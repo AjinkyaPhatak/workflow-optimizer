@@ -87,7 +87,7 @@ func TestNoStatusMutationBypassesStateMachine(t *testing.T) {
 	if got := methods((*execution.ExecutionRepository)(nil)); !equalStrings(got, []string{"Create", "Get", "History", "Transition"}) {
 		t.Fatalf("ExecutionRepository methods = %v", got)
 	}
-	if got := methods((*execution.NodeExecutionRepository)(nil)); !equalStrings(got, []string{"Create", "Get", "ListByExecution", "Transition"}) {
+	if got := methods((*execution.NodeExecutionRepository)(nil)); !equalStrings(got, []string{"Begin", "Create", "Get", "ListByExecution", "Transition"}) {
 		t.Fatalf("NodeExecutionRepository methods = %v", got)
 	}
 }
@@ -100,6 +100,10 @@ func TestPostgresUpdatesAreConditionalOnStatus(t *testing.T) {
 	fset := token.NewFileSet()
 	found := 0
 	updateRe := regexp.MustCompile(`(?i)UPDATE\s+(executions|node_executions)\b`)
+	// Every lifecycle UPDATE is conditional on the row's current status: the
+	// compare-and-set (WHERE id = $1 AND status = $2) or the sweep of RUNNING
+	// nodes (WHERE execution_id = $1 AND status = 'RUNNING').
+	guardRe := regexp.MustCompile(`WHERE\s+(id|execution_id)\s*=\s*\$1\s+AND\s+status\s*=\s*(\$2|'RUNNING')`)
 	for _, p := range paths {
 		if strings.HasSuffix(p, "_test.go") {
 			continue
@@ -116,7 +120,7 @@ func TestPostgresUpdatesAreConditionalOnStatus(t *testing.T) {
 			s, _ := strconv.Unquote(lit.Value)
 			if updateRe.MatchString(s) {
 				found++
-				if !strings.Contains(s, "WHERE id = $1 AND status = $2") {
+				if !guardRe.MatchString(s) {
 					t.Errorf("%s: lifecycle UPDATE is not guarded by the current status", fset.Position(lit.Pos()))
 				}
 			}

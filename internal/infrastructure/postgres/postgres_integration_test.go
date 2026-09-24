@@ -44,9 +44,15 @@ func TestSchemaRelationshipsConstraintsJSONBAndHistory(t *testing.T) {
 	mustExec(t, pool, "UPDATE workflows SET active_version_id = $1 WHERE id = $2", versionOneID, workflowID)
 	mustExec(t, pool, "INSERT INTO credentials (id, workspace_id, name, provider, credential_type, encrypted_data) VALUES ($1, $2, 'Credential', 'openai', 'api_key', '{\"ciphertext\": \"test-only\"}')", uuid.New(), workspaceID)
 
-	executionID := uuid.New()
-	mustExec(t, pool, "INSERT INTO executions (id, workflow_id, workflow_version_id, status, input, output, error, started_at, finished_at) VALUES ($1, $2, $3, 'COMPLETED', '{\"input\": true}', '{\"output\": true}', '{\"error\": null}', now(), now())", executionID, workflowID, versionOneID)
-	mustExec(t, pool, "INSERT INTO node_executions (id, execution_id, node_id, node_type, status, input, output, error, started_at, finished_at) VALUES ($1, $2, 'node-1', 'text', 'COMPLETED', '{\"input\": true}', '{\"output\": true}', '{\"error\": null}', now(), now())", uuid.New(), executionID)
+	// Phase 8 makes the database the lifecycle authority: rows are created
+	// PENDING and reach COMPLETED only through legal transitions.
+	executionID, nodeExecutionID := uuid.New(), uuid.New()
+	mustExec(t, pool, "INSERT INTO executions (id, workflow_id, workflow_version_id, status, input) VALUES ($1, $2, $3, 'PENDING', '{\"input\": true}')", executionID, workflowID, versionOneID)
+	mustExec(t, pool, "UPDATE executions SET status = 'RUNNING', claim_token = $2 WHERE id = $1", executionID, uuid.New())
+	mustExec(t, pool, "INSERT INTO node_executions (id, execution_id, node_id, node_type, status, input) VALUES ($1, $2, 'node-1', 'text', 'PENDING', '{\"input\": true}')", nodeExecutionID, executionID)
+	mustExec(t, pool, "UPDATE node_executions SET status = 'RUNNING' WHERE id = $1", nodeExecutionID)
+	mustExec(t, pool, "UPDATE node_executions SET status = 'COMPLETED', output = '{\"output\": true}' WHERE id = $1", nodeExecutionID)
+	mustExec(t, pool, "UPDATE executions SET status = 'COMPLETED', output = '{\"output\": true}' WHERE id = $1", executionID)
 
 	mustExec(t, pool, "INSERT INTO workflow_versions (id, workflow_id, version_number, definition, status, created_by) VALUES ($1, $2, 2, '{\"nodes\": [\"new\"]}', 'DRAFT', $3)", uuid.New(), workflowID, userID)
 	var referencedVersion uuid.UUID

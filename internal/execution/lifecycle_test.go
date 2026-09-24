@@ -91,6 +91,9 @@ func TestValidTransitionsThroughService(t *testing.T) {
 				t.Fatal(err)
 			}
 			running, _ := repo.Get(ctx, e.ID)
+			if running.ClaimToken == nil || *running.ClaimToken == uuid.Nil {
+				t.Fatal("claim must record a claim token")
+			}
 			if running.StartedAt == nil || running.FinishedAt != nil || !running.UpdatedAt.After(e.UpdatedAt) {
 				t.Fatalf("RUNNING timestamps = %+v", running)
 			}
@@ -194,6 +197,9 @@ func TestStateMachineRejectsUnreachableTargetsAndBadPayloads(t *testing.T) {
 			t.Fatalf("target %q: %v", target, err)
 		}
 	}
+	if err := machine.Transition(ctx, e.ID, execution.StatusRunning, execution.TransitionUpdate{}); !errors.Is(err, execution.ErrInvalidExecution) {
+		t.Fatalf("claim without token: %v", err)
+	}
 	_ = svc.Start(ctx, e.ID)
 	bad := []struct {
 		target execution.ExecutionStatus
@@ -204,6 +210,8 @@ func TestStateMachineRejectsUnreachableTargetsAndBadPayloads(t *testing.T) {
 		{execution.StatusFailed, execution.TransitionUpdate{Output: map[string]any{"x": 1}, Error: &execution.ExecutionError{Code: "X", Message: "m"}}},
 		{execution.StatusCancelled, execution.TransitionUpdate{Output: map[string]any{"x": 1}}}, // output only on COMPLETED
 		{execution.StatusCompleted, execution.TransitionUpdate{Error: &execution.ExecutionError{Code: "X", Message: "m"}}},
+		{execution.StatusCompleted, execution.TransitionUpdate{ClaimToken: uuid.New()}}, // token only on claim
+		{execution.StatusCompleted, execution.TransitionUpdate{InterruptedNodeError: &execution.ExecutionError{Code: "X", Message: "m"}}},
 	}
 	for i, b := range bad {
 		if err := machine.Transition(ctx, e.ID, b.target, b.update); !errors.Is(err, execution.ErrInvalidExecution) {
@@ -221,6 +229,13 @@ func TestNodeExecutionLifecycle(t *testing.T) {
 	nodes := nodeRepo{repo}
 	machine := execution.NewNodeExecutionStateMachine(nodes)
 	e := mustCreate(t, svc)
+	pendingParent := execution.NodeExecution{ID: uuid.New(), ExecutionID: e.ID, NodeID: "early", NodeType: "t", Status: execution.NodeStatusPending}
+	if err := nodes.Create(ctx, pendingParent); !errors.Is(err, execution.ErrExecutionNotRunning) {
+		t.Fatalf("node under PENDING execution: %v", err)
+	}
+	if err := svc.Start(ctx, e.ID); err != nil {
+		t.Fatal(err)
+	}
 
 	newNode := func(id string) uuid.UUID {
 		rec := execution.NodeExecution{ID: uuid.New(), ExecutionID: e.ID, NodeID: id, NodeType: "test", Status: execution.NodeStatusPending}
@@ -271,5 +286,25 @@ func TestNodeExecutionLifecycle(t *testing.T) {
 	list, _ := nodes.ListByExecution(ctx, e.ID)
 	if len(list) != 3 {
 		t.Fatalf("records = %d", len(list))
+	}
+
+	// Begin creates the record and moves it to RUNNING in one step.
+	begun := execution.NodeExecution{ID: uuid.New(), ExecutionID: e.ID, NodeID: "D", NodeType: "t", Status: execution.NodeStatusPending}
+	if err := machine.Begin(ctx, begun, map[string]any{"ports": map[string]any{}}); err != nil {
+		t.Fatal(err)
+	}
+	if rec, _ := nodes.Get(ctx, begun.ID); rec.Status != execution.NodeStatusRunning || rec.StartedAt == nil || rec.Input == nil {
+		t.Fatalf("begun node = %+v", rec)
+	}
+	// Terminal parent: cancelling sweeps the RUNNING node and rejects every later node write.
+	if err := svc.Cancel(ctx, e.ID); err != nil {
+		t.Fatal(err)
+	}
+	if rec, _ := nodes.Get(ctx, begun.ID); rec.Status != execution.NodeStatusFailed || rec.Error == nil || rec.Error.Code != execution.CodeCancelled || *rec.Error.NodeID != "D" {
+		t.Fatalf("swept node = %+v / %+v", rec, rec.Error)
+	}
+	late := execution.NodeExecution{ID: uuid.New(), ExecutionID: e.ID, NodeID: "late", NodeType: "t", Status: execution.NodeStatusPending}
+	if err := machine.Begin(ctx, late, nil); !errors.Is(err, execution.ErrExecutionNotRunning) {
+		t.Fatalf("node begin under CANCELLED execution: %v", err)
 	}
 }

@@ -20,6 +20,11 @@ const (
 	CodeNodeNotRegistered  = "NODE_NOT_REGISTERED"
 	CodeTimeout            = "EXECUTION_TIMEOUT"
 	CodeCancelled          = "EXECUTION_CANCELLED"
+	// CodeDefinitionLoadFailed: the version definition could not be loaded
+	// (transient). CodeNodeInterrupted: a node was still RUNNING when its
+	// execution was finalized, so its outcome was not recorded.
+	CodeDefinitionLoadFailed = "DEFINITION_LOAD_FAILED"
+	CodeNodeInterrupted      = "NODE_INTERRUPTED"
 )
 
 // ExecutionError is the structured, persisted failure of an execution or node.

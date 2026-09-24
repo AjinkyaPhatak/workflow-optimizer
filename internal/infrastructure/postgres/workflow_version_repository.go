@@ -15,7 +15,8 @@ import (
 )
 
 // ErrWorkflowVersionNotFound is returned when a workflow version is missing.
-var ErrWorkflowVersionNotFound = errors.New("postgres: workflow version not found")
+// It is the execution package's sentinel so lifecycle callers can match it.
+var ErrWorkflowVersionNotFound = execution.ErrWorkflowVersionNotFound
 
 // WorkflowVersionRepository implements the existing (Phase 2)
 // workflow.VersionRepository and adapts it to execution.DefinitionLoader so
@@ -63,7 +64,9 @@ func (r *WorkflowVersionRepository) FindByWorkflowAndNumber(ctx context.Context,
 	return scanVersion(r.pool.QueryRow(ctx, `SELECT `+versionColumns+` FROM workflow_versions WHERE workflow_id = $1 AND version_number = $2`, workflowID, number))
 }
 
-// LoadDefinition decodes the version's canonical workflow definition.
+// LoadDefinition decodes the version's canonical workflow definition. The
+// database guarantees the definition cannot change once the version is
+// published or referenced by an execution (migration 000002).
 func (r *WorkflowVersionRepository) LoadDefinition(ctx context.Context, versionID uuid.UUID) (workflow.Definition, error) {
 	v, err := r.FindByID(ctx, versionID)
 	if err != nil {
@@ -71,7 +74,7 @@ func (r *WorkflowVersionRepository) LoadDefinition(ctx context.Context, versionI
 	}
 	var def workflow.Definition
 	if err := json.Unmarshal(v.Definition, &def); err != nil {
-		return workflow.Definition{}, fmt.Errorf("decode workflow version %s definition: %w", versionID, err)
+		return workflow.Definition{}, fmt.Errorf("%w: decode workflow version %s definition: %v", execution.ErrInvalidWorkflowDefinition, versionID, err)
 	}
 	return def, nil
 }

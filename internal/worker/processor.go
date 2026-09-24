@@ -1,0 +1,185 @@
+// Package worker runs workflow executions in the background: it consumes
+// queue.Jobs and drives each execution through the existing Phase 8 lifecycle
+// (execution.Runner), which in turn uses the Phase 7 GraphExecutor.
+//
+// Ownership rule: a job only says "try this execution". A worker executes it
+// only if its atomic PostgreSQL claim (PENDING -> RUNNING, performed by
+// execution.Runner via the Phase 8 state machine) succeeds. There is no
+// process-local locking; the database claim is the ownership boundary, so the
+// rule holds across any number of worker processes.
+package worker
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"time"
+
+	"github.com/google/uuid"
+
+	"workflow-optimizer/internal/execution"
+	"workflow-optimizer/internal/queue"
+)
+
+// Outcome classifies what happened to one job.
+type Outcome string
+
+const (
+	// The job's execution ran here and reached a terminal status.
+	OutcomeCompleted Outcome = "completed"
+	OutcomeFailed    Outcome = "failed"
+	OutcomeCancelled Outcome = "cancelled"
+	// OutcomeSkipped: the execution was not PENDING when the job arrived
+	// (already running elsewhere, or terminal). Nothing was executed or written.
+	OutcomeSkipped Outcome = "skipped_not_pending"
+	// OutcomeClaimLost: the execution was PENDING, but another worker won the
+	// atomic claim. Nothing was executed.
+	OutcomeClaimLost Outcome = "claim_lost"
+	// OutcomeNotFound: no such execution. Nothing was executed.
+	OutcomeNotFound Outcome = "not_found"
+	// OutcomeNotAttempted: no claim was made (the worker was stopping, or the
+	// claim was definitely not applied); the execution is still PENDING.
+	OutcomeNotAttempted Outcome = "not_attempted"
+	// OutcomeError: the job could not be handled because of an infrastructure
+	// failure (e.g. PostgreSQL unreachable, or a claimed execution whose final
+	// status could not be recorded). Result.Err says why.
+	OutcomeError Outcome = "error"
+)
+
+// Result describes how a job was handled.
+type Result struct {
+	ExecutionID uuid.UUID
+	Outcome     Outcome
+	// Status is the execution's status as last read from PostgreSQL ("" when
+	// unknown).
+	Status execution.ExecutionStatus
+	// Err is the underlying error, if any (for completed runs it is nil; for
+	// failed runs it is the execution error).
+	Err error
+}
+
+// Executed reports whether this worker ran the execution's graph.
+func (r Result) Executed() bool {
+	switch r.Outcome {
+	case OutcomeCompleted, OutcomeFailed, OutcomeCancelled:
+		return true
+	}
+	return false
+}
+
+// JobProcessor handles one dequeued job.
+type JobProcessor interface {
+	Process(ctx context.Context, job queue.Job) Result
+}
+
+// ExecutionReader loads an execution (execution.ExecutionRepository satisfies it).
+type ExecutionReader interface {
+	Get(ctx context.Context, id uuid.UUID) (execution.Execution, error)
+}
+
+// ExecutionRunner claims and runs one execution (execution.Runner satisfies
+// it: Start = atomic claim, then GraphExecutor, then finalization).
+type ExecutionRunner interface {
+	Run(ctx context.Context, executionID uuid.UUID) (execution.ExecutionResult, error)
+}
+
+// ExecutionProcessor is the production JobProcessor.
+type ExecutionProcessor struct {
+	executions  ExecutionReader
+	runner      ExecutionRunner
+	readTimeout time.Duration
+}
+
+var _ JobProcessor = (*ExecutionProcessor)(nil)
+
+// DefaultReadTimeout bounds the status read that classifies a finished job.
+const DefaultReadTimeout = 10 * time.Second
+
+// NewExecutionProcessor wires the processor to the Phase 8 repository and
+// runner.
+func NewExecutionProcessor(executions ExecutionReader, runner ExecutionRunner) (*ExecutionProcessor, error) {
+	if executions == nil || runner == nil {
+		return nil, errors.New("worker: processor requires an execution reader and a runner")
+	}
+	return &ExecutionProcessor{executions: executions, runner: runner, readTimeout: DefaultReadTimeout}, nil
+}
+
+// Process handles one job:
+//
+//  1. load the execution;
+//  2. if it is not PENDING, skip it (duplicate or stale job): no claim, no write;
+//  3. otherwise hand it to the runner, whose first step is the atomic
+//     PENDING -> RUNNING claim; only if that claim succeeds is the graph run;
+//  4. classify the result from the authoritative status in PostgreSQL.
+func (p *ExecutionProcessor) Process(ctx context.Context, job queue.Job) Result {
+	res := Result{ExecutionID: job.ExecutionID}
+	if err := job.Validate(); err != nil {
+		res.Outcome, res.Err = OutcomeError, err
+		return res
+	}
+	if err := ctx.Err(); err != nil {
+		res.Outcome, res.Err = OutcomeNotAttempted, err
+		return res
+	}
+
+	current, err := p.executions.Get(ctx, job.ExecutionID)
+	switch {
+	case errors.Is(err, execution.ErrExecutionNotFound):
+		res.Outcome, res.Err = OutcomeNotFound, err
+		return res
+	case err != nil && ctx.Err() != nil:
+		res.Outcome, res.Err = OutcomeNotAttempted, err
+		return res
+	case err != nil:
+		res.Outcome, res.Err = OutcomeError, fmt.Errorf("load execution %s: %w", job.ExecutionID, err)
+		return res
+	}
+	res.Status = current.Status
+	if current.Status != execution.StatusPending {
+		res.Outcome = OutcomeSkipped
+		return res
+	}
+
+	_, runErr := p.runner.Run(ctx, job.ExecutionID)
+	if errors.Is(runErr, execution.ErrExecutionNotClaimable) {
+		// Another worker's claim won between our read and our claim.
+		res.Outcome, res.Err = OutcomeClaimLost, runErr
+		res.Status = p.status(ctx, job.ExecutionID)
+		return res
+	}
+	res.Err = runErr
+	res.Status = p.status(ctx, job.ExecutionID)
+	switch res.Status {
+	case execution.StatusCompleted:
+		res.Outcome = OutcomeCompleted
+	case execution.StatusFailed:
+		res.Outcome = OutcomeFailed
+	case execution.StatusCancelled:
+		res.Outcome = OutcomeCancelled
+	case execution.StatusPending:
+		// The claim was never applied (caller already cancelled, or the
+		// database refused it definitively).
+		res.Outcome = OutcomeNotAttempted
+	default:
+		// RUNNING after Run returned: claimed here but the final status could
+		// not be recorded (database failure). Phase 8 leaves this execution
+		// RUNNING with this worker's claim token.
+		res.Outcome = OutcomeError
+		if res.Err == nil {
+			res.Err = fmt.Errorf("execution %s is %q after running", job.ExecutionID, res.Status)
+		}
+	}
+	return res
+}
+
+// status re-reads the authoritative status on a bounded context that is not
+// cancelled by the worker stopping (the run may just have been cancelled).
+func (p *ExecutionProcessor) status(ctx context.Context, id uuid.UUID) execution.ExecutionStatus {
+	rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), p.readTimeout)
+	defer cancel()
+	e, err := p.executions.Get(rctx, id)
+	if err != nil {
+		return ""
+	}
+	return e.Status
+}

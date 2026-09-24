@@ -195,7 +195,7 @@ func TestPGExecutionCreateGetAndJSONBInput(t *testing.T) {
 	}
 	// Create never starts: a non-PENDING create is refused.
 	bad := execution.Execution{ID: uuid.New(), WorkflowID: e.WorkflowID, WorkflowVersionID: e.WorkflowVersionID, Status: execution.StatusRunning}
-	if err := p.execs.Create(context.Background(), bad); !errors.Is(err, execution.ErrInvalidExecution) {
+	if _, err := p.execs.Create(context.Background(), bad); !errors.Is(err, execution.ErrInvalidExecution) {
 		t.Fatalf("RUNNING create: %v", err)
 	}
 }
@@ -405,7 +405,7 @@ func TestPGDatabaseEnforcesStateMachineForAnyWriter(t *testing.T) {
 	_ = p.svc.Complete(ctx, done.ID, map[string]any{"a": 1.0})
 	assertRejected(t, p.raw, "UPDATE executions SET output='{\"tampered\":true}' WHERE id=$1", done.ID)
 	assertRejected(t, p.raw, "UPDATE executions SET finished_at = now() + interval '1 day' WHERE id=$1", done.ID)
-	if got := p.get(t, done.ID); got.Output["a"] != 1.0 {
+	if got := p.get(t, done.ID); mustJSON(t, got.Output) != `{"a":1}` {
 		t.Fatalf("terminal output changed: %+v", got.Output)
 	}
 }
@@ -506,10 +506,7 @@ func TestPGBlockedClaimLosesAfterWinnerCommits(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := tx.Exec(ctx, "UPDATE executions SET status='RUNNING', started_at=now(), updated_at=now() WHERE id=$1 AND status='PENDING'", e.ID); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := tx.Exec(ctx, "INSERT INTO execution_status_history (execution_id, from_status, to_status) VALUES ($1, 'PENDING', 'RUNNING')", e.ID); err != nil {
+	if _, err := tx.Exec(ctx, "UPDATE executions SET status='RUNNING', claim_token=$2 WHERE id=$1 AND status='PENDING'", e.ID, uuid.New()); err != nil {
 		t.Fatal(err)
 	}
 	done := make(chan error, 1)
@@ -542,6 +539,11 @@ func TestPGNodeExecutionPersistence(t *testing.T) {
 	machine := execution.NewNodeExecutionStateMachine(p.nodes)
 	e := p.create(t, nil)
 	other := p.create(t, nil)
+	for _, x := range []uuid.UUID{e.ID, other.ID} {
+		if err := p.svc.Start(ctx, x); err != nil {
+			t.Fatal(err)
+		}
+	}
 
 	orphan := execution.NodeExecution{ID: uuid.New(), ExecutionID: uuid.New(), NodeID: "x", NodeType: "text", Status: execution.NodeStatusPending}
 	if err := p.nodes.Create(ctx, orphan); !errors.Is(err, execution.ErrExecutionNotFound) {

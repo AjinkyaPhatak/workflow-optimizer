@@ -10,7 +10,10 @@ import (
 )
 
 func main() {
-	cfg := config.Load()
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatalf("api configuration: %v", err)
+	}
 	if _, err := app.Bootstrap(cfg); err != nil {
 		log.Fatalf("failed to bootstrap api application: %v", err)
 	}

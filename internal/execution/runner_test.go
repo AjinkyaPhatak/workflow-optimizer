@@ -3,6 +3,8 @@ package execution_test
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -190,20 +192,192 @@ func TestRunnerCancellationDuringNodeIsNotANodeFailureCode(t *testing.T) {
 	}
 }
 
-func TestRunnerDeadlineIsFailureNotCancellation(t *testing.T) {
+// With a done context the claim is never issued: the execution stays PENDING
+// (the same behaviour PostgreSQL shows; see the integration tests).
+func TestRunnerDoesNotClaimWithDoneContext(t *testing.T) {
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+	expired, cancel2 := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+	defer cancel2()
+	for name, ctx := range map[string]context.Context{"cancelled": cancelled, "deadline": expired} {
+		t.Run(name, func(t *testing.T) {
+			r := newRunnerEnv(t, chainABC())
+			id := r.create(t, map[string]any{})
+			writesBefore := len(r.repo.writes)
+			_, err := r.runner.Run(ctx, id)
+			if !errors.Is(err, ctx.Err()) {
+				t.Fatalf("err = %v", err)
+			}
+			if statusOf(t, r.repo, id) != execution.StatusPending || len(r.rec.calls) != 0 || len(r.repo.writes) != writesBefore {
+				t.Fatal("a done context must not claim, execute or write anything")
+			}
+		})
+	}
+}
+
+func TestRunnerDeadlineDuringNodeIsTimeoutFailure(t *testing.T) {
 	r := newRunnerEnv(t, chainABC())
-	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
+	r.rec.hooks["B"] = func(nodeCtx context.Context) error { <-nodeCtx.Done(); return nodeCtx.Err() }
 	id := r.create(t, map[string]any{})
 	if _, err := r.runner.Run(ctx, id); !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("err = %v", err)
 	}
 	e, _ := r.repo.Get(context.Background(), id)
-	if e.Status != execution.StatusFailed || e.Error.Code != execution.CodeTimeout {
+	if e.Status != execution.StatusFailed || e.Error.Code != execution.CodeTimeout || *e.Error.NodeID != "B" {
 		t.Fatalf("execution = %+v %+v", e, e.Error)
 	}
+	if b := r.nodeRecords(t, id)["B"]; b.Status != execution.NodeStatusFailed || b.Error.Code != execution.CodeTimeout {
+		t.Fatalf("B = %+v", b)
+	}
+	if _, ran := r.nodeRecords(t, id)["C"]; ran {
+		t.Fatal("no node may start after the deadline")
+	}
+}
+
+// F13: the caller cancelled, but the node ignored its context and returned an
+// unrelated error. The execution is CANCELLED; the node keeps its own error.
+func TestRunnerCallerCancellationWinsOverContextIgnoringNode(t *testing.T) {
+	r := newRunnerEnv(t, chainABC())
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	r.rec.hooks["B"] = func(context.Context) error { cancel(); return errors.New("upstream API said no") }
+	id := r.create(t, map[string]any{})
+	if _, err := r.runner.Run(ctx, id); !errors.Is(err, context.Canceled) {
+		t.Fatalf("err = %v", err)
+	}
+	e, _ := r.repo.Get(context.Background(), id)
+	if e.Status != execution.StatusCancelled {
+		t.Fatalf("status = %s", e.Status)
+	}
+	b := r.nodeRecords(t, id)["B"]
+	if b.Status != execution.NodeStatusFailed || b.Error.Code != execution.CodeNodeFailed || b.Error.Message == "" {
+		t.Fatalf("B = %+v / %+v", b, b.Error)
+	}
+	h, _ := r.repo.History(context.Background(), id)
+	if last := h[len(h)-1]; last.To != execution.StatusCancelled || last.Metadata["graph_error"] == nil {
+		t.Fatalf("cancel history = %+v", last)
+	}
+}
+
+// Without cancellation, the same node error is an ordinary failure.
+func TestRunnerNodeErrorWithoutCancellationIsFailure(t *testing.T) {
+	r := newRunnerEnv(t, chainABC())
+	r.rec.hooks["B"] = func(context.Context) error { return errors.New("upstream API said no") }
+	id := r.create(t, map[string]any{})
+	_, _ = r.runner.Run(context.Background(), id)
+	if e, _ := r.repo.Get(context.Background(), id); e.Status != execution.StatusFailed || e.Error.Code != execution.CodeNodeFailed {
+		t.Fatalf("execution = %+v", e)
+	}
+}
+
+// F10: finalization after caller cancellation runs on a context that is not
+// cancelled but has its own bounded deadline.
+func TestRunnerFinalizationUsesDetachedBoundedContext(t *testing.T) {
+	r := newRunnerEnv(t, chainABC())
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	r.rec.hooks["A"] = func(context.Context) error { cancel(); return nil }
+	id := r.create(t, map[string]any{})
+	_, _ = r.runner.Run(ctx, id)
+	if statusOf(t, r.repo, id) != execution.StatusCancelled {
+		t.Fatal("expected CANCELLED")
+	}
+	last := r.repo.writes[len(r.repo.writes)-1] // the CANCELLED transition
+	if last.err != nil || !last.hasDeadline || last.remaining <= 0 || last.remaining > execution.DefaultWriteTimeout {
+		t.Fatalf("finalization context = %+v; want live, bounded by %s", last, execution.DefaultWriteTimeout)
+	}
+}
+
+// F2: another actor cancels while a node runs. The node's result write is
+// rejected, the graph stops, and the Runner reports the external status.
+func TestRunnerStopsWhenExecutionCancelledExternally(t *testing.T) {
+	r := newRunnerEnv(t, chainABC())
+	var id uuid.UUID
+	r.rec.hooks["B"] = func(context.Context) error { return r.runner.Service().Cancel(context.Background(), id) }
+	id = r.create(t, map[string]any{})
+	_, err := r.runner.Run(context.Background(), id)
+	var ext *execution.ExternallyFinalizedError
+	if !errors.As(err, &ext) || ext.Status != execution.StatusCancelled || !errors.Is(err, execution.ErrExecutionCancelled) || !errors.Is(err, execution.ErrExecutionNotRunning) {
+		t.Fatalf("err = %v", err)
+	}
+	if statusOf(t, r.repo, id) != execution.StatusCancelled {
+		t.Fatal("execution must stay CANCELLED")
+	}
+	recs := r.nodeRecords(t, id)
+	if b := recs["B"]; b.Status != execution.NodeStatusFailed || b.Error.Code != execution.CodeCancelled {
+		t.Fatalf("B = %+v / %+v", b, b.Error)
+	}
+	if _, ran := recs["C"]; ran || len(r.rec.calls) != 2 {
+		t.Fatalf("work continued after external cancellation: %v", r.rec.labels())
+	}
+}
+
+// F9: the node ran but recording its completion failed. The execution fails,
+// and the node is not left RUNNING nor presented as never having run.
+func TestRunnerNodeFinishRecordingFailure(t *testing.T) {
+	r := newRunnerEnv(t, chainABC())
+	r.repo.failNodeFinish = true
+	id := r.create(t, map[string]any{})
+	if _, err := r.runner.Run(context.Background(), id); err == nil {
+		t.Fatal("expected failure")
+	}
+	e, _ := r.repo.Get(context.Background(), id)
+	if e.Status != execution.StatusFailed || e.Error.Code != execution.CodeNodeObservation || *e.Error.NodeID != "in" {
+		t.Fatalf("execution = %+v %+v", e, e.Error)
+	}
+	in := r.nodeRecords(t, id)["in"]
+	if in.Status != execution.NodeStatusFailed || in.Error.Code != execution.CodeNodeObservation || in.StartedAt == nil ||
+		!strings.Contains(in.Error.Message, "executed") {
+		t.Fatalf("node 'in' = %+v / %+v", in, in.Error)
+	}
 	if len(r.rec.calls) != 0 {
-		t.Fatal("no node may run past the deadline")
+		t.Fatal("no later node may run")
+	}
+}
+
+// F14: a node failing during variable resolution has its own record.
+func TestRunnerRecordsNodeFailingBeforeExecute(t *testing.T) {
+	def := graph(nodes(entry("in"), probeWith("A", map[string]any{"message": "{{input.missing}}"}), exit("out")),
+		edge("in", "data", "A", "in"), edge("A", "out", "out", "value"))
+	r := newRunnerEnv(t, def)
+	id := r.create(t, map[string]any{})
+	_, _ = r.runner.Run(context.Background(), id)
+	a, ok := r.nodeRecords(t, id)["A"]
+	if !ok || a.Status != execution.NodeStatusFailed || a.Error.Code != execution.CodeVariableResolution || *a.Error.NodeID != "A" {
+		t.Fatalf("A = %+v", a)
+	}
+	if len(r.rec.calls) != 0 {
+		t.Fatal("A's Execute must not run")
+	}
+}
+
+// F14: a transient definition-load failure is not INVALID_WORKFLOW.
+func TestRunnerClassifiesDefinitionLoadFailures(t *testing.T) {
+	cases := map[string]struct {
+		err       error
+		code      string
+		retryable bool
+	}{
+		"transient": {errors.New("connection refused"), execution.CodeDefinitionLoadFailed, true},
+		"corrupt":   {fmt.Errorf("%w: bad json", execution.ErrInvalidWorkflowDefinition), execution.CodeInvalidWorkflow, false},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			e := newEnv(t)
+			repo := newMemRepo()
+			r, _ := execution.NewRunner(execution.RunnerConfig{
+				Executions: repo, NodeExecutions: nodeRepo{repo}, Validator: workflow.NewValidator(e.reg), Graph: e.exec,
+				Definitions: loaderFunc(func(context.Context, uuid.UUID) (workflow.Definition, error) { return workflow.Definition{}, tc.err }),
+			})
+			ex, _ := r.Service().Create(context.Background(), uuid.New(), uuid.New(), nil)
+			_, _ = r.Run(context.Background(), ex.ID)
+			got, _ := repo.Get(context.Background(), ex.ID)
+			if got.Status != execution.StatusFailed || got.Error.Code != tc.code || got.Error.Retryable != tc.retryable {
+				t.Fatalf("error = %+v", got.Error)
+			}
+		})
 	}
 }
 

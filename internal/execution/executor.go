@@ -37,6 +37,10 @@ type NodeObserver interface {
 	NodeStarted(ctx context.Context, nodeID, nodeType string, input node.NodeInput) error
 	// NodeFinished is called after Execute returns, with its output or error.
 	NodeFinished(ctx context.Context, nodeID string, output node.NodeOutput, err error) error
+	// NodeFailedBeforeExecute is called when a node's configuration or inputs
+	// cannot be resolved, so the failing node is observable even though its
+	// Execute never ran. err is the resolution error for stage.
+	NodeFailedBeforeExecute(ctx context.Context, nodeID, nodeType string, stage Stage, err error) error
 }
 
 // GraphExecutor is the Phase 7 sequential DAG executor. It assumes the
@@ -108,14 +112,22 @@ func (e *GraphExecutor) ExecuteWithObserver(ctx context.Context, definition work
 		fail := func(stage Stage, cause error) (ExecutionResult, error) {
 			return ExecutionResult{State: *state}, &NodeExecutionError{NodeID: id, NodeType: b.spec.Type, Stage: stage, Err: cause}
 		}
+		failBeforeExecute := func(stage Stage, cause error) (ExecutionResult, error) {
+			if observer != nil {
+				if obsErr := observer.NodeFailedBeforeExecute(ctx, id, b.spec.Type, stage, cause); obsErr != nil {
+					cause = errors.Join(cause, obsErr)
+				}
+			}
+			return fail(stage, cause)
+		}
 
 		cfg, err := resolveConfig(b.spec.Config, variableScope{nodeID: id, plan: &plan, results: state.Results, input: input})
 		if err != nil {
-			return fail(StageResolveConfig, err)
+			return failBeforeExecute(StageResolveConfig, err)
 		}
 		ports, err := resolveInputs(id, b.def, &plan, state, bound)
 		if err != nil {
-			return fail(StageResolveInputs, err)
+			return failBeforeExecute(StageResolveInputs, err)
 		}
 		if b.def.Role == node.SemanticRoleEntry && input != nil {
 			if _, wired := ports[EntryInputPort]; !wired {
