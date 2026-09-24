@@ -1,0 +1,16 @@
+# Block massive local compiler build artifacts
+.go-cache/
+bin/
+dist/
+tmp/
+
+# Block version control and hidden IDE logs
+.git/
+.vscode/
+
+# Block raw database migrations or docker caches if they get heavy
+migrations/
+
+# Block environment keys (Good for safety/privacy)
+.env
+.env.example

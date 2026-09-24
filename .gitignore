@@ -1,0 +1,15 @@
+# Build outputs
+bin/
+*.exe
+*.test
+*.out
+
+# Local environment files
+.env
+
+# Docker volumes
+postgres-data/
+
+# Local Go toolchain caches
+.go-cache/
+.go-mod-cache/

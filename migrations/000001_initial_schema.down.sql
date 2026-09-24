@@ -1,0 +1,9 @@
+DROP TABLE IF EXISTS node_executions;
+DROP TABLE IF EXISTS executions;
+DROP TABLE IF EXISTS credentials;
+DROP TABLE IF EXISTS workflow_versions;
+DROP TABLE IF EXISTS workflows;
+DROP TABLE IF EXISTS projects;
+DROP TABLE IF EXISTS workspace_members;
+DROP TABLE IF EXISTS workspaces;
+DROP TABLE IF EXISTS users;
