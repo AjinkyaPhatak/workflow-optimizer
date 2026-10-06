@@ -4,8 +4,10 @@ package app
 
 import (
 	"fmt"
+	"net/http"
 
 	"workflow-optimizer/internal/config"
+	"workflow-optimizer/internal/credential"
 	"workflow-optimizer/internal/node"
 	"workflow-optimizer/internal/node/condition"
 	nodehttp "workflow-optimizer/internal/node/http"
@@ -19,6 +21,7 @@ import (
 	"workflow-optimizer/internal/node/text"
 	"workflow-optimizer/internal/node/transform"
 	providerllm "workflow-optimizer/internal/provider/llm"
+	"workflow-optimizer/internal/provider/llm/openai"
 )
 
 // Application encapsulates the runtime registries and configuration of the system.
@@ -28,13 +31,47 @@ type Application struct {
 	ProviderRegistry providerllm.Registry
 }
 
-// Bootstrap is the single startup composition point. It creates application
-// dependencies, sets up the provider and node registries, constructs all canonical
-// V1 nodes with their dependencies, registers them with their metadata definitions,
-// and validates registry consistency before returning.
+// Dependencies are the runtime collaborators Bootstrap cannot create without
+// I/O (Phase 11).
+type Dependencies struct {
+	// Credentials resolves workspace credentials for provider-backed nodes
+	// (credential.Service in production). Nil leaves the LLM node unwired:
+	// it then answers with its Phase 4 stub and never calls a provider.
+	Credentials credential.Resolver
+	// HTTPClient is the shared client of the HTTP-based providers (nil: the
+	// provider's default, TLS-verifying client).
+	HTTPClient *http.Client
+}
+
+// Bootstrap composes the application without runtime dependencies (no
+// credential resolution). See BootstrapWith.
 func Bootstrap(cfg config.Config) (*Application, error) {
+	return BootstrapWith(cfg, Dependencies{})
+}
+
+// BootstrapWith is the single startup composition point. It creates the
+// provider registry (OpenAI registered, then frozen) and the node registry,
+// constructs all canonical V1 nodes with their dependencies, registers them
+// with their metadata definitions, and validates registry consistency:
+//
+//	credential resolver + provider registry -> LLM node -> node registry
+//
+// The executor sees only the node registry; it knows nothing about providers.
+func BootstrapWith(cfg config.Config, deps Dependencies) (*Application, error) {
 	// 1. Construct Provider Registry
 	providerReg := providerllm.NewRegistry()
+	openAI, err := openai.New(openai.Options{BaseURL: cfg.OpenAIBaseURL, HTTPClient: deps.HTTPClient})
+	if err != nil {
+		return nil, fmt.Errorf("bootstrap openai provider: %w", err)
+	}
+	if err := providerReg.Register(openai.Name, openAI); err != nil {
+		return nil, fmt.Errorf("bootstrap register provider %q: %w", openai.Name, err)
+	}
+	providerReg.Freeze()
+	llmDeps := llm.Dependencies{}
+	if deps.Credentials != nil {
+		llmDeps = llm.Dependencies{Providers: providerReg, Credentials: deps.Credentials}
+	}
 
 	// 2. Construct Node Registry
 	nodeReg := node.NewRegistry()
@@ -57,7 +94,7 @@ func Bootstrap(cfg config.Config) (*Application, error) {
 
 		// AI category
 		{node: prompt.New(), def: prompt.Definition()},
-		{node: llm.New(nil), def: llm.Definition()},
+		{node: llm.New(llmDeps), def: llm.Definition()},
 		{node: structured_output.New(nil), def: structured_output.Definition()},
 
 		// Integration category

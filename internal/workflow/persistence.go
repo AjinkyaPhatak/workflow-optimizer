@@ -3,9 +3,19 @@ package workflow
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
+)
+
+// Persistence errors (Phase 12).
+var (
+	ErrProjectNotFound  = errors.New("workflow: project not found")
+	ErrWorkflowNotFound = errors.New("workflow: workflow not found")
+	ErrVersionNotFound  = errors.New("workflow: workflow version not found")
+	// ErrVersionArchived rejects publishing an archived version.
+	ErrVersionArchived = errors.New("workflow: workflow version is archived")
 )
 
 // VersionStatus is a workflow-version lifecycle label.

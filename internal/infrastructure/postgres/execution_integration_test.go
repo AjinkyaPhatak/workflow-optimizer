@@ -215,7 +215,10 @@ func TestPGExecutionWorkflowAndVersionIntegrity(t *testing.T) {
 	wfA, vA := p.seedWorkflow(t, nil)
 	wfB, vB := p.seedWorkflow(t, nil)
 
-	if _, err := p.svc.Create(ctx, uuid.New(), vA, nil); !errors.Is(err, execution.ErrWorkflowNotFound) {
+	// Both foreign keys reject an unknown workflow; PostgreSQL fires their
+	// checks in trigger-name order, which embeds catalog OIDs, so which one
+	// reports first depends on the database (as for the unknown version below).
+	if _, err := p.svc.Create(ctx, uuid.New(), vA, nil); !errors.Is(err, execution.ErrWorkflowNotFound) && !errors.Is(err, execution.ErrWorkflowVersionMismatch) {
 		t.Fatalf("unknown workflow: %v", err)
 	}
 	if _, err := p.svc.Create(ctx, wfA, uuid.New(), nil); !errors.Is(err, execution.ErrWorkflowVersionNotFound) && !errors.Is(err, execution.ErrWorkflowVersionMismatch) {
@@ -603,14 +606,21 @@ func TestPGNodeExecutionPersistence(t *testing.T) {
 		t.Fatalf("RUNNING->SKIPPED: %v", err)
 	}
 	assertRejected(t, p.raw, "INSERT INTO node_executions (id, execution_id, node_id, node_type, status) VALUES ($1, $2, 'D', 'text', 'CANCELLED')", uuid.New(), e.ID)
-	// One record per node attempt.
-	if err := p.nodes.Create(ctx, execution.NodeExecution{ID: uuid.New(), ExecutionID: e.ID, NodeID: "A", NodeType: "text", Status: execution.NodeStatusPending}); !errors.Is(err, execution.ErrInvalidExecution) {
-		t.Fatalf("duplicate node record: %v", err)
+	// One record per node attempt: since Phase 10 the repository numbers a
+	// node's invocations, so a second record for A is attempt 2; a record
+	// that reuses an attempt number is still rejected by the database.
+	again := uuid.New()
+	if err := p.nodes.Create(ctx, execution.NodeExecution{ID: again, ExecutionID: e.ID, NodeID: "A", NodeType: "text", Status: execution.NodeStatusPending}); err != nil {
+		t.Fatalf("second invocation record: %v", err)
 	}
+	if n, err := p.nodes.Get(ctx, again); err != nil || n.Attempt != 2 {
+		t.Fatalf("second invocation of A = attempt %d, %v", n.Attempt, err)
+	}
+	assertRejected(t, p.raw, "INSERT INTO node_executions (id, execution_id, node_id, node_type, status, attempt) VALUES ($1, $2, 'A', 'text', 'PENDING', 1)", uuid.New(), e.ID)
 
 	newNode(other.ID, "A")
 	list, err := p.nodes.ListByExecution(ctx, e.ID)
-	if err != nil || len(list) != 3 {
+	if err != nil || len(list) != 4 {
 		t.Fatalf("ListByExecution = %d, %v", len(list), err)
 	}
 	for _, n := range list {

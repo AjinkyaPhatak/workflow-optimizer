@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -192,7 +193,9 @@ func TestStateMachineRejectsUnreachableTargetsAndBadPayloads(t *testing.T) {
 	svc, repo := newService(t)
 	machine := execution.NewExecutionStateMachine(repo)
 	e := mustCreate(t, svc)
-	for _, target := range []execution.ExecutionStatus{execution.StatusPending, "BOGUS"} {
+	// PENDING is reachable since Phase 10 (RUNNING -> PENDING schedules a
+	// retry); its payload rules are checked below.
+	for _, target := range []execution.ExecutionStatus{"BOGUS"} {
 		if err := machine.Transition(ctx, e.ID, target, execution.TransitionUpdate{}); !errors.Is(err, execution.ErrInvalidTransition) {
 			t.Fatalf("target %q: %v", target, err)
 		}
@@ -212,6 +215,14 @@ func TestStateMachineRejectsUnreachableTargetsAndBadPayloads(t *testing.T) {
 		{execution.StatusCompleted, execution.TransitionUpdate{Error: &execution.ExecutionError{Code: "X", Message: "m"}}},
 		{execution.StatusCompleted, execution.TransitionUpdate{ClaimToken: uuid.New()}}, // token only on claim
 		{execution.StatusCompleted, execution.TransitionUpdate{InterruptedNodeError: &execution.ExecutionError{Code: "X", Message: "m"}}},
+		// Phase 10 payload rules.
+		{execution.StatusPending, execution.TransitionUpdate{}},                                                // retry without its error
+		{execution.StatusPending, execution.TransitionUpdate{LastError: &execution.ExecutionError{Code: "X"}}}, // invalid error
+		{execution.StatusPending, execution.TransitionUpdate{LastError: &execution.ExecutionError{Code: "X", Message: "m"}, RetryDelay: -1}},
+		{execution.StatusFailed, execution.TransitionUpdate{Error: &execution.ExecutionError{Code: "X", Message: "m"}, RetryDelay: time.Second}},
+		{execution.StatusCompleted, execution.TransitionUpdate{DeadLetter: execution.DeadLetterAttemptsExhausted}}, // dead letter only on FAILED
+		{execution.StatusFailed, execution.TransitionUpdate{Error: &execution.ExecutionError{Code: "X", Message: "m"}, DeadLetter: "bogus"}},
+		{execution.StatusCompleted, execution.TransitionUpdate{Lease: &execution.LeaseGrant{Owner: "w", Duration: time.Second}}}, // lease only on claim
 	}
 	for i, b := range bad {
 		if err := machine.Transition(ctx, e.ID, b.target, b.update); !errors.Is(err, execution.ErrInvalidExecution) {

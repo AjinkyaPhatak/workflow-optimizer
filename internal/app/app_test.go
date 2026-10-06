@@ -2,11 +2,14 @@
 package app_test
 
 import (
+	"errors"
+	"os/exec"
 	"strings"
 	"testing"
 
 	"workflow-optimizer/internal/app"
 	"workflow-optimizer/internal/config"
+	providerllm "workflow-optimizer/internal/provider/llm"
 	"workflow-optimizer/internal/workflow"
 )
 
@@ -78,5 +81,33 @@ func TestValidateWithRegistry_NilProvider(t *testing.T) {
 	}
 	if err := def.ValidateWithRegistry(nil); err != nil {
 		t.Fatalf("ValidateWithRegistry with nil provider should succeed, got %v", err)
+	}
+}
+
+// Phase 11: the provider registry holds OpenAI and is frozen at startup; the
+// graph executor's package never imports a provider.
+func TestBootstrapProviderRegistry(t *testing.T) {
+	a, err := app.Bootstrap(config.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := a.ProviderRegistry.List(); len(got) != 1 || got[0] != "openai" {
+		t.Fatalf("providers = %v", got)
+	}
+	openAI, _ := a.ProviderRegistry.Get("openai")
+	if err := a.ProviderRegistry.Register("late", openAI); !errors.Is(err, providerllm.ErrRegistryFrozen) {
+		t.Fatalf("registration after startup: %v", err)
+	}
+	if _, err := app.BootstrapWith(config.Config{OpenAIBaseURL: "ftp://nope"}, app.Dependencies{}); err == nil {
+		t.Fatal("invalid OpenAI base URL accepted")
+	}
+	out, err := exec.Command("go", "list", "-deps", "workflow-optimizer/internal/execution").Output()
+	if err != nil {
+		t.Skipf("go list unavailable: %v", err)
+	}
+	for _, dep := range strings.Fields(string(out)) {
+		if strings.HasPrefix(dep, "workflow-optimizer/internal/provider") || strings.HasPrefix(dep, "workflow-optimizer/internal/credential") {
+			t.Fatalf("the execution package depends on %s", dep)
+		}
 	}
 }

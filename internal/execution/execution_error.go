@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"workflow-optimizer/internal/node"
 )
@@ -25,17 +26,39 @@ const (
 	// execution was finalized, so its outcome was not recorded.
 	CodeDefinitionLoadFailed = "DEFINITION_LOAD_FAILED"
 	CodeNodeInterrupted      = "NODE_INTERRUPTED"
+	// Phase 10. CodeNodeTimeout: one node invocation exceeded its node
+	// timeout (retryable; the execution deadline is CodeTimeout, which is
+	// not). CodeWorkerLost: the worker owning the attempt stopped
+	// heartbeating and its lease expired (retryable).
+	CodeNodeTimeout = "NODE_TIMEOUT"
+	CodeWorkerLost  = "WORKER_LOST"
+)
+
+// Error sources: which part of the system produced a failure.
+const (
+	SourceNode     = node.SourceNode
+	SourceProvider = node.SourceProvider
+	SourceWorker   = "worker"
+	SourceDatabase = "database"
+	SourceQueue    = "queue"
+	SourceSystem   = "system"
 )
 
 // ExecutionError is the structured, persisted failure of an execution or node.
-// Retryable is metadata only; Phase 8 never retries.
+//
+// Phase 10: the retry engine consumes Retryable; it never re-derives it.
+// Source records where the failure came from (node, provider, worker,
+// database, queue, system). RetryAfter carries a server's explicit delay
+// (not persisted: the resulting schedule is).
 //
 // JSON field order is fixed by the struct, so serialization is deterministic.
 type ExecutionError struct {
-	Code      string  `json:"code"`
-	Message   string  `json:"message"`
-	NodeID    *string `json:"node_id,omitempty"`
-	Retryable bool    `json:"retryable"`
+	Code       string        `json:"code"`
+	Message    string        `json:"message"`
+	NodeID     *string       `json:"node_id,omitempty"`
+	Retryable  bool          `json:"retryable"`
+	Source     string        `json:"source,omitempty"`
+	RetryAfter time.Duration `json:"-"`
 }
 
 func (e *ExecutionError) Error() string {
@@ -75,19 +98,45 @@ func ErrorFromExecution(err error) ExecutionError {
 		}
 	}
 
-	var typed *node.NodeError
+	out.Source = SourceSystem
+	if nodeErr != nil {
+		out.Source = SourceNode
+	}
+
+	var (
+		typed   *node.NodeError
+		timeout *NodeTimeoutError
+	)
 	switch {
+	case errors.As(err, &timeout):
+		// Checked before the context sentinels: a node timeout is not the
+		// execution deadline.
+		out.Code, out.Retryable, out.Source = CodeNodeTimeout, true, SourceNode
 	case errors.As(err, &typed):
 		out.Code = string(typed.Code)
 		out.Retryable = typed.Retryable
+		out.RetryAfter = typed.RetryAfter
+		if typed.Source != "" {
+			out.Source = typed.Source
+		}
 	case errors.Is(err, context.DeadlineExceeded):
-		out.Code = CodeTimeout
+		out.Code, out.Source = CodeTimeout, SourceSystem
 	case errors.Is(err, context.Canceled):
-		out.Code = CodeCancelled
+		out.Code, out.Source = CodeCancelled, SourceSystem
 	case errors.Is(err, ErrNodeImplementationMissing), errors.Is(err, ErrNodeDefinitionMissing):
 		out.Code = CodeNodeNotRegistered
 	case errors.Is(err, ErrGraphCycle), errors.Is(err, ErrInvalidPlanInput):
 		out.Code = CodeInvalidWorkflow
+	}
+
+	// Side effects decide whether a transient failure may be repeated: a node
+	// declaring unsafe side effects is re-run only when its error proves the
+	// failed operation had no effect.
+	if out.Retryable && nodeErr != nil && nodeErr.SideEffects == node.SideEffectsUnsafe &&
+		(typed == nil || !typed.NotApplied) {
+		out.Retryable = false
+		out.RetryAfter = 0
+		out.Message += " (not retried: the node has non-idempotent side effects and may have applied them)"
 	}
 	return out
 }

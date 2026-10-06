@@ -152,6 +152,7 @@ func (m *memRepo) Transition(ctx context.Context, id uuid.UUID, from, to executi
 		e.StartedAt = &now
 		token := u.ClaimToken
 		e.ClaimToken = &token
+		e.Attempt++ // like the database: every claim is a new attempt
 	}
 	if to.IsTerminal() {
 		e.FinishedAt = &now
@@ -187,14 +188,18 @@ func (m *memRepo) History(ctx context.Context, id uuid.UUID) ([]execution.Status
 // nodeRepo exposes the node half of memRepo under the node interface.
 type nodeRepo struct{ *memRepo }
 
-// parentRunning mirrors the database rule: node writes need a RUNNING parent.
-func (n nodeRepo) parentRunning(executionID uuid.UUID) error {
+// parentRunning mirrors the database rules: node writes need a RUNNING
+// parent, and a fenced writer (claim != uuid.Nil) must still own it.
+func (n nodeRepo) parentRunning(executionID, claim uuid.UUID) error {
 	e, ok := n.execs[executionID]
 	if !ok {
 		return execution.ErrExecutionNotFound
 	}
 	if e.Status != execution.StatusRunning {
 		return fmt.Errorf("%w: %s", execution.ErrExecutionNotRunning, e.Status)
+	}
+	if claim != uuid.Nil && (e.ClaimToken == nil || *e.ClaimToken != claim) {
+		return fmt.Errorf("%w: stale claim", execution.ErrLeaseLost)
 	}
 	return nil
 }
@@ -203,8 +208,13 @@ func (n nodeRepo) insert(rec execution.NodeExecution) error {
 	if n.failNodeWrites {
 		return fmt.Errorf("simulated node persistence outage")
 	}
-	if err := n.parentRunning(rec.ExecutionID); err != nil {
+	if err := n.parentRunning(rec.ExecutionID, rec.ClaimToken); err != nil {
 		return err
+	}
+	parent := n.execs[rec.ExecutionID]
+	rec.ExecutionAttempt = parent.Attempt
+	if rec.ClaimToken == uuid.Nil && parent.ClaimToken != nil {
+		rec.ClaimToken = *parent.ClaimToken
 	}
 	if rec.Status != execution.NodeStatusPending {
 		return execution.ErrInvalidExecution
@@ -276,7 +286,7 @@ func (n nodeRepo) Transition(ctx context.Context, id uuid.UUID, from, to executi
 	if !ok {
 		return execution.ErrTransitionConflict
 	}
-	if err := n.parentRunning(rec.ExecutionID); err != nil {
+	if err := n.parentRunning(rec.ExecutionID, rec.ClaimToken); err != nil {
 		return err
 	}
 	if rec.Status != from {

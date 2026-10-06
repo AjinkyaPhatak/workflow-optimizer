@@ -3,6 +3,8 @@ package node
 import (
 	"context"
 	"encoding/json"
+
+	"github.com/google/uuid"
 )
 
 // NodeInput is the canonical runtime input supplied to a node during execution.
@@ -12,6 +14,25 @@ import (
 type NodeInput struct {
 	Ports  map[string]Value `json:"ports"`
 	Config map[string]any   `json:"config"`
+	// IdempotencyKey identifies this node's operation within its execution
+	// and stays the same across every attempt (node retries, execution
+	// retries, recovery after a worker crash), so an external service can
+	// deduplicate a repeated side effect. Empty outside lifecycle-managed runs.
+	IdempotencyKey string `json:"idempotency_key,omitempty"`
+	// Attempt is the 1-based number of this invocation of the node within
+	// its execution (it grows across retries; 0 when unknown).
+	Attempt int `json:"attempt,omitempty"`
+	// Scope identifies where the node runs (Phase 11). Zero outside
+	// lifecycle-managed runs.
+	Scope Scope `json:"-"`
+}
+
+// Scope is the execution context a node runs in.
+type Scope struct {
+	// WorkspaceID is the workspace of the workflow being executed: the
+	// boundary in which workspace-scoped resources such as credentials are
+	// resolved.
+	WorkspaceID uuid.UUID
 }
 
 // GetPort retrieves a Value from runtime input ports by name.

@@ -44,6 +44,21 @@ const (
 	// failure (e.g. PostgreSQL unreachable, or a claimed execution whose final
 	// status could not be recorded). Result.Err says why.
 	OutcomeError Outcome = "error"
+
+	// Phase 10.
+
+	// OutcomeRetryScheduled: the attempt ran and failed retryably; the
+	// execution is PENDING with a persisted retry schedule. The scheduler,
+	// not this worker, dispatches it when due.
+	OutcomeRetryScheduled Outcome = "retry_scheduled"
+	// OutcomeNotDue: the job arrived before the execution's scheduled retry
+	// (a stale or duplicate delivery). The database refused the claim; the
+	// scheduler dispatches the retry when it is due.
+	OutcomeNotDue Outcome = "not_due"
+	// OutcomeLeaseLost: this worker lost ownership of the attempt (its lease
+	// expired and the attempt may have been recovered, or another actor
+	// finalized it). It wrote nothing more.
+	OutcomeLeaseLost Outcome = "lease_lost"
 )
 
 // Result describes how a job was handled.
@@ -56,12 +71,28 @@ type Result struct {
 	// Err is the underlying error, if any (for completed runs it is nil; for
 	// failed runs it is the execution error).
 	Err error
+	// DeadLetter is set when the execution failed and was dead-lettered.
+	DeadLetter execution.DeadLetterReason
+	// DeadLetterAttempt is the attempt that was dead-lettered.
+	DeadLetterAttempt int
+	// Requeue reports that this worker has definitely NOT claimed the
+	// execution and could not decide what to do with it because of an
+	// infrastructure failure (or because it is stopping), so the job must go
+	// back to the queue instead of being dropped. Returning it is safe: the
+	// next attempt goes through the same PENDING check and atomic database
+	// claim, so it can never cause a second execution.
+	//
+	// It is set only when (a) the execution could not be loaded (never for
+	// "not found"), or (b) the runner returned without the claim applied
+	// (status still PENDING). It is never set once a claim may have been
+	// made, for terminal or RUNNING executions, or for lost claims.
+	Requeue bool
 }
 
 // Executed reports whether this worker ran the execution's graph.
 func (r Result) Executed() bool {
 	switch r.Outcome {
-	case OutcomeCompleted, OutcomeFailed, OutcomeCancelled:
+	case OutcomeCompleted, OutcomeFailed, OutcomeCancelled, OutcomeRetryScheduled:
 		return true
 	}
 	return false
@@ -111,6 +142,9 @@ func NewExecutionProcessor(executions ExecutionReader, runner ExecutionRunner) (
 //  3. otherwise hand it to the runner, whose first step is the atomic
 //     PENDING -> RUNNING claim; only if that claim succeeds is the graph run;
 //  4. classify the result from the authoritative status in PostgreSQL.
+//
+// Result.Requeue marks the pre-claim infrastructure failures after which the
+// job must be returned to the queue rather than dropped.
 func (p *ExecutionProcessor) Process(ctx context.Context, job queue.Job) Result {
 	res := Result{ExecutionID: job.ExecutionID}
 	if err := job.Validate(); err != nil {
@@ -118,7 +152,7 @@ func (p *ExecutionProcessor) Process(ctx context.Context, job queue.Job) Result 
 		return res
 	}
 	if err := ctx.Err(); err != nil {
-		res.Outcome, res.Err = OutcomeNotAttempted, err
+		res.Outcome, res.Err, res.Requeue = OutcomeNotAttempted, err, true
 		return res
 	}
 
@@ -128,10 +162,12 @@ func (p *ExecutionProcessor) Process(ctx context.Context, job queue.Job) Result 
 		res.Outcome, res.Err = OutcomeNotFound, err
 		return res
 	case err != nil && ctx.Err() != nil:
-		res.Outcome, res.Err = OutcomeNotAttempted, err
+		res.Outcome, res.Err, res.Requeue = OutcomeNotAttempted, err, true
 		return res
 	case err != nil:
-		res.Outcome, res.Err = OutcomeError, fmt.Errorf("load execution %s: %w", job.ExecutionID, err)
+		// Infrastructure failure before any claim attempt: the execution may
+		// still be PENDING and this job may be its only one, so hand it back.
+		res.Outcome, res.Err, res.Requeue = OutcomeError, fmt.Errorf("load execution %s: %w", job.ExecutionID, err), true
 		return res
 	}
 	res.Status = current.Status
@@ -141,11 +177,29 @@ func (p *ExecutionProcessor) Process(ctx context.Context, job queue.Job) Result 
 	}
 
 	_, runErr := p.runner.Run(ctx, job.ExecutionID)
-	if errors.Is(runErr, execution.ErrExecutionNotClaimable) {
+	var (
+		scheduled *execution.RetryScheduledError
+		dead      *execution.DeadLetteredError
+	)
+	switch {
+	case errors.Is(runErr, execution.ErrExecutionNotClaimable):
 		// Another worker's claim won between our read and our claim.
 		res.Outcome, res.Err = OutcomeClaimLost, runErr
 		res.Status = p.status(ctx, job.ExecutionID)
 		return res
+	case errors.Is(runErr, execution.ErrRetryNotDue):
+		res.Outcome, res.Err, res.Status = OutcomeNotDue, runErr, execution.StatusPending
+		return res
+	case errors.As(runErr, &scheduled):
+		res.Outcome, res.Err = OutcomeRetryScheduled, runErr
+		res.Status = p.status(ctx, job.ExecutionID)
+		return res
+	case errors.Is(runErr, execution.ErrLeaseLost):
+		res.Outcome, res.Err = OutcomeLeaseLost, runErr
+		res.Status = p.status(ctx, job.ExecutionID)
+		return res
+	case errors.As(runErr, &dead):
+		res.DeadLetter, res.DeadLetterAttempt = dead.Reason, dead.Attempt
 	}
 	res.Err = runErr
 	res.Status = p.status(ctx, job.ExecutionID)
@@ -158,8 +212,9 @@ func (p *ExecutionProcessor) Process(ctx context.Context, job queue.Job) Result 
 		res.Outcome = OutcomeCancelled
 	case execution.StatusPending:
 		// The claim was never applied (caller already cancelled, or the
-		// database refused it definitively).
-		res.Outcome = OutcomeNotAttempted
+		// claim write failed): nobody owns the execution, so the job must go
+		// back to the queue.
+		res.Outcome, res.Requeue = OutcomeNotAttempted, true
 	default:
 		// RUNNING after Run returned: claimed here but the final status could
 		// not be recorded (database failure). Phase 8 leaves this execution

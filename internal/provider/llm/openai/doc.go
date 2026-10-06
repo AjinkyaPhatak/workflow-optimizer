@@ -1,3 +1,4 @@
-// Package openai is the boundary for an OpenAI implementation of the LLM
-// provider contract. It intentionally makes no external API calls in Phase 1.
+// Package openai is the OpenAI implementation of the provider-neutral LLM
+// contract (internal/provider/llm), using the Chat Completions API. It
+// authenticates with the resolved credential carried by each request.
 package openai

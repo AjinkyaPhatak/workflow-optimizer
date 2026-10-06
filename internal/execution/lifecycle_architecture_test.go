@@ -132,33 +132,51 @@ func TestPostgresUpdatesAreConditionalOnStatus(t *testing.T) {
 	}
 }
 
-func TestNoRetryOrBackoffInPhase8(t *testing.T) {
-	retry := regexp.MustCompile(`(?i)(retry|retries|backoff|attempt)`)
-	allowed := map[string]bool{"Retryable": true, "IsRetryable": true}
+// Phase 10 replaced Phase 8's "never retries" guard (which rejected any
+// retry/attempt/backoff identifier) with the invariant retries must keep: a
+// retry never holds a worker while it backs off. Execution-level retries are
+// persisted schedules (next_attempt_at) that a scheduler dispatches later, so
+// lifecycle code may not sleep, create timers or loop unboundedly. The only
+// in-process pause is the bounded, cancellable wait between in-place node
+// retries (waitForNodeRetry in executor.go).
+func TestRetriesAreScheduledNeverSlept(t *testing.T) {
 	lifecycleFiles := map[string]bool{"status.go": true, "statemachine.go": true, "service.go": true, "runner.go": true,
-		"persistence.go": true, "execution_error.go": true, "lifecycle_errors.go": true}
+		"persistence.go": true, "execution_error.go": true, "lifecycle_errors.go": true, "reliability.go": true}
+	timers := map[string]bool{"Sleep": true, "After": true, "NewTimer": true, "NewTicker": true, "Tick": true, "AfterFunc": true}
 	fset, files := productionFiles(t)
+	waits := 0
 	for _, f := range files {
-		isLifecycle := lifecycleFiles[filepath.Base(fset.Position(f.Pos()).Filename)]
+		file := filepath.Base(fset.Position(f.Pos()).Filename)
+		isLifecycle := lifecycleFiles[file]
 		ast.Inspect(f, func(n ast.Node) bool {
 			switch x := n.(type) {
-			case *ast.Ident:
-				if retry.MatchString(x.Name) && !allowed[x.Name] {
-					t.Errorf("%s: retry logic identifier %q", fset.Position(x.Pos()), x.Name)
-				}
 			case *ast.SelectorExpr:
-				if pkg, ok := x.X.(*ast.Ident); ok && pkg.Name == "time" && x.Sel.Name == "Sleep" {
-					t.Errorf("%s: sleeping/backoff in lifecycle code", fset.Position(x.Pos()))
+				pkg, ok := x.X.(*ast.Ident)
+				if !ok || pkg.Name != "time" || !timers[x.Sel.Name] {
+					return true
+				}
+				switch {
+				case x.Sel.Name == "Sleep":
+					t.Errorf("%s: time.Sleep in the execution package", fset.Position(x.Pos()))
+				case isLifecycle:
+					t.Errorf("%s: time.%s in lifecycle code: execution retries must be scheduled, not waited for", fset.Position(x.Pos()), x.Sel.Name)
+				case file == "executor.go":
+					waits++
+				default:
+					t.Errorf("%s: unexpected time.%s", fset.Position(x.Pos()), x.Sel.Name)
 				}
 			case *ast.ForStmt:
-				// A bare loop around lifecycle calls is how retries sneak in;
-				// lifecycle code has no unbounded loops (graph code may).
+				// A bare loop around lifecycle calls is how unbounded retries
+				// sneak in; lifecycle code has no unbounded loops.
 				if isLifecycle && x.Cond == nil {
-					t.Errorf("%s: unbounded loop in execution package", fset.Position(x.Pos()))
+					t.Errorf("%s: unbounded loop in lifecycle code", fset.Position(x.Pos()))
 				}
 			}
 			return true
 		})
+	}
+	if waits != 1 {
+		t.Fatalf("expected exactly one timer (the bounded in-place node retry wait), found %d", waits)
 	}
 }
 

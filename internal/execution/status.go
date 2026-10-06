@@ -27,8 +27,11 @@ const (
 // executionTransitions is the single source of truth for execution lifecycle
 // rules. The database triggers in migration 000002 mirror this table.
 var executionTransitions = map[ExecutionStatus][]ExecutionStatus{
-	StatusPending:   {StatusRunning},
-	StatusRunning:   {StatusCompleted, StatusFailed, StatusCancelled},
+	StatusPending: {StatusRunning},
+	// RUNNING -> PENDING (Phase 10): a failed attempt is scheduled for
+	// retry, or an attempt whose worker died is recovered. PENDING keeps a
+	// unique predecessor (creation is not a transition).
+	StatusRunning:   {StatusCompleted, StatusFailed, StatusCancelled, StatusPending},
 	StatusCompleted: nil,
 	StatusFailed:    nil,
 	StatusCancelled: nil,

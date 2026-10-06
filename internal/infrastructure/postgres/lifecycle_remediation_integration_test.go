@@ -974,7 +974,8 @@ func TestPGMigrationUpgradesLegacyData(t *testing.T) {
 	insert("node_cancelled", "INSERT INTO node_executions (id, execution_id, node_id, node_type, status) VALUES ($1,$2,'n','text','CANCELLED')", ids["running_no_start"])
 	insert("node_dup", "INSERT INTO node_executions (id, execution_id, node_id, node_type, status, started_at, completed_at) VALUES ($1,$2,'n','text','COMPLETED',now(),now())", ids["running_no_start"])
 
-	if err := m.Up(); err != nil {
+	// Pinned to 000002 (Phase 10 added 000003, tested separately).
+	if err := m.Migrate(2); err != nil {
 		t.Fatalf("upgrade with legacy data failed: %v", err)
 	}
 	if v, dirty, _ := m.Version(); v != 2 || dirty {
@@ -1028,6 +1029,8 @@ func TestPGMigrationUpgradesLegacyData(t *testing.T) {
 
 func TestPGMigrationDownAndUpPreservesPhase8Data(t *testing.T) {
 	m, pool := freshMigrator(t)
+	// The repositories need the latest schema; DOWN then goes all the way
+	// back to 000001 (through 000003 and 000002 DOWN) and UP returns.
 	if err := m.Up(); err != nil {
 		t.Fatal(err)
 	}
@@ -1050,7 +1053,7 @@ func TestPGMigrationDownAndUpPreservesPhase8Data(t *testing.T) {
 	_ = svc.Complete(ctx, e.ID, map[string]any{"ok": true})
 	before, _ := postgresinfra.NewExecutionRepository(store).Get(ctx, e.ID)
 
-	if err := m.Steps(-1); err != nil {
+	if err := m.Migrate(1); err != nil {
 		t.Fatalf("DOWN failed with Phase 8 data: %v", err)
 	}
 	if v, dirty, _ := m.Version(); v != 1 || dirty {

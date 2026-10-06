@@ -27,8 +27,11 @@ func TestExecutionTransitionMatrix(t *testing.T) {
 		{execution.StatusRunning, execution.StatusCompleted}: true,
 		{execution.StatusRunning, execution.StatusFailed}:    true,
 		{execution.StatusRunning, execution.StatusCancelled}: true,
+		// Phase 10: a failed attempt may be scheduled for retry (or recovered
+		// after its worker died); the execution waits PENDING again.
+		{execution.StatusRunning, execution.StatusPending}: true,
 	}
-	// Exhaustive 5x5 matrix: exactly the four spec transitions are legal.
+	// Exhaustive 5x5 matrix: exactly the five legal transitions.
 	for _, from := range allExecutionStatuses {
 		for _, to := range allExecutionStatuses {
 			if got, want := from.CanTransitionTo(to), valid[[2]execution.ExecutionStatus{from, to}]; got != want {

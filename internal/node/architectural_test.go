@@ -60,7 +60,7 @@ func TestArchitecturalGenericExecutionWithoutTypeBranching(t *testing.T) {
 
 	// Register existing V1 nodes
 	_ = registry.Register(input.New())
-	_ = registry.Register(llm.New(nil))
+	_ = registry.Register(llm.New(llm.Dependencies{}))
 	_ = registry.Register(http.New())
 
 	// Register the brand new future node

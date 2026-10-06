@@ -3,6 +3,7 @@ package execution
 import (
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -58,7 +59,43 @@ var (
 	// not be reached to establish whether the write committed. The record may
 	// be in either state; ownership is identifiable through its claim token.
 	ErrOutcomeUnknown = errors.New("execution: write outcome unknown")
+
+	// Phase 10.
+
+	// ErrRetryNotDue rejects claiming a PENDING execution whose scheduled
+	// retry is not due yet.
+	ErrRetryNotDue = errors.New("execution: scheduled retry is not due yet")
+	// ErrAttemptsExhausted rejects claiming or rescheduling an execution that
+	// has used all its attempts.
+	ErrAttemptsExhausted = errors.New("execution: no attempts left")
+	// ErrRetryAfterDeadline rejects a retry that would start after the
+	// execution deadline.
+	ErrRetryAfterDeadline = errors.New("execution: retry would start after the execution deadline")
+	// ErrCancelRequested rejects rescheduling an execution whose cancellation
+	// was requested, and is the cancellation cause of a run whose
+	// cancellation was requested while it ran.
+	ErrCancelRequested = errors.New("execution: cancellation requested")
+	// ErrLeaseLost: this worker no longer owns the attempt (its lease expired
+	// and the attempt may have been recovered, or another actor finalized the
+	// execution). A worker that lost its lease writes nothing more.
+	ErrLeaseLost = errors.New("execution: ownership of the attempt was lost")
 )
+
+// RetryScheduledError reports that a failed attempt was not the end: the
+// execution is PENDING again with a persisted retry schedule. It unwraps to
+// the attempt's failure.
+type RetryScheduledError struct {
+	ExecutionID uuid.UUID
+	Attempt     int
+	Delay       time.Duration
+	Err         error
+}
+
+func (e *RetryScheduledError) Error() string {
+	return fmt.Sprintf("execution %s attempt %d failed; retry scheduled in %s: %v", e.ExecutionID, e.Attempt, e.Delay, e.Err)
+}
+
+func (e *RetryScheduledError) Unwrap() error { return e.Err }
 
 // ExternallyFinalizedError reports that the execution reached a terminal
 // status through another actor (e.g. an operator's Cancel) while this worker
@@ -115,3 +152,20 @@ func (e *NodeTransitionError) Error() string {
 }
 
 func (e *NodeTransitionError) Is(target error) bool { return target == ErrInvalidTransition }
+
+// DeadLetteredError reports that a retryable failure stopped being retried
+// and the execution was dead-lettered (FAILED, with an authoritative
+// dead-letter record written in the same transaction). It unwraps to the
+// attempt's failure.
+type DeadLetteredError struct {
+	ExecutionID uuid.UUID
+	Attempt     int
+	Reason      DeadLetterReason
+	Err         error
+}
+
+func (e *DeadLetteredError) Error() string {
+	return fmt.Sprintf("execution %s dead-lettered after attempt %d (%s): %v", e.ExecutionID, e.Attempt, e.Reason, e.Err)
+}
+
+func (e *DeadLetteredError) Unwrap() error { return e.Err }

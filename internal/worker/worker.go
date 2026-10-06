@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"runtime/debug"
 	"sync"
 	"time"
 
@@ -36,7 +37,10 @@ const (
 var (
 	// ErrAlreadyStarted is returned by Start on a worker that was started before.
 	ErrAlreadyStarted = errors.New("worker: already started")
-	errNilDependency  = errors.New("worker: nil dependency")
+	// ErrProcessorPanicked marks a job whose processing panicked outside the
+	// node boundary (recovered by the worker; see QueueWorker.process).
+	ErrProcessorPanicked = errors.New("worker: job processing panicked")
+	errNilDependency     = errors.New("worker: nil dependency")
 )
 
 // Options tunes a worker. Zero values select the defaults.
@@ -48,9 +52,12 @@ type Options struct {
 	// dequeueing again, so an unreachable queue does not cause a hot loop.
 	// It is loop pacing, not a job retry. Default 1s.
 	ErrorPause time.Duration
-	// RequeueTimeout bounds returning an unclaimed job to the queue when the
-	// worker stops. Default 5s.
+	// RequeueTimeout bounds returning an unclaimed job to the queue (on stop,
+	// or after an infrastructure failure before the claim). Default 5s.
 	RequeueTimeout time.Duration
+	// OnDeadLetter, when set, is called for every dead-lettered execution
+	// (e.g. to publish a non-authoritative notice).
+	OnDeadLetter func(ctx context.Context, res Result)
 }
 
 func (o Options) withDefaults() Options {
@@ -71,8 +78,9 @@ type Stats struct {
 	Outcomes      map[Outcome]int
 	Malformed     int // payloads that were not valid jobs (dropped, logged)
 	QueueErrors   int // Dequeue failures other than cancellation
-	Requeued      int // unclaimed jobs returned to the queue on stop
+	Requeued      int // unclaimed jobs returned to the queue (stop or pre-claim failure)
 	RequeueFailed int // unclaimed jobs that could not be returned (lost; logged)
+	Panics        int // processor panics recovered by the worker (logged with stack)
 }
 
 // QueueWorker consumes jobs from a queue.JobQueue and hands each to a
@@ -222,13 +230,23 @@ func (w *QueueWorker) loop(ctx context.Context) {
 			return
 		}
 
-		res := w.processor.Process(ctx, job)
+		res := w.process(ctx, log, job)
 		w.record(func(s *Stats) { s.Outcomes[res.Outcome]++ })
 		w.report(log, res)
-		if res.Outcome == OutcomeNotAttempted && ctx.Err() != nil {
-			// Stopping before the claim: the execution is still PENDING and
-			// its job must not be lost.
+		if res.DeadLetter != "" && w.opts.OnDeadLetter != nil {
+			w.opts.OnDeadLetter(context.WithoutCancel(ctx), res)
+		}
+		if res.Requeue || (res.Outcome == OutcomeNotAttempted && ctx.Err() != nil) {
+			// Not claimed by this worker (stopping, or an infrastructure
+			// failure before the claim): the execution may still be PENDING
+			// and this job must not be lost. The database claim makes the
+			// returned job harmless if another job for it exists.
 			w.requeue(ctx, log, job)
+			if ctx.Err() == nil && !sleep(ctx, w.opts.ErrorPause) {
+				// Paced like a queue error, so a persistent outage cannot turn
+				// dequeue -> fail -> requeue into a hot loop.
+				return
+			}
 		}
 		if ctx.Err() != nil {
 			return
@@ -236,13 +254,33 @@ func (w *QueueWorker) loop(ctx context.Context) {
 	}
 }
 
+// process runs the processor with a last-resort recover. Node panics are
+// already turned into ordinary execution failures by the executor; this only
+// catches a panic in the surrounding processing code, so one bad job cannot
+// kill the whole process (and every other worker's in-flight execution). The
+// job is not returned to the queue, because whether it was claimed is unknown.
+func (w *QueueWorker) process(ctx context.Context, log *slog.Logger, job queue.Job) (res Result) {
+	defer func() {
+		if r := recover(); r != nil {
+			w.record(func(s *Stats) { s.Panics++ })
+			log.Error("job processing panicked; job dropped, execution may need attention",
+				"execution_id", job.ExecutionID, "panic", r, "stack", string(debug.Stack()))
+			res = Result{ExecutionID: job.ExecutionID, Outcome: OutcomeError,
+				Err: fmt.Errorf("%w: %v", ErrProcessorPanicked, r)}
+		}
+	}()
+	return w.processor.Process(ctx, job)
+}
+
 func (w *QueueWorker) report(log *slog.Logger, res Result) {
 	attrs := []any{"execution_id", res.ExecutionID, "outcome", res.Outcome, "status", res.Status}
 	switch res.Outcome {
 	case OutcomeError:
 		log.Error("job could not be handled", append(attrs, "error", res.Err)...)
-	case OutcomeFailed, OutcomeNotFound:
-		log.Warn("job finished without success", append(attrs, "error", res.Err)...)
+	case OutcomeFailed, OutcomeNotFound, OutcomeLeaseLost:
+		log.Warn("job finished without success", append(attrs, "error", res.Err, "dead_letter", res.DeadLetter)...)
+	case OutcomeRetryScheduled:
+		log.Info("attempt failed; retry scheduled", append(attrs, "error", res.Err)...)
 	case OutcomeNotAttempted:
 		if res.Err != nil {
 			log.Warn("execution not claimed", append(attrs, "error", res.Err)...)
@@ -259,11 +297,12 @@ func (w *QueueWorker) requeue(ctx context.Context, log *slog.Logger, job queue.J
 	defer cancel()
 	if err := w.queue.Enqueue(rctx, job); err != nil {
 		w.record(func(s *Stats) { s.RequeueFailed++ })
-		log.Error("could not return unclaimed job to the queue; execution stays PENDING until dispatched again",
+		log.Error("JOB LOST: could not return unclaimed job to the queue; execution stays PENDING until dispatched again",
 			"execution_id", job.ExecutionID, "error", err)
 		return
 	}
 	w.record(func(s *Stats) { s.Requeued++ })
+	log.Warn("returned unclaimed job to the queue", "execution_id", job.ExecutionID)
 }
 
 // sleep waits d or until ctx is done; it reports whether ctx is still live.

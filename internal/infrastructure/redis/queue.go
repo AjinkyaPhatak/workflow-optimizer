@@ -98,3 +98,32 @@ func (q *Queue) Dequeue(ctx context.Context) (queue.Job, error) {
 		return queue.DecodeJob([]byte(res[1]))
 	}
 }
+
+// List is a plain Redis list used for notices (e.g. the dead-letter list).
+// Nothing consumes it as work: it is not a queue.JobQueue.
+type List struct {
+	client *Client
+	name   string
+}
+
+// NewList returns a list handle for key name.
+func NewList(client *Client, name string) (*List, error) {
+	if client == nil {
+		return nil, errors.New("redis: list requires a client")
+	}
+	if strings.TrimSpace(name) == "" {
+		return nil, errors.New("redis: list name must not be empty")
+	}
+	return &List{client: client, name: name}, nil
+}
+
+// Name returns the Redis key of the list.
+func (l *List) Name() string { return l.name }
+
+// Push LPUSHes payload.
+func (l *List) Push(ctx context.Context, payload []byte) error {
+	if err := l.client.rdb.LPush(ctx, l.name, payload).Err(); err != nil {
+		return fmt.Errorf("%w: push to %q: %w", ErrUnavailable, l.name, err)
+	}
+	return nil
+}

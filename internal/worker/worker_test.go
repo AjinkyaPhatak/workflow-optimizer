@@ -264,8 +264,9 @@ func TestUnclaimedJobIsReturnedOnStop(t *testing.T) {
 	}
 }
 
-// A NotAttempted result while the worker keeps running is not re-enqueued:
-// that would be a retry, which Phase 9 does not do.
+// A result that does not ask for Requeue is not re-enqueued while the worker
+// keeps running: only the processor decides that a job is safely unclaimed
+// (see TestRequeueResultReturnsJobAndPaces).
 func TestNotAttemptedWhileRunningIsNotRetried(t *testing.T) {
 	q := queue.NewMemoryQueue()
 	var calls atomic.Int32

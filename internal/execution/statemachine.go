@@ -70,6 +70,12 @@ func (m *executionStateMachine) Transition(ctx context.Context, id uuid.UUID, ta
 	if getErr != nil {
 		return getErr
 	}
+	if update.Owner != uuid.Nil && !current.Status.IsTerminal() &&
+		(current.Status != from || current.ClaimToken == nil || *current.ClaimToken != update.Owner) {
+		// A fenced write lost: the attempt is no longer this claim's (its
+		// lease expired and it was recovered, possibly re-claimed).
+		return fmt.Errorf("%w: execution %s is %s under another claim", ErrLeaseLost, id, current.Status)
+	}
 	if current.Status == from {
 		// Nobody else moved the execution: the write failed for a database
 		// reason (e.g. deadlock victim), which must not be hidden.
@@ -86,8 +92,8 @@ func validateExecutionUpdate(target ExecutionStatus, u TransitionUpdate) error {
 		return fmt.Errorf("%w: a claim token is required for, and only for, %s", ErrInvalidExecution, StatusRunning)
 	}
 	if u.InterruptedNodeError != nil {
-		if target != StatusFailed && target != StatusCancelled {
-			return fmt.Errorf("%w: interrupted-node errors apply only to %s or %s", ErrInvalidExecution, StatusFailed, StatusCancelled)
+		if target != StatusFailed && target != StatusCancelled && target != StatusPending {
+			return fmt.Errorf("%w: interrupted-node errors apply only to %s, %s or %s", ErrInvalidExecution, StatusFailed, StatusCancelled, StatusPending)
 		}
 		if err := u.InterruptedNodeError.Validate(); err != nil {
 			return err
@@ -102,6 +108,39 @@ func validateExecutionUpdate(target ExecutionStatus, u TransitionUpdate) error {
 		}
 	} else if u.Error != nil && target != StatusCancelled {
 		return fmt.Errorf("%w: error may only be written on %s or %s", ErrInvalidExecution, StatusFailed, StatusCancelled)
+	}
+	return validateReliabilityUpdate(target, u)
+}
+
+// validateReliabilityUpdate checks the Phase 10 payload of a transition.
+func validateReliabilityUpdate(target ExecutionStatus, u TransitionUpdate) error {
+	if u.Lease != nil {
+		if target != StatusRunning {
+			return fmt.Errorf("%w: a lease is granted only with a claim", ErrInvalidExecution)
+		}
+		if u.Lease.Owner == "" || u.Lease.Duration <= 0 {
+			return fmt.Errorf("%w: a lease requires an owner and a positive duration", ErrInvalidExecution)
+		}
+	}
+	if target == StatusRunning && u.Owner != uuid.Nil {
+		return fmt.Errorf("%w: a claim is not fenced by a previous claim", ErrInvalidExecution)
+	}
+	if target == StatusPending {
+		if u.LastError == nil || u.RetryDelay < 0 {
+			return fmt.Errorf("%w: scheduling a retry requires the attempt's error and a non-negative delay", ErrInvalidExecution)
+		}
+		if err := u.LastError.Validate(); err != nil {
+			return err
+		}
+	} else if u.LastError != nil || u.RetryDelay != 0 {
+		return fmt.Errorf("%w: a retry schedule may only be written on %s", ErrInvalidExecution, StatusPending)
+	}
+	if u.DeadLetter != "" && target != StatusFailed {
+		return fmt.Errorf("%w: a dead letter is written only with %s", ErrInvalidExecution, StatusFailed)
+	}
+	if u.DeadLetter != "" && u.DeadLetter != DeadLetterAttemptsExhausted && u.DeadLetter != DeadLetterDeadlineExceeded &&
+		u.DeadLetter != DeadLetterRetryUnsafe {
+		return fmt.Errorf("%w: unknown dead-letter reason %q", ErrInvalidExecution, u.DeadLetter)
 	}
 	return nil
 }
@@ -138,7 +177,7 @@ func (m *nodeExecutionStateMachine) Transition(ctx context.Context, id uuid.UUID
 	if update.Input != nil && target != NodeStatusRunning {
 		return fmt.Errorf("%w: node input may only be written on %s", ErrInvalidExecution, NodeStatusRunning)
 	}
-	if update.Output != nil && target != NodeStatusCompleted {
+	if (update.Output != nil || update.OutputValues != nil) && target != NodeStatusCompleted {
 		return fmt.Errorf("%w: node output may only be written on %s", ErrInvalidExecution, NodeStatusCompleted)
 	}
 	if target == NodeStatusFailed {

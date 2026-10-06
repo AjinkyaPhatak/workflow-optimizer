@@ -2,9 +2,17 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
+)
+
+var (
+	// ErrUserNotFound is returned when no user matches.
+	ErrUserNotFound = errors.New("auth: user not found")
+	// ErrEmailTaken rejects registering an email that already has an account.
+	ErrEmailTaken = errors.New("auth: email is already registered")
 )
 
 // User is the durable representation of an account.

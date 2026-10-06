@@ -16,6 +16,12 @@ func Definition() node.NodeDefinition {
 		Name:        "HTTP",
 		Description: "Performs outbound HTTP requests to external third-party services and APIs.",
 		Category:    node.CategoryIntegration,
+		// Conservative until the transport exists: an HTTP call may be a
+		// non-idempotent write, so a failed call is only re-run when its
+		// error proves it was not applied (node.HTTPStatusError marks 429).
+		// A real transport should send NodeInput.IdempotencyKey as an
+		// Idempotency-Key header and mark failures of safe methods NotApplied.
+		SideEffects: node.SideEffectsUnsafe,
 		Inputs: []node.PortDefinition{
 			node.NewPortDefinition("url", node.ValueTypeString, false, "Dynamic destination URL override"),
 			node.NewPortDefinition("body", node.ValueTypeJSON, false, "HTTP request payload"),

@@ -215,6 +215,19 @@ func mapWriteError(err error) error {
 			return wrap(execution.ErrWorkflowVersionNotExecutable)
 		case "lifecycle_insert_requires_pending":
 			return wrap(execution.ErrInvalidExecution)
+		// Phase 10.
+		case "lifecycle_retry_not_due":
+			return wrap(execution.ErrRetryNotDue)
+		case "lifecycle_attempts_exhausted":
+			return wrap(execution.ErrAttemptsExhausted)
+		case "lifecycle_retry_after_deadline":
+			return wrap(execution.ErrRetryAfterDeadline)
+		case "lifecycle_retry_cancel_requested":
+			return wrap(execution.ErrCancelRequested)
+		case "lifecycle_stale_attempt", "lifecycle_stale_owner", "lifecycle_lease_not_owner":
+			return wrap(execution.ErrLeaseLost)
+		case "lifecycle_retry_requires_schedule":
+			return wrap(execution.ErrInvalidExecution)
 		}
 		return wrap(execution.ErrInvalidTransition)
 	case pgSerializationFailure, pgDeadlockDetected:

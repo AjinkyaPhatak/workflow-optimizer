@@ -24,11 +24,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("worker configuration: %v", err)
 	}
-	application, err := app.Bootstrap(cfg)
-	if err != nil {
-		log.Fatalf("failed to bootstrap worker application: %v", err)
-	}
-	runtime, err := app.NewWorkerRuntime(ctx, cfg, application, slog.Default())
+	runtime, err := app.NewWorker(ctx, cfg, slog.Default())
 	if err != nil {
 		log.Fatalf("failed to start worker runtime: %v", err)
 	}

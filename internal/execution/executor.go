@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"time"
 
 	"workflow-optimizer/internal/node"
 	"workflow-optimizer/internal/workflow"
@@ -61,6 +62,17 @@ func NewGraphExecutor(registry node.Registry) *GraphExecutor {
 	return &GraphExecutor{registry: registry}
 }
 
+// SideEffects returns the registered side-effect declaration of nodeType, or
+// node.SideEffectsUnsafe when the type has no definition (unknown effects
+// must never be assumed safe to repeat).
+func (e *GraphExecutor) SideEffects(nodeType string) node.SideEffects {
+	def, err := e.registry.GetDefinition(nodeType)
+	if err != nil {
+		return node.SideEffectsUnsafe
+	}
+	return def.SideEffects
+}
+
 // boundNode pairs a workflow node instance with its registered implementation
 // and definition.
 type boundNode struct {
@@ -84,6 +96,46 @@ func (e *GraphExecutor) Execute(ctx context.Context, definition workflow.Definit
 
 // ExecuteWithObserver is Execute with an optional NodeObserver (nil allowed).
 func (e *GraphExecutor) ExecuteWithObserver(ctx context.Context, definition workflow.Definition, input map[string]any, observer NodeObserver) (ExecutionResult, error) {
+	return e.ExecuteWithOptions(ctx, definition, input, ExecuteOptions{Observer: observer})
+}
+
+// NodeRetryPolicy decides whether a failed node invocation runs again in
+// place (within the same execution attempt, on the same worker).
+type NodeRetryPolicy interface {
+	// NodeRetryDelay is consulted after `failures` failed invocations of a
+	// node with definition def, the last failing with err. It returns the
+	// pause before invoking the node again, or false to stop.
+	NodeRetryDelay(def node.NodeDefinition, failures int, err ExecutionError) (time.Duration, bool)
+}
+
+// ExecuteOptions extends Execute (Phase 10). The zero value is Execute.
+type ExecuteOptions struct {
+	// Observer receives node lifecycle events (nil allowed).
+	Observer NodeObserver
+	// Completed holds the outputs of nodes that completed in an earlier
+	// attempt of the same execution. They are not run again; their outputs
+	// feed downstream nodes exactly as if they had just run.
+	Completed map[string]node.NodeOutput
+	// PriorInvocations counts earlier invocations per node, so
+	// NodeInput.Attempt keeps growing across attempts.
+	PriorInvocations map[string]int
+	// OperationKey, when set, makes every node receive the stable
+	// NodeInput.IdempotencyKey OperationKey + "/" + nodeID.
+	OperationKey string
+	// NodeTimeout bounds each node invocation (0 = no node timeout). The node
+	// context derives from ctx, so a node timeout never extends ctx's deadline.
+	NodeTimeout time.Duration
+	// NodeRetry, when set, may re-invoke a node after a failure (bounded by
+	// the policy, ctx's deadline and cancellation).
+	NodeRetry NodeRetryPolicy
+	// Scope (Phase 11) is passed to every node as NodeInput.Scope; the
+	// executor does not interpret it.
+	Scope node.Scope
+}
+
+// ExecuteWithOptions is Execute with Phase 10 reliability options.
+func (e *GraphExecutor) ExecuteWithOptions(ctx context.Context, definition workflow.Definition, input map[string]any, opts ExecuteOptions) (ExecutionResult, error) {
+	observer := opts.Observer
 	if ctx == nil {
 		return ExecutionResult{}, ErrNilContext
 	}
@@ -105,12 +157,20 @@ func (e *GraphExecutor) ExecuteWithObserver(ctx context.Context, definition work
 
 	state := newExecutionState(len(plan.Order))
 	for _, id := range plan.Order {
+		if out, done := opts.Completed[id]; done {
+			// Completed in an earlier attempt: reuse its output, do not re-run.
+			if out.Ports == nil {
+				out = node.NewNodeOutput(nil)
+			}
+			state.record(id, out)
+			continue
+		}
 		if err := ctx.Err(); err != nil {
 			return ExecutionResult{State: *state}, fmt.Errorf("execution cancelled before node %q: %w", id, err)
 		}
 		b := bound[id]
 		fail := func(stage Stage, cause error) (ExecutionResult, error) {
-			return ExecutionResult{State: *state}, &NodeExecutionError{NodeID: id, NodeType: b.spec.Type, Stage: stage, Err: cause}
+			return ExecutionResult{State: *state}, &NodeExecutionError{NodeID: id, NodeType: b.spec.Type, Stage: stage, Err: cause, SideEffects: b.def.SideEffects}
 		}
 		failBeforeExecute := func(stage Stage, cause error) (ExecutionResult, error) {
 			if observer != nil {
@@ -135,31 +195,107 @@ func (e *GraphExecutor) ExecuteWithObserver(ctx context.Context, definition work
 			}
 		}
 
-		nodeInput := node.NodeInput{Ports: ports, Config: cfg}
-		if observer != nil {
-			if err := observer.NodeStarted(ctx, id, b.spec.Type, nodeInput); err != nil {
-				return fail(StageObserve, err)
-			}
+		key := ""
+		if opts.OperationKey != "" {
+			key = opts.OperationKey + "/" + id
 		}
-		out, err := b.impl.Execute(ctx, nodeInput)
-		if observer != nil {
-			if obsErr := observer.NodeFinished(ctx, id, out, err); obsErr != nil {
-				if err != nil {
-					return fail(StageExecute, errors.Join(err, obsErr))
+		for failures := 0; ; failures++ {
+			nodeInput := node.NodeInput{Ports: ports, Config: cfg, IdempotencyKey: key,
+				Attempt: opts.PriorInvocations[id] + failures + 1, Scope: opts.Scope}
+			if observer != nil {
+				if err := observer.NodeStarted(ctx, id, b.spec.Type, nodeInput); err != nil {
+					return fail(StageObserve, err)
 				}
-				return fail(StageObserve, obsErr)
+			}
+			out, err := invokeNodeWithTimeout(ctx, b.impl, nodeInput, opts.NodeTimeout)
+			if observer != nil {
+				if obsErr := observer.NodeFinished(ctx, id, out, err); obsErr != nil {
+					if err != nil {
+						return fail(StageExecute, errors.Join(err, obsErr))
+					}
+					return fail(StageObserve, obsErr)
+				}
+			}
+			if err == nil {
+				if out.Ports == nil {
+					out = node.NewNodeOutput(nil)
+				}
+				state.record(id, out)
+				break
+			}
+			failure := &NodeExecutionError{NodeID: id, NodeType: b.spec.Type, Stage: StageExecute, Err: err, SideEffects: b.def.SideEffects}
+			if !waitForNodeRetry(ctx, opts.NodeRetry, b.def, failures+1, failure) {
+				return fail(StageExecute, err)
 			}
 		}
-		if err != nil {
-			return fail(StageExecute, err)
-		}
-		if out.Ports == nil {
-			out = node.NewNodeOutput(nil)
-		}
-		state.record(id, out)
 	}
 
 	return buildResult(&plan, bound, state), nil
+}
+
+// invokeNode is the single boundary between the executor and a node
+// implementation. A panic inside Execute is recovered here and returned as a
+// *NodePanicError, so it follows the ordinary node-failure path (observer
+// NodeFinished, fail-fast NodeExecutionError at StageExecute) instead of
+// unwinding through the executor and killing the calling goroutine/process.
+// Only the node's own code runs under this recover.
+func invokeNode(ctx context.Context, impl node.Node, in node.NodeInput) (out node.NodeOutput, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			out, err = node.NodeOutput{}, &NodePanicError{Value: r}
+		}
+	}()
+	return impl.Execute(ctx, in)
+}
+
+// invokeNodeWithTimeout runs one node invocation under a context derived
+// from ctx and bounded by timeout (0 = ctx only). The derived context can only
+// end earlier than ctx, so a node timeout never extends the execution
+// deadline. When the node's own timeout (not ctx) ended it, the failure is a
+// *NodeTimeoutError.
+func invokeNodeWithTimeout(ctx context.Context, impl node.Node, in node.NodeInput, timeout time.Duration) (node.NodeOutput, error) {
+	if timeout <= 0 {
+		return invokeNode(ctx, impl, in)
+	}
+	nodeCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	out, err := invokeNode(nodeCtx, impl, in)
+	if ctx.Err() == nil && errors.Is(nodeCtx.Err(), context.DeadlineExceeded) {
+		if err == nil {
+			// Returned a result only after its time was up: not accepted.
+			err = nodeCtx.Err()
+		}
+		return node.NodeOutput{}, &NodeTimeoutError{Timeout: timeout, Err: err}
+	}
+	return out, err
+}
+
+// waitForNodeRetry decides, from the failure's own classification, whether
+// the node runs again in place, and waits for the policy's delay. It never
+// retries once ctx is done (cancellation and the execution deadline win) and
+// never schedules a retry that would start after ctx's deadline.
+func waitForNodeRetry(ctx context.Context, policy NodeRetryPolicy, def node.NodeDefinition, failures int, failure error) bool {
+	if policy == nil || ctx.Err() != nil {
+		return false
+	}
+	delay, ok := policy.NodeRetryDelay(def, failures, ErrorFromExecution(failure))
+	if !ok {
+		return false
+	}
+	if deadline, has := ctx.Deadline(); has && time.Until(deadline) <= delay {
+		return false
+	}
+	if delay <= 0 {
+		return ctx.Err() == nil
+	}
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-timer.C:
+		return true
+	}
 }
 
 // bind resolves every node's implementation and definition through the

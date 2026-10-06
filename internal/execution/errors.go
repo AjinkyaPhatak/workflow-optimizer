@@ -3,6 +3,9 @@ package execution
 import (
 	"errors"
 	"fmt"
+	"time"
+
+	"workflow-optimizer/internal/node"
 )
 
 // Sentinel errors returned by the Phase 7 graph executor. They classify
@@ -32,6 +35,11 @@ var (
 	ErrInvalidConnection = errors.New("execution: input connection cannot be resolved")
 	// ErrUnresolvedReference marks a {{variable}} reference with no runtime value.
 	ErrUnresolvedReference = errors.New("execution: unresolved variable reference")
+	// ErrNodePanicked marks a node whose Execute panicked. The panic is
+	// recovered at the node invocation boundary and reported as a node failure.
+	ErrNodePanicked = errors.New("execution: node panicked")
+	// ErrNodeTimeout marks a node invocation that exceeded its node timeout.
+	ErrNodeTimeout = errors.New("execution: node timed out")
 )
 
 // Stage identifies which step of a node's execution failed.
@@ -54,6 +62,9 @@ type NodeExecutionError struct {
 	NodeType string
 	Stage    Stage
 	Err      error
+	// SideEffects is the failing node's declaration; it decides whether a
+	// transient failure may be repeated (see ErrorFromExecution).
+	SideEffects node.SideEffects
 }
 
 func (e *NodeExecutionError) Error() string {
@@ -61,3 +72,36 @@ func (e *NodeExecutionError) Error() string {
 }
 
 func (e *NodeExecutionError) Unwrap() error { return e.Err }
+
+// NodePanicError is the cause recorded when a node's Execute panics. It is
+// wrapped in a NodeExecutionError (Stage == StageExecute), which carries the
+// node ID and type. It matches ErrNodePanicked. It deliberately does not
+// unwrap to the panic value: a panic is always a node failure, never
+// reclassified (e.g. panic(context.Canceled) must not read as a cancellation).
+// The raw value stays available through errors.As.
+type NodePanicError struct {
+	Value any
+}
+
+func (e *NodePanicError) Error() string {
+	return fmt.Sprintf("node panicked: %v", e.Value)
+}
+
+// Is matches ErrNodePanicked.
+func (e *NodePanicError) Is(target error) bool { return target == ErrNodePanicked }
+
+// NodeTimeoutError is the cause recorded when one node invocation exceeds its
+// node timeout while the execution itself is still within its deadline. It
+// matches ErrNodeTimeout and unwraps to what the node returned.
+type NodeTimeoutError struct {
+	Timeout time.Duration
+	Err     error
+}
+
+func (e *NodeTimeoutError) Error() string {
+	return fmt.Sprintf("node exceeded its %s timeout: %v", e.Timeout, e.Err)
+}
+
+func (e *NodeTimeoutError) Is(target error) bool { return target == ErrNodeTimeout }
+
+func (e *NodeTimeoutError) Unwrap() error { return e.Err }

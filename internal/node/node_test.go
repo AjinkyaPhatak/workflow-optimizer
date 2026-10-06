@@ -9,6 +9,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+
+	"workflow-optimizer/internal/credential"
 	"workflow-optimizer/internal/node"
 	"workflow-optimizer/internal/node/condition"
 	"workflow-optimizer/internal/node/http"
@@ -613,12 +616,15 @@ func TestAllInitialV1NodeContracts(t *testing.T) {
 			t.Fatalf("invalid llm def: %v", err)
 		}
 		mockProv := &mockLLMProvider{responseText: "AI generated response"}
-		n := llm.New(mockProv)
+		providers := providerllm.NewRegistry()
+		_ = providers.Register("mock", mockProv)
+		n := llm.New(llm.Dependencies{Providers: providers, Credentials: mockResolver{}})
 		out, err := n.Execute(ctx, node.NodeInput{
 			Ports: map[string]node.Value{
 				"prompt": node.NewStringValue("Tell me a joke"),
 			},
-			Config: map[string]any{"model": "gpt-5"},
+			Config: map[string]any{"provider": "mock", "model": "gpt-5", "credential_id": uuid.NewString()},
+			Scope:  node.Scope{WorkspaceID: uuid.New()},
 		})
 		if err != nil {
 			t.Fatalf("execute failed: %v", err)
@@ -687,9 +693,14 @@ func (m *mockLLMProvider) Generate(ctx context.Context, req providerllm.Request)
 		return providerllm.Response{}, m.err
 	}
 	return providerllm.Response{
-		Text:         m.responseText,
+		Content:      m.responseText,
 		FinishReason: "stop",
-		InputTokens:  10,
-		OutputTokens: 25,
+		Usage:        providerllm.TokenUsage{InputTokens: 10, OutputTokens: 25, TotalTokens: 35},
 	}, nil
+}
+
+type mockResolver struct{}
+
+func (mockResolver) Resolve(_ context.Context, _, id uuid.UUID, provider string) (credential.ResolvedCredential, error) {
+	return credential.ResolvedCredential{ID: id, Provider: provider, Type: credential.TypeAPIKey, Secret: credential.NewSecret("test-secret")}, nil
 }

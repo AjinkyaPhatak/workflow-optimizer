@@ -29,6 +29,29 @@ const (
 	SemanticRoleExit  SemanticRole = "exit"
 )
 
+// SideEffects declares what re-running a node can do to the outside world.
+// The retry engine consults it before re-running a node (Phase 10).
+type SideEffects string
+
+const (
+	// SideEffectsNone: the node only computes; re-running it is always safe.
+	SideEffectsNone SideEffects = ""
+	// SideEffectsIdempotent: the node changes external state but deduplicates
+	// repeated calls with NodeInput.IdempotencyKey (e.g. by sending it as an
+	// Idempotency-Key header), so a retry does not repeat the effect when the
+	// target honours the key.
+	SideEffectsIdempotent SideEffects = "idempotent"
+	// SideEffectsUnsafe: the node changes external state and cannot
+	// deduplicate (emails, payments, non-idempotent writes). A failed attempt
+	// is never re-run automatically unless its error states NotApplied.
+	SideEffectsUnsafe SideEffects = "unsafe"
+)
+
+// Valid reports whether s is a known side-effect declaration.
+func (s SideEffects) Valid() bool {
+	return s == SideEffectsNone || s == SideEffectsIdempotent || s == SideEffectsUnsafe
+}
+
 // NodeDefinition is the static metadata describing what a node type is capable of:
 // its identity, declared input/output ports, and configuration schema.
 // It is strictly decoupled from workflow.Node (which represents a configured instance
@@ -42,6 +65,8 @@ type NodeDefinition struct {
 	Inputs      []PortDefinition `json:"inputs"`
 	Outputs     []PortDefinition `json:"outputs"`
 	Config      []ConfigField    `json:"config,omitempty"`
+	// SideEffects declares whether re-running the node is safe (Phase 10).
+	SideEffects SideEffects `json:"side_effects,omitempty"`
 }
 
 // GetInputPort looks up an input port definition by name.
@@ -84,6 +109,9 @@ func (d NodeDefinition) Validate() error {
 	}
 	if d.Category == "" {
 		return fmt.Errorf("%w: definition category is required", ErrInvalidDefinition)
+	}
+	if !d.SideEffects.Valid() {
+		return fmt.Errorf("%w: unknown side effects %q", ErrInvalidDefinition, d.SideEffects)
 	}
 
 	seenInputs := make(map[string]struct{}, len(d.Inputs))

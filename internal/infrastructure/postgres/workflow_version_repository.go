@@ -28,6 +28,7 @@ type WorkflowVersionRepository struct {
 var (
 	_ workflow.VersionRepository = (*WorkflowVersionRepository)(nil)
 	_ execution.DefinitionLoader = (*WorkflowVersionRepository)(nil)
+	_ execution.WorkspaceLookup  = (*WorkflowVersionRepository)(nil)
 )
 
 // NewWorkflowVersionRepository uses the Store's existing connection pool.
@@ -62,6 +63,21 @@ func (r *WorkflowVersionRepository) FindByID(ctx context.Context, id uuid.UUID) 
 // FindByWorkflowAndNumber loads a workflow version by workflow and number.
 func (r *WorkflowVersionRepository) FindByWorkflowAndNumber(ctx context.Context, workflowID uuid.UUID, number int) (workflow.Version, error) {
 	return scanVersion(r.pool.QueryRow(ctx, `SELECT `+versionColumns+` FROM workflow_versions WHERE workflow_id = $1 AND version_number = $2`, workflowID, number))
+}
+
+// WorkspaceOf implements execution.WorkspaceLookup: the workspace that owns
+// the workflow (workflows -> projects -> workspaces).
+func (r *WorkflowVersionRepository) WorkspaceOf(ctx context.Context, workflowID uuid.UUID) (uuid.UUID, error) {
+	var ws uuid.UUID
+	err := r.pool.QueryRow(ctx, `
+SELECT p.workspace_id FROM workflows w JOIN projects p ON p.id = w.project_id WHERE w.id = $1`, workflowID).Scan(&ws)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return uuid.Nil, fmt.Errorf("%w: %s", execution.ErrWorkflowNotFound, workflowID)
+	}
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("find workspace of workflow %s: %w", workflowID, err)
+	}
+	return ws, nil
 }
 
 // LoadDefinition decodes the version's canonical workflow definition. The
