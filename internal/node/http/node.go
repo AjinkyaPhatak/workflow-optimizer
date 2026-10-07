@@ -33,7 +33,9 @@ func Definition() node.NodeDefinition {
 		},
 		Config: []node.ConfigField{
 			node.NewConfigField("url", node.ValueTypeString, false, "", "Target URL endpoint"),
-			node.NewConfigField("method", node.ValueTypeString, true, "GET", "HTTP method (GET, POST, PUT, DELETE, PATCH)"),
+			node.NewConfigField("method", node.ValueTypeString, true, "GET", "HTTP method").WithLabel("Method").WithOptions(
+				node.Option("GET", "GET"), node.Option("POST", "POST"), node.Option("PUT", "PUT"),
+				node.Option("PATCH", "PATCH"), node.Option("DELETE", "DELETE")),
 			node.NewConfigField("timeout_ms", node.ValueTypeNumber, false, 30000, "Request timeout in milliseconds"),
 			node.NewConfigField("credential_id", node.ValueTypeString, false, "", "Workspace credential identifier for authentication"),
 		},

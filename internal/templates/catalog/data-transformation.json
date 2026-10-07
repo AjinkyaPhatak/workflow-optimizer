@@ -1,0 +1,22 @@
+{
+  "id": "data-transformation",
+  "name": "Data Transformation",
+  "description": "Reshape the run input into a new JSON object without calling a model.",
+  "definition": {
+    "version": 1,
+    "settings": {},
+    "variables": [
+      { "name": "source", "type": "string", "default": "web form", "description": "Where the request came from" }
+    ],
+    "nodes": [
+      { "id": "input", "type": "input", "name": "Input", "position": { "x": 0, "y": 80 }, "config": {} },
+      { "id": "transform", "type": "transform", "name": "Reshape", "position": { "x": 320, "y": 80 },
+        "config": { "mapping": { "question": "{{input.query}}", "source": "{{source}}", "received": true } } },
+      { "id": "output", "type": "output", "name": "Output", "position": { "x": 640, "y": 80 }, "config": {} }
+    ],
+    "edges": [
+      { "id": "e1", "source": "input", "source_port": "data", "target": "transform", "target_port": "input" },
+      { "id": "e2", "source": "transform", "source_port": "output", "target": "output", "target_port": "value" }
+    ]
+  }
+}

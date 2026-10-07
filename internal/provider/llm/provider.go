@@ -195,3 +195,39 @@ func (r *inMemoryRegistry) Freeze() {
 	r.frozen = true
 	r.mu.Unlock()
 }
+
+// Model is a model a provider offers.
+type Model struct {
+	ID    string `json:"id"`
+	Label string `json:"label"`
+}
+
+// Info describes a provider for configuration UIs: its display name and the
+// models it offers. It is metadata only; any model ID may still be sent.
+type Info struct {
+	Name   string  `json:"name"`
+	Label  string  `json:"label"`
+	Models []Model `json:"models"`
+}
+
+// Describer is implemented by providers that describe themselves.
+type Describer interface {
+	Describe() Info
+}
+
+// Describe returns the registered providers' descriptions, sorted by name.
+// A provider that does not implement Describer is listed by name only.
+func Describe(reg Registry) []Info {
+	out := []Info{}
+	for _, name := range reg.List() {
+		info := Info{Name: name, Label: name}
+		if p, err := reg.Get(name); err == nil {
+			if d, ok := p.(Describer); ok {
+				info = d.Describe()
+				info.Name = name
+			}
+		}
+		out = append(out, info)
+	}
+	return out
+}

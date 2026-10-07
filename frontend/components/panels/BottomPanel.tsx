@@ -8,6 +8,7 @@ import { useEditorContext } from "@/features/workflows/EditorContext";
 import { useFocusIssue, useIssues } from "@/features/workflows/useIssues";
 import type { Issue } from "@/lib/workflow/issues";
 import { useEditorStore, useIsDirty } from "@/stores/workflow-editor/store";
+import type { WorkflowVariable } from "@/types/api";
 
 export type BottomTab = "validation" | "run";
 
@@ -16,7 +17,7 @@ export type BottomTab = "validation" | "run";
 function groupIssues(issues: Issue[]): { key: string; title: string; items: Issue[] }[] {
   const groups = new Map<string, { key: string; title: string; items: Issue[] }>();
   for (const i of issues) {
-    const key = i.edgeId ? `edge:${i.edgeId}` : i.nodeId ? `node:${i.nodeId}` : "workflow";
+    const key = i.edgeId ? `edge:${i.edgeId}` : i.nodeId ? `node:${i.nodeId}` : i.variable !== undefined ? "variables" : "workflow";
     const g = groups.get(key) ?? { key, title: i.title, items: [] };
     g.items.push(i);
     groups.set(key, g);
@@ -67,7 +68,7 @@ function ValidationTab() {
           <li key={key} className={items.some((i) => i.severity === "error") ? "error" : "warning"}>
             <div className="issue-title">{title}</div>
             {items.map((i) => (
-              <button key={i.key} type="button" className={i.severity} onClick={() => focus(i)} disabled={!i.nodeId && !i.edgeId}>
+              <button key={i.key} type="button" className={i.severity} onClick={() => focus(i)} disabled={!i.nodeId && !i.edgeId && i.variable === undefined}>
                 <span className="issue-icon" aria-hidden>⚠</span>
                 <span className="issue-body">
                   <span>{i.message}</span>
@@ -83,13 +84,44 @@ function ValidationTab() {
   );
 }
 
+type RunRow = { key: string; value: string; variable?: WorkflowVariable };
+
+/** A run-input row's value: declared variables are converted to their type
+ * (the backend checks it); an empty variable row is left out so its default
+ * applies. Other rows are text. */
+function rowValue(r: RunRow): { set: boolean; value?: unknown } {
+  const v = r.variable;
+  if (!v) return { set: true, value: r.value };
+  if (r.value === "") return { set: false };
+  switch (v.type) {
+    case "string": return { set: true, value: r.value };
+    case "number": return { set: true, value: Number.isNaN(Number(r.value)) ? r.value : Number(r.value) };
+    case "boolean": return { set: true, value: r.value === "true" ? true : r.value === "false" ? false : r.value };
+    default:
+      try {
+        return { set: true, value: JSON.parse(r.value) };
+      } catch {
+        return { set: true, value: r.value };
+      }
+  }
+}
+
+function initialRows(variables: WorkflowVariable[]): RunRow[] {
+  return [
+    { key: "query", value: "" },
+    ...variables.filter((v) => v.name !== "query").map((v) => ({ key: v.name, value: "", variable: v })),
+  ];
+}
+
 function RunTab({ workflowId }: { workflowId: string }) {
   const { workflow, version } = useEditorContext();
   const { execution, nodes, running, error, run } = useExecution(workflowId);
-  const [rows, setRows] = useState<{ key: string; value: string }[]>([{ key: "query", value: "" }]);
+  const [rows, setRows] = useState<RunRow[]>(() => initialRows(useEditorStore.getState().definition.variables ?? []));
   const activeVersion = workflow?.active_version_id ?? null;
 
-  const input = Object.fromEntries(rows.filter((r) => r.key.trim()).map((r) => [r.key.trim(), r.value]));
+  const input = Object.fromEntries(
+    rows.filter((r) => r.key.trim() && rowValue(r).set).map((r) => [r.key.trim(), rowValue(r).value]),
+  );
 
   return (
     <div className="run-grid">
@@ -98,12 +130,17 @@ function RunTab({ workflowId }: { workflowId: string }) {
         {rows.map((r, i) => (
           <div className="kv-row" key={i}>
             <input aria-label={`Input key ${i + 1}`} value={r.key} onChange={(e) => setRows(rows.map((x, j) => (j === i ? { ...x, key: e.target.value } : x)))} />
-            <input aria-label={`Input ${r.key || i + 1}`} value={r.value} onChange={(e) => setRows(rows.map((x, j) => (j === i ? { ...x, value: e.target.value } : x)))} />
+            <input aria-label={`Input ${r.key || i + 1}`} value={r.value}
+              placeholder={r.variable ? (r.variable.default === null ? `${r.variable.type}, required` : `default: ${typeof r.variable.default === "string" ? r.variable.default : JSON.stringify(r.variable.default)}`) : undefined}
+              onChange={(e) => setRows(rows.map((x, j) => (j === i ? { ...x, value: e.target.value } : x)))} />
             <button onClick={() => setRows(rows.filter((_, j) => j !== i))} aria-label="Remove input">✕</button>
           </div>
         ))}
         <div className="row">
           <button onClick={() => setRows([...rows, { key: "", value: "" }])}>+ Field</button>
+          <button onClick={() => setRows(initialRows(useEditorStore.getState().definition.variables ?? []))} title="One field per workflow variable">
+            Reset fields
+          </button>
           <span className="spacer" />
           <button className="primary" disabled={!activeVersion || running} onClick={() => activeVersion && run(input, activeVersion)}>
             {running ? "Running…" : "Execute"}

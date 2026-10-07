@@ -141,6 +141,9 @@ type CreateWorkflow struct {
 	ProjectID   string  `json:"project_id"`
 	Name        string  `json:"name"`
 	Description *string `json:"description"`
+	// TemplateID, when set, starts the workflow from a template: its first
+	// version is a DRAFT copy of the template definition.
+	TemplateID *string `json:"template_id"`
 }
 
 // Validate returns the parsed fields.

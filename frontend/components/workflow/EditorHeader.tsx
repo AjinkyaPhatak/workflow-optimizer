@@ -1,11 +1,14 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { useEditorContext } from "@/features/workflows/EditorContext";
 import { useEditorStore, useIsDirty } from "@/stores/workflow-editor/store";
+import { VersionsPanel } from "./VersionsPanel";
 
 export function EditorHeader({ onExecute }: { onExecute: () => void }) {
-  const { workflow, version, busy, notice, save, validate, publish, canPublish } = useEditorContext();
+  const { workflow, version, busy, notice, save, validate, publish, canPublish, refreshVersions } = useEditorContext();
+  const [history, setHistory] = useState(false);
   const dirty = useIsDirty();
   const readonly = useEditorStore((s) => s.mode === "readonly");
   const canUndo = useEditorStore((s) => s.past.length > 0);
@@ -18,13 +21,29 @@ export function EditorHeader({ onExecute }: { onExecute: () => void }) {
     <header className="editor-header">
       <Link href="/workflows" aria-label="Back to workflows">←</Link>
       <h1>{workflow?.name}</h1>
-      {version ? (
-        <span className={`badge ${published ? "published" : "draft"}`} data-testid="version-status">
-          v{version.version_number} · {published ? "Published" : "Draft"}
-        </span>
-      ) : (
-        <span className="badge draft" data-testid="version-status">No saved version</span>
-      )}
+      <span className="versions-anchor">
+        <button
+          type="button"
+          className="version-button"
+          data-versions-toggle
+          aria-expanded={history}
+          title="Version history"
+          onClick={() => {
+            if (!history) void refreshVersions();
+            setHistory(!history);
+          }}
+        >
+          {version ? (
+            <span className={`badge ${published ? "published" : "draft"}`} data-testid="version-status">
+              v{version.version_number} · {published ? "Published" : "Draft"}
+            </span>
+          ) : (
+            <span className="badge draft" data-testid="version-status">No saved version</span>
+          )}
+          <span className="caret" aria-hidden>▾</span>
+        </button>
+        {history && <VersionsPanel onClose={() => setHistory(false)} />}
+      </span>
       {dirty && <span className="dirty" data-testid="dirty">• Unsaved changes{published ? " (saving creates a new draft)" : ""}</span>}
       {readonly && <span className="badge">Read-only</span>}
       <span className="spacer" />

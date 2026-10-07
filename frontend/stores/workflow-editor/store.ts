@@ -5,7 +5,7 @@
 
 import { applyEdgeChanges, applyNodeChanges, type EdgeChange, type NodeChange } from "@xyflow/react";
 import { create } from "zustand";
-import type { NodeDefinition, Position, ValidationResult, WorkflowDefinition, WorkflowEdge } from "@/types/api";
+import type { NodeDefinition, Position, ValidationResult, WorkflowDefinition, WorkflowEdge, WorkflowVariable } from "@/types/api";
 import { createNode, emptyDefinition, newEdgeId, normalizeDefinition, stableStringify } from "@/lib/workflow/definition";
 import { fromCanvas, toCanvas, type CanvasNode } from "@/lib/workflow/mapping";
 import { pasteFragment, type Fragment } from "@/lib/workflow/clipboard";
@@ -38,6 +38,8 @@ export interface WorkflowEditorState {
   moveNode: (id: string, position: Position) => void;
   renameNode: (id: string, name: string) => void;
   setConfigValue: (id: string, key: string, value: unknown) => void;
+  /** Replaces the workflow variables (one undoable step); [] removes them. */
+  setVariables: (variables: WorkflowVariable[]) => void;
   connect: (c: ConnectionAttempt, catalog: Map<string, NodeDefinition>) => ConnectionCheck;
   removeEdges: (ids: string[]) => void;
   select: (nodeIds: string[], edgeIds?: string[]) => void;
@@ -143,6 +145,15 @@ export const useEditorStore = create<WorkflowEditorState>((set, get) => {
         config[key] = value;
       }
       commit({ ...definition, nodes: definition.nodes.map((n) => (n.id === id ? { ...n, config } : n)) });
+    },
+
+    setVariables: (variables) => {
+      const { definition } = get();
+      const next = { ...definition };
+      if (variables.length > 0) next.variables = variables;
+      else delete next.variables;
+      if (stableStringify(next.variables ?? []) === stableStringify(definition.variables ?? [])) return;
+      commit(next);
     },
 
     connect: (c, catalog) => {

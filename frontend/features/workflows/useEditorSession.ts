@@ -10,7 +10,7 @@
 // publishing marks a version PUBLISHED and makes it the active version.
 // Published versions are never modified.
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, authApi, credentialApi, nodeApi, projectApi, workflowApi } from "@/lib/api";
 import { isDirty, useEditorStore } from "@/stores/workflow-editor/store";
 import type { Credential, NodeDefinition, Role, ValidationResult, VersionSummary, Workflow } from "@/types/api";
@@ -33,6 +33,12 @@ export interface EditorSession {
   validate: () => Promise<ValidationResult | null>;
   publish: () => Promise<boolean>;
   canPublish: boolean;
+  /** Version history, newest first (loaded on demand). */
+  versions: VersionSummary[] | null;
+  refreshVersions: () => Promise<void>;
+  /** Loads a stored version into the editor as the working copy. Saving
+   * then creates a new draft; the stored version never changes. */
+  openVersion: (versionId: string) => Promise<void>;
 }
 
 export function useEditorSession(workflowId: string): EditorSession {
@@ -45,6 +51,10 @@ export function useEditorSession(workflowId: string): EditorSession {
   const [role, setRole] = useState<Role | null>(null);
   const [busy, setBusy] = useState<BusyAction>(null);
   const [notice, setNotice] = useState<EditorSession["notice"]>(null);
+  const [versions, setVersions] = useState<VersionSummary[] | null>(null);
+  /** Whether the history has been loaded (then saves/publishes refresh it). */
+  const historyLoaded = useRef(false);
+  const refreshVersionsRef = useRef<() => Promise<void>>(async () => {});
 
   useEffect(() => {
     let cancelled = false;
@@ -105,6 +115,7 @@ export function useEditorSession(workflowId: string): EditorSession {
       };
       setVersion(summary);
       setNotice({ kind: "ok", text: `Saved as version ${v.version_number}` });
+      if (historyLoaded.current) void refreshVersionsRef.current();
       return summary;
     } catch (e) {
       reportFailure(e, "Save failed");
@@ -154,6 +165,7 @@ export function useEditorSession(workflowId: string): EditorSession {
       setWorkflow((wf) => (wf ? { ...wf, active_version_id: published.id } : wf));
       useEditorStore.getState().setValidation({ valid: true, errors: [], warnings: [] });
       setNotice({ kind: "ok", text: `Published version ${published.version_number}` });
+      if (historyLoaded.current) void refreshVersionsRef.current();
       return true;
     } catch (e) {
       reportFailure(e, "Publish failed");
@@ -163,9 +175,39 @@ export function useEditorSession(workflowId: string): EditorSession {
     }
   }, [ensureSaved, workflowId, reportFailure]);
 
+  const refreshVersions = useCallback(async () => {
+    try {
+      historyLoaded.current = true;
+      setVersions((await workflowApi.listVersions(workflowId, 1, 100)).items);
+    } catch (e) {
+      setNotice({ kind: "error", text: `Could not load versions: ${e instanceof Error ? e.message : "failed"}` });
+    }
+  }, [workflowId]);
+
+  useEffect(() => {
+    refreshVersionsRef.current = refreshVersions;
+  }, [refreshVersions]);
+
+  const openVersion = useCallback(
+    async (versionId: string) => {
+      try {
+        const v = await workflowApi.getVersion(workflowId, versionId);
+        const { definition: _definition, ...summary } = v;
+        void _definition;
+        useEditorStore.getState().load(v.definition, useEditorStore.getState().mode);
+        setVersion(summary);
+        setNotice({ kind: "ok", text: `Opened version ${v.version_number}` });
+      } catch (e) {
+        setNotice({ kind: "error", text: `Could not open the version: ${e instanceof Error ? e.message : "failed"}` });
+      }
+    },
+    [workflowId],
+  );
+
   return {
     loading, loadError, workflow, version, catalogList, catalog, credentials, role, busy, notice,
     save, validate, publish,
     canPublish: role === "owner" || role === "admin",
+    versions, refreshVersions, openVersion,
   };
 }

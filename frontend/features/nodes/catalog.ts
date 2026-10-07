@@ -35,3 +35,34 @@ export function iconText(def: Pick<NodeDefinition, "name">): string {
 
 /** MIME type of palette drags. */
 export const NODE_DRAG_TYPE = "application/x-workflow-node-type";
+
+/** Searches the catalog by name, type, category, description and port names
+ * (every word must match somewhere). Better matches first: name prefix, then
+ * name, then the other fields. */
+export function searchNodes(defs: NodeDefinition[], query: string): NodeDefinition[] {
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return defs;
+  const scored: { d: NodeDefinition; score: number }[] = [];
+  for (const d of defs) {
+    const name = d.name.toLowerCase();
+    const fields = [
+      d.type.toLowerCase(),
+      categoryLabel(d.category).toLowerCase(),
+      d.description.toLowerCase(),
+      [...d.inputs, ...d.outputs].map((p) => p.name).join(" ").toLowerCase(),
+    ];
+    let score = 0;
+    let all = true;
+    for (const w of words) {
+      if (name.startsWith(w)) continue;
+      if (name.includes(w)) score += 1;
+      else if (fields.some((f) => f.includes(w))) score += 3;
+      else {
+        all = false;
+        break;
+      }
+    }
+    if (all) scored.push({ d, score });
+  }
+  return scored.sort((a, b) => a.score - b.score || a.d.name.localeCompare(b.d.name)).map((x) => x.d);
+}

@@ -94,7 +94,7 @@ func BootstrapWith(cfg config.Config, deps Dependencies) (*Application, error) {
 
 		// AI category
 		{node: prompt.New(), def: prompt.Definition()},
-		{node: llm.New(llmDeps), def: llm.Definition()},
+		{node: llm.New(llmDeps), def: llm.DefinitionFor(providerllm.Describe(providerReg))},
 		{node: structured_output.New(nil), def: structured_output.Definition()},
 
 		// Integration category

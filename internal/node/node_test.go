@@ -648,7 +648,7 @@ func TestAllInitialV1NodeContracts(t *testing.T) {
 		n := structured_output.New(nil)
 		out, err := n.Execute(ctx, node.NodeInput{
 			Ports: map[string]node.Value{
-				"prompt": node.NewStringValue("Extract items"),
+				"input": node.NewStringValue(`{"items": ["a"]}`),
 			},
 		})
 		if err != nil {
@@ -686,9 +686,11 @@ func TestAllInitialV1NodeContracts(t *testing.T) {
 type mockLLMProvider struct {
 	responseText string
 	err          error
+	lastReq      providerllm.Request
 }
 
 func (m *mockLLMProvider) Generate(ctx context.Context, req providerllm.Request) (providerllm.Response, error) {
+	m.lastReq = req
 	if m.err != nil {
 		return providerllm.Response{}, m.err
 	}

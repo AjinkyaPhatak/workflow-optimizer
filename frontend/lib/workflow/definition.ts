@@ -11,12 +11,15 @@ export function emptyDefinition(): WorkflowDefinition {
 
 /** Normalizes a definition loaded from the API (null collections become empty). */
 export function normalizeDefinition(d: Partial<WorkflowDefinition> | null | undefined): WorkflowDefinition {
-  return {
+  const out: WorkflowDefinition = {
     version: d?.version ?? DEFINITION_SCHEMA_VERSION,
     nodes: (d?.nodes ?? []).map((n) => ({ ...n, config: n.config ?? {}, position: n.position ?? null })),
     edges: d?.edges ?? [],
     settings: d?.settings ?? {},
   };
+  // Variables are optional in the schema; an empty list is the same as none.
+  if (d?.variables && d.variables.length > 0) out.variables = d.variables.map((v) => ({ ...v, default: v.default ?? null }));
+  return out;
 }
 
 /** Deterministic JSON (sorted keys) used for dirty tracking. */

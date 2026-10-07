@@ -49,7 +49,24 @@ type Provider struct {
 	client  *http.Client
 }
 
-var _ llm.Provider = (*Provider)(nil)
+var (
+	_ llm.Provider  = (*Provider)(nil)
+	_ llm.Describer = (*Provider)(nil)
+)
+
+// Describe implements llm.Describer: the models offered in configuration
+// UIs. Other model IDs can still be configured and are sent as given.
+func (p *Provider) Describe() llm.Info {
+	return llm.Info{Name: Name, Label: "OpenAI", Models: []llm.Model{
+		{ID: "gpt-5", Label: "GPT-5"},
+		{ID: "gpt-5-mini", Label: "GPT-5 mini"},
+		{ID: "gpt-5-nano", Label: "GPT-5 nano"},
+		{ID: "gpt-4.1", Label: "GPT-4.1"},
+		{ID: "gpt-4.1-mini", Label: "GPT-4.1 mini"},
+		{ID: "gpt-4o", Label: "GPT-4o"},
+		{ID: "gpt-4o-mini", Label: "GPT-4o mini"},
+	}}
+}
 
 // New builds the provider.
 func New(opts Options) (*Provider, error) {

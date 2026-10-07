@@ -6,6 +6,7 @@ import (
 	"workflow-optimizer/internal/api/httpx"
 	"workflow-optimizer/internal/api/requests"
 	"workflow-optimizer/internal/api/responses"
+	"workflow-optimizer/internal/templates"
 )
 
 // CreateProject handles POST /api/v1/projects.
@@ -70,12 +71,31 @@ func (h *Handlers) CreateWorkflow(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, err)
 		return
 	}
+	if req.TemplateID != nil && *req.TemplateID != "" {
+		wf, v, err := h.Workflows.CreateWorkflowFromTemplate(r.Context(), user(r), project, name, desc, *req.TemplateID)
+		if err != nil {
+			h.fail(w, r, err)
+			return
+		}
+		httpx.WriteJSON(w, http.StatusCreated, responses.NewWorkflowFromTemplate(wf, v))
+		return
+	}
 	wf, err := h.Workflows.CreateWorkflow(r.Context(), user(r), project, name, desc)
 	if err != nil {
 		h.fail(w, r, err)
 		return
 	}
 	httpx.WriteJSON(w, http.StatusCreated, responses.NewWorkflow(wf))
+}
+
+// ListTemplates handles GET /api/v1/templates: the workflow templates a new
+// workflow can start from.
+func (h *Handlers) ListTemplates(w http.ResponseWriter, r *http.Request) {
+	out := responses.List[responses.Template]{Items: []responses.Template{}}
+	for _, t := range templates.List() {
+		out.Items = append(out.Items, responses.NewTemplate(t))
+	}
+	httpx.WriteJSON(w, http.StatusOK, out)
 }
 
 // ListWorkflows handles GET /api/v1/workflows?project_id=&page=&page_size=.

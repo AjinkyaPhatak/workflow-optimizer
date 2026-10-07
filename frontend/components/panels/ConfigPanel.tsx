@@ -5,17 +5,19 @@ import { useEditorContext } from "@/features/workflows/EditorContext";
 import { useFocusIssue, useIssues } from "@/features/workflows/useIssues";
 import { categoryClass, iconText } from "@/features/nodes/catalog";
 import type { Issue } from "@/lib/workflow/issues";
-import { fieldControl, fieldLabel, typeLabel } from "@/lib/workflow/labels";
+import { effectiveConfig, fieldControl, labelOf, optionsFor, typeLabel } from "@/lib/workflow/labels";
 import { availableVariables } from "@/lib/workflow/variables";
 import { useEditorStore } from "@/stores/workflow-editor/store";
-import type { ConfigField, Credential, WorkflowNode } from "@/types/api";
+import type { ConfigField, ConfigOption, Credential, WorkflowNode } from "@/types/api";
 import { VariableField } from "./VariableField";
+import { VariablesEditor } from "./VariablesEditor";
 
-/** Fields whose value is usually picked from a known set: offered as a
- * combobox of suggestions (declared default, values used elsewhere in the
- * workflow, providers of workspace credentials). Free text stays allowed;
- * the backend decides what is valid. */
-const SUGGESTED_FIELDS = new Set(["model", "provider"]);
+const DEFAULT_CHOICE = "__default__";
+const CUSTOM_CHOICE = "__custom__";
+const CURRENT_CHOICE = "__current__";
+
+/** An option's <option> value: strings as themselves, others as JSON. */
+const optionKey = (v: unknown) => (typeof v === "string" ? v : JSON.stringify(v));
 
 /** A text input that commits on blur or Enter (one undo step per edit, not
  * per keystroke). It restarts from the stored value whenever that changes
@@ -35,16 +37,18 @@ interface CommitInputProps {
   invalid?: boolean;
   describedBy?: string;
   step?: string;
+  min?: number;
+  max?: number;
 }
 
-function CommitInputDraft({ id, value, onCommit, placeholder, type = "text", list, disabled, invalid, describedBy, step }: CommitInputProps) {
+function CommitInputDraft({ id, value, onCommit, placeholder, type = "text", list, disabled, invalid, describedBy, step, min, max }: CommitInputProps) {
   const [draft, setDraft] = useState(value);
   const commit = () => {
     if (draft !== value) onCommit(draft);
   };
   return (
     <input
-      id={id} type={type} value={draft} placeholder={placeholder} list={list} disabled={disabled} step={step}
+      id={id} type={type} value={draft} placeholder={placeholder} list={list} disabled={disabled} step={step} min={min} max={max}
       autoComplete="off"
       aria-invalid={invalid || undefined}
       aria-describedby={describedBy}
@@ -127,6 +131,50 @@ function CredentialSelect({ id, value, provider, credentials, onCommit, disabled
   );
 }
 
+/** A dropdown of the backend's options for the field (only those whose
+ * conditions hold for this node). With allow_custom, "Custom..." switches to
+ * a text input for any other value. */
+function OptionSelect({ id, field, value, options, onCommit, disabled, invalid, describedBy }: {
+  id: string; field: ConfigField; value: unknown; options: ConfigOption[]; onCommit: (v: unknown) => void;
+  disabled?: boolean; invalid?: boolean; describedBy?: string;
+}) {
+  const known = options.some((o) => optionKey(o.value) === optionKey(value));
+  const [custom, setCustom] = useState(value !== undefined && !known && !!field.allow_custom);
+  const hasDefault = field.default !== null && field.default !== undefined && field.default !== "";
+  const defaultLabel = hasDefault ? options.find((o) => optionKey(o.value) === optionKey(field.default))?.label ?? String(field.default) : "";
+
+  if (custom) {
+    return (
+      <>
+        <CommitInput id={id} disabled={disabled} invalid={invalid} describedBy={describedBy} placeholder="Enter a value"
+          value={value === undefined ? "" : String(value)} onCommit={(v) => onCommit(v.trim() === "" ? undefined : v.trim())} />
+        {!disabled && (
+          <div className="field-actions">
+            <button type="button" className="link" onClick={() => setCustom(false)}>Choose from the list</button>
+          </div>
+        )}
+      </>
+    );
+  }
+  const current = value === undefined ? DEFAULT_CHOICE : known ? optionKey(value) : CURRENT_CHOICE;
+  return (
+    <select id={id} value={current} disabled={disabled} aria-invalid={invalid || (value !== undefined && !known) || undefined} aria-describedby={describedBy}
+      onChange={(e) => {
+        const k = e.target.value;
+        if (k === CUSTOM_CHOICE) setCustom(true);
+        else if (k === DEFAULT_CHOICE) onCommit(undefined);
+        else if (k !== CURRENT_CHOICE) onCommit(options.find((o) => optionKey(o.value) === k)?.value);
+      }}>
+      <option value={DEFAULT_CHOICE}>{hasDefault ? `Default (${defaultLabel})` : "Select…"}</option>
+      {options.map((o) => (
+        <option key={optionKey(o.value)} value={optionKey(o.value)}>{o.label}</option>
+      ))}
+      {value !== undefined && !known && <option value={CURRENT_CHOICE}>{String(value)} (not available)</option>}
+      {field.allow_custom && <option value={CUSTOM_CHOICE}>Custom…</option>}
+    </select>
+  );
+}
+
 function BooleanField({ id, value, def, onCommit, disabled }: { id: string; value: unknown; def: unknown; onCommit: (v: boolean) => void; disabled?: boolean }) {
   const checked = value === undefined ? def === true : value === true;
   return (
@@ -143,6 +191,7 @@ function FieldEditor({ node, field, issues }: { node: WorkflowNode; field: Confi
   const readonly = useEditorStore((s) => s.mode === "readonly");
   const setConfig = useEditorStore((s) => s.setConfigValue);
   const value = node.config[field.name];
+  const def = catalog.get(node.type);
   const id = `cfg-${field.name}`;
   const helpId = `${id}-help`;
   const errorId = `${id}-error`;
@@ -161,9 +210,15 @@ function FieldEditor({ node, field, issues }: { node: WorkflowNode; field: Confi
       <CredentialSelect id={id} value={typeof value === "string" ? value : ""} provider={provider} credentials={credentials}
         onCommit={commit} disabled={readonly} invalid={invalid} describedBy={describedBy} />
     );
+  } else if (control === "select") {
+    input = (
+      <OptionSelect id={id} field={field} value={value} options={optionsFor(field, effectiveConfig(def, node.config))}
+        onCommit={commit} disabled={readonly} invalid={invalid} describedBy={describedBy} />
+    );
   } else if (control === "number") {
     input = (
-      <CommitInput id={id} type="number" step="any" disabled={readonly} placeholder={placeholder} invalid={invalid} describedBy={describedBy}
+      <CommitInput id={id} type="number" step={field.step !== undefined ? String(field.step) : "any"} min={field.min} max={field.max}
+        disabled={readonly} placeholder={placeholder} invalid={invalid} describedBy={describedBy}
         value={typeof value === "number" ? String(value) : ""}
         onCommit={(v) => commit(v.trim() === "" || Number.isNaN(Number(v)) ? undefined : Number(v))} />
     );
@@ -172,25 +227,6 @@ function FieldEditor({ node, field, issues }: { node: WorkflowNode; field: Confi
   } else if (control === "json") {
     input = <JsonField id={id} value={value} onCommit={commit} disabled={readonly} invalid={invalid} describedBy={describedBy}
       placeholder={hasDefault ? JSON.stringify(field.default) : undefined} />;
-  } else if (SUGGESTED_FIELDS.has(field.name)) {
-    const listId = `${id}-options`;
-    const suggestions = new Set<string>();
-    if (typeof field.default === "string" && field.default) suggestions.add(field.default);
-    for (const n of definition.nodes) {
-      const v = n.config[field.name];
-      if (typeof v === "string" && v && !v.includes("{{")) suggestions.add(v);
-    }
-    if (field.name === "provider") for (const c of credentials) suggestions.add(c.provider);
-    input = (
-      <>
-        <CommitInput id={id} list={listId} disabled={readonly} placeholder={placeholder} invalid={invalid} describedBy={describedBy}
-          value={typeof value === "string" ? value : value === undefined ? "" : JSON.stringify(value)}
-          onCommit={(v) => commit(v.trim() === "" ? undefined : v.trim())} />
-        <datalist id={listId}>
-          {[...suggestions].map((s) => <option key={s} value={s} />)}
-        </datalist>
-      </>
-    );
   } else {
     input = (
       <VariableField id={id} groups={groups} multiline={control === "multiline"} disabled={readonly} placeholder={placeholder}
@@ -204,7 +240,7 @@ function FieldEditor({ node, field, issues }: { node: WorkflowNode; field: Confi
   return (
     <div className={`field ${invalid ? "has-error" : ""}`} data-field={field.name}>
       <label htmlFor={id}>
-        {fieldLabel(field.name)}
+        {labelOf(field)}
         {/* Same rule as the backend: a required field with a declared default
             may be left empty. */}
         {field.required && (field.default === null || field.default === undefined) && <span className="req" title="Required"> *</span>}
@@ -310,7 +346,7 @@ export function ConfigPanel() {
           <div className="section">
             <h3 className="section-title">Settings</h3>
             {def.config.map((f) => (
-              <FieldEditor key={f.name} node={node} field={f} issues={mine.filter((i) => i.field === f.name)} />
+              <FieldEditor key={`${node.id}:${f.name}`} node={node} field={f} issues={mine.filter((i) => i.field === f.name)} />
             ))}
           </div>
         )}
@@ -389,6 +425,10 @@ export function ConfigPanel() {
           : "Select a node to configure it. Drag from an output port to an input port to connect nodes."}
       </p>
       {errorCount > 0 && <p className="small" style={{ color: "var(--danger)" }}>{errorCount} validation problem{errorCount === 1 ? "" : "s"}: see the Validation panel.</p>}
+      <div className="section">
+        <h3 className="section-title">Variables</h3>
+        <VariablesEditor />
+      </div>
       <div className="section">
         <h3 className="section-title">Keyboard</h3>
         <Shortcuts />

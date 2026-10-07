@@ -24,6 +24,7 @@ const session = (): EditorSession => ({
   ],
   role: "owner", busy: null, notice: null,
   save: vi.fn(), validate: vi.fn(), publish: vi.fn(), canPublish: true,
+  versions: null, refreshVersions: vi.fn(), openVersion: vi.fn(),
 });
 
 function Editor({ children }: { children: ReactNode }) {

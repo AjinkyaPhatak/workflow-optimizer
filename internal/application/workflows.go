@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"workflow-optimizer/internal/templates"
 	"workflow-optimizer/internal/workflow"
 	"workflow-optimizer/internal/workspace"
 )
@@ -121,6 +122,32 @@ func (s *WorkflowService) CreateWorkflow(ctx context.Context, user, projectID uu
 		return workflow.Workflow{}, notFound("project")
 	}
 	return wf, err
+}
+
+// CreateWorkflowFromTemplate creates a workflow whose first version is a
+// DRAFT copy of the template's definition (fresh node IDs). The draft goes
+// through CreateVersion, so it is validated and stored like any other.
+func (s *WorkflowService) CreateWorkflowFromTemplate(ctx context.Context, user, projectID uuid.UUID, name string, description *string, templateID string) (workflow.Workflow, workflow.Version, error) {
+	def, err := templates.Instantiate(templateID)
+	if errors.Is(err, templates.ErrNotFound) {
+		return workflow.Workflow{}, workflow.Version{}, &InvalidError{Message: "unknown template_id"}
+	}
+	if err != nil {
+		return workflow.Workflow{}, workflow.Version{}, err
+	}
+	raw, err := json.Marshal(def)
+	if err != nil {
+		return workflow.Workflow{}, workflow.Version{}, err
+	}
+	wf, err := s.CreateWorkflow(ctx, user, projectID, name, description)
+	if err != nil {
+		return workflow.Workflow{}, workflow.Version{}, err
+	}
+	v, err := s.CreateVersion(ctx, user, wf.ID, raw)
+	if err != nil {
+		return wf, workflow.Version{}, err
+	}
+	return wf, v, nil
 }
 
 // ListWorkflows lists one page of the project's workflows.

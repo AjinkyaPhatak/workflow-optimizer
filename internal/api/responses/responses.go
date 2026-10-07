@@ -2,6 +2,7 @@ package responses
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 	"workflow-optimizer/internal/execution"
 	"workflow-optimizer/internal/node"
 	"workflow-optimizer/internal/observability"
+	"workflow-optimizer/internal/templates"
 	"workflow-optimizer/internal/workflow"
 	"workflow-optimizer/internal/workspace"
 )
@@ -96,6 +98,34 @@ type Workflow struct {
 func NewWorkflow(w workflow.Workflow) Workflow {
 	return Workflow{ID: w.ID, ProjectID: w.ProjectID, Name: w.Name, Description: w.Description,
 		ActiveVersionID: w.ActiveVersionID, CreatedAt: w.CreatedAt, UpdatedAt: w.UpdatedAt}
+}
+
+// WorkflowFromTemplate is a workflow created from a template, with its
+// first (DRAFT) version.
+type WorkflowFromTemplate struct {
+	Workflow
+	Version VersionSummary `json:"version"`
+}
+
+func NewWorkflowFromTemplate(w workflow.Workflow, v workflow.Version) WorkflowFromTemplate {
+	return WorkflowFromTemplate{Workflow: NewWorkflow(w), Version: NewVersionSummary(v)}
+}
+
+// Template is a workflow template: a ready-made workflow definition.
+type Template struct {
+	ID          string              `json:"id"`
+	Name        string              `json:"name"`
+	Description string              `json:"description"`
+	NodeTypes   []string            `json:"node_types"`
+	Definition  workflow.Definition `json:"definition"`
+}
+
+func NewTemplate(t templates.Template) Template {
+	types := []string{}
+	for _, n := range t.Definition.Nodes {
+		types = append(types, n.Type)
+	}
+	return Template{ID: t.ID, Name: t.Name, Description: t.Description, NodeTypes: types, Definition: t.Definition}
 }
 
 // VersionSummary is version metadata (no definition).
@@ -249,6 +279,22 @@ type ConfigField struct {
 	Required    bool   `json:"required"`
 	Default     any    `json:"default"`
 	Description string `json:"description"`
+	// Presentation metadata (Phase B); omitted when unset.
+	Label       string         `json:"label,omitempty"`
+	Options     []ConfigOption `json:"options,omitempty"`
+	AllowCustom bool           `json:"allow_custom,omitempty"`
+	Min         *float64       `json:"min,omitempty"`
+	Max         *float64       `json:"max,omitempty"`
+	Step        *float64       `json:"step,omitempty"`
+	Multiline   bool           `json:"multiline,omitempty"`
+}
+
+// ConfigOption is one accepted value of a configuration field; When limits
+// it to configurations where the named fields have the given values.
+type ConfigOption struct {
+	Value any            `json:"value"`
+	Label string         `json:"label"`
+	When  map[string]any `json:"when,omitempty"`
 }
 
 // NodeType is a node type from the node registry.
@@ -275,7 +321,16 @@ func ports(ps []node.PortDefinition) []Port {
 func NewNodeType(d node.NodeDefinition) NodeType {
 	cfg := make([]ConfigField, 0, len(d.Config))
 	for _, f := range d.Config {
-		cfg = append(cfg, ConfigField{Name: f.Name, Type: string(f.Type), Required: f.Required, Default: f.Default, Description: f.Description})
+		var opts []ConfigOption
+		for _, o := range f.Options {
+			label := o.Label
+			if label == "" {
+				label = fmt.Sprint(o.Value)
+			}
+			opts = append(opts, ConfigOption{Value: o.Value, Label: label, When: o.When})
+		}
+		cfg = append(cfg, ConfigField{Name: f.Name, Type: string(f.Type), Required: f.Required, Default: f.Default, Description: f.Description,
+			Label: f.Label, Options: opts, AllowCustom: f.AllowCustom, Min: f.Min, Max: f.Max, Step: f.Step, Multiline: f.Multiline})
 	}
 	side := string(d.SideEffects)
 	if side == "" {

@@ -1,7 +1,7 @@
 // Human-readable presentation of backend node metadata. Generic rules over
 // names and types only: no per-node-type knowledge lives here.
 
-import type { ConfigField, NodeDefinition, ValueType } from "@/types/api";
+import type { ConfigField, ConfigOption, NodeDefinition, ValueType } from "@/types/api";
 
 /** The configuration field through which a node uses a workspace credential
  * (the convention every credential-using node definition follows). */
@@ -28,6 +28,25 @@ export function fieldLabel(name: string): string {
   return (words.join(" ") || name) + suffix;
 }
 
+/** The field's display name: the backend label, else derived from the name. */
+export function labelOf(field: Pick<ConfigField, "name" | "label">): string {
+  return field.label || fieldLabel(field.name);
+}
+
+/** The node's configuration with declared defaults filled in (what option
+ * conditions are checked against, as in the backend validator). */
+export function effectiveConfig(def: Pick<NodeDefinition, "config"> | undefined, config: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const f of def?.config ?? []) if (f.default !== null && f.default !== undefined) out[f.name] = f.default;
+  return { ...out, ...config };
+}
+
+/** The field's options that apply to this configuration (their "when"
+ * conditions hold). */
+export function optionsFor(field: Pick<ConfigField, "options">, effective: Record<string, unknown>): ConfigOption[] {
+  return (field.options ?? []).filter((o) => Object.entries(o.when ?? {}).every(([k, v]) => effective[k] === v));
+}
+
 /** "string" -> "text", "json" -> "any JSON", ... for prose. */
 export function typeLabel(t: ValueType): string {
   switch (t) {
@@ -41,16 +60,17 @@ export function usesCredential(def: Pick<NodeDefinition, "config">): ConfigField
   return def.config.find((f) => f.name === CREDENTIAL_FIELD);
 }
 
-export type FieldControl = "credential" | "boolean" | "number" | "text" | "multiline" | "json";
+export type FieldControl = "credential" | "select" | "boolean" | "number" | "text" | "multiline" | "json";
 
 const MULTILINE = /(template|text|prompt|body|content|expression|message|system|instructions)/;
 
 /** Which control renders a config field, from its declared type and name. */
-export function fieldControl(field: Pick<ConfigField, "name" | "type">): FieldControl {
+export function fieldControl(field: Pick<ConfigField, "name" | "type" | "options" | "multiline">): FieldControl {
   if (field.name === CREDENTIAL_FIELD) return "credential";
+  if (field.options && field.options.length > 0) return "select";
   if (field.type === "boolean") return "boolean";
   if (field.type === "number") return "number";
-  if (field.type === "string") return MULTILINE.test(field.name) ? "multiline" : "text";
+  if (field.type === "string") return field.multiline || MULTILINE.test(field.name) ? "multiline" : "text";
   return "json";
 }
 

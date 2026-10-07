@@ -4,7 +4,7 @@
 // the definition. It never checks the graph itself.
 
 import type { NodeDefinition, ValidationError, ValidationResult, WorkflowDefinition } from "@/types/api";
-import { fieldLabel } from "./labels";
+import { labelOf } from "./labels";
 
 export type IssueSeverity = "error" | "warning";
 
@@ -18,6 +18,8 @@ export interface Issue {
   field?: string;
   /** The input/output port the finding is about. */
   port?: string;
+  /** The workflow variable the finding is about (INVALID_VARIABLE). */
+  variable?: string;
   /** Where: a node name, a connection, or "Workflow". */
   title: string;
   /** What is wrong. */
@@ -60,7 +62,7 @@ function describe(e: ValidationError, severity: IssueSeverity, index: number, de
     case "INVALID_NODE_CONFIG": {
       const name = e.port ?? "";
       const field = def?.config.find((f) => f.name === name);
-      const label = fieldLabel(name);
+      const label = labelOf(field ?? { name });
       issue.field = name || undefined;
       issue.port = undefined;
       if (/missing/.test(e.message)) {
@@ -69,6 +71,13 @@ function describe(e: ValidationError, severity: IssueSeverity, index: number, de
       } else if (/unknown/.test(e.message)) {
         issue.message = `"${name}" is not a setting of ${def?.name ?? "this node"}.`;
         issue.hint = "Remove it from the node's configuration.";
+      } else if (/allowed options/.test(e.message)) {
+        issue.message = `${label} must be one of the listed options.`;
+        issue.hint = `Choose a ${label.toLowerCase()} from the list.`;
+      } else if (/out of range/.test(e.message)) {
+        const lo = field?.min, hi = field?.max;
+        issue.message = lo !== undefined && hi !== undefined ? `${label} must be between ${lo} and ${hi}.` : lo !== undefined ? `${label} must be at least ${lo}.` : `${label} must be at most ${hi}.`;
+        issue.hint = `Change the value of ${label}.`;
       } else if (/type/.test(e.message)) {
         issue.message = field ? `${label} must be a ${field.type} value.` : `${label} has the wrong type.`;
         issue.hint = `Change the value of ${label}.`;
@@ -140,6 +149,14 @@ function describe(e: ValidationError, severity: IssueSeverity, index: number, de
       issue.message = `Node type "${node?.type ?? ""}" is not available.`;
       issue.hint = "Delete this node.";
       break;
+    case "INVALID_VARIABLE": {
+      const name = typeof e.details?.variable === "string" ? e.details.variable : "";
+      issue.variable = name;
+      issue.title = "Workflow variables";
+      issue.message = `${name ? `Variable "${name}": ` : ""}${sentence(e.message)}`;
+      issue.hint = "Fix it in the Variables section of the workflow panel.";
+      break;
+    }
     case "INVALID_VARIABLE_REFERENCE":
       issue.message = "A {{variable}} reference is malformed.";
       issue.hint = "Check the {{…}} expressions in the configuration: use {{input.key}} or {{node_id.port}}.";

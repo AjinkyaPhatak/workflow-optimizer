@@ -1,0 +1,22 @@
+{
+  "id": "basic-ai-prompt",
+  "name": "Basic AI Prompt",
+  "description": "Build a prompt from the run input and send it to a language model.",
+  "definition": {
+    "version": 1,
+    "settings": {},
+    "nodes": [
+      { "id": "input", "type": "input", "name": "Input", "position": { "x": 0, "y": 80 }, "config": {} },
+      { "id": "prompt", "type": "prompt", "name": "Prompt", "position": { "x": 320, "y": 80 },
+        "config": { "template": "Answer the following question clearly and concisely.\n\nQuestion: {{input.query}}" } },
+      { "id": "llm", "type": "llm", "name": "LLM", "position": { "x": 640, "y": 80 },
+        "config": { "provider": "openai", "model": "gpt-5-mini", "temperature": 0.2 } },
+      { "id": "output", "type": "output", "name": "Output", "position": { "x": 960, "y": 80 }, "config": {} }
+    ],
+    "edges": [
+      { "id": "e1", "source": "input", "source_port": "data", "target": "prompt", "target_port": "variables" },
+      { "id": "e2", "source": "prompt", "source_port": "prompt", "target": "llm", "target_port": "prompt" },
+      { "id": "e3", "source": "llm", "source_port": "response", "target": "output", "target_port": "value" }
+    ]
+  }
+}

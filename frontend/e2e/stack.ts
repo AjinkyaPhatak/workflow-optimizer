@@ -20,6 +20,10 @@ export const MOCK_OPENAI_PORT = Number(process.env.E2E_OPENAI_PORT ?? 18190);
 export const MOCK_REPLY_PREFIX = "Mock answer to: ";
 /** Prompts containing this fail once with 503 (a retryable provider error). */
 export const MOCK_FAIL_ONCE = "flaky";
+/** Prompts containing this are answered with MOCK_JSON_REPLY. */
+export const MOCK_JSON_MARKER = "Respond with JSON";
+export const MOCK_JSON_REPLY =
+  'Here it is:\n```json\n{"summary": "Launch moved to May", "sentiment": "neutral", "action_items": ["Tell sales", "Update the plan"], "extra": 1}\n```';
 /** Test prices (USD per million tokens) so cost estimates are visible. */
 export const MODEL_PRICING = { "gpt-5-mini": { input_per_million: 1000, output_per_million: 2000 } };
 
@@ -102,9 +106,11 @@ function startMockOpenAI(expectedKey: string): Promise<Server> {
         res.end(JSON.stringify({ error: { type: "invalid_request_error", code: authorized ? "not_found" : "invalid_api_key" } }));
         return;
       }
+      // Prompts asking for JSON (the structured-output template) get JSON.
+      const content = prompt.includes(MOCK_JSON_MARKER) ? MOCK_JSON_REPLY : MOCK_REPLY_PREFIX + prompt;
       res.end(JSON.stringify({
         model: parsed.model,
-        choices: [{ index: 0, message: { role: "assistant", content: MOCK_REPLY_PREFIX + prompt }, finish_reason: "stop" }],
+        choices: [{ index: 0, message: { role: "assistant", content }, finish_reason: "stop" }],
         usage: { prompt_tokens: 7, completion_tokens: 5, total_tokens: 12 },
       }));
     });

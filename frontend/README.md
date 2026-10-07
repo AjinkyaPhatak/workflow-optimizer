@@ -38,6 +38,13 @@ the variable picker lists the references the backend resolver accepts (the run
 input and outputs of upstream nodes) but resolves nothing; validation findings
 come from the backend and are only reworded and located on the canvas.
 
+Phase B: configuration controls follow the backend field metadata (labels,
+options with conditions, ranges); workflow variables are edited in the
+workflow panel and saved in the definition; the version badge opens the
+version history; the palette search covers names, descriptions, categories
+and ports with keyboard navigation; new workflows can start from the
+backend's templates (`GET /api/v1/templates`).
+
 Saving stores the definition as a new immutable DRAFT version (the API has no
 version update). Publishing validates and publishes that version; only
 published versions can be executed.

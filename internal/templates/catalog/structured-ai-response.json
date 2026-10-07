@@ -1,0 +1,28 @@
+{
+  "id": "structured-ai-response",
+  "name": "Structured AI Response",
+  "description": "Ask a model for JSON and turn its answer into checked, structured data.",
+  "definition": {
+    "version": 1,
+    "settings": {},
+    "variables": [
+      { "name": "audience", "type": "string", "default": "a busy executive", "description": "Who the summary is written for" }
+    ],
+    "nodes": [
+      { "id": "input", "type": "input", "name": "Input", "position": { "x": 0, "y": 80 }, "config": {} },
+      { "id": "prompt", "type": "prompt", "name": "Prompt", "position": { "x": 320, "y": 80 },
+        "config": { "template": "Summarize the text below for {{audience}}.\n\nText:\n{{input.query}}\n\nRespond with JSON only, in exactly this shape:\n{\"summary\": \"...\", \"sentiment\": \"positive | neutral | negative\", \"action_items\": [\"...\"]}" } },
+      { "id": "llm", "type": "llm", "name": "LLM", "position": { "x": 640, "y": 80 },
+        "config": { "provider": "openai", "model": "gpt-5-mini", "temperature": 0 } },
+      { "id": "structured", "type": "structured_output", "name": "Structured Output", "position": { "x": 960, "y": 80 },
+        "config": { "schema": { "summary": "string", "sentiment": "string", "action_items": ["string"] } } },
+      { "id": "output", "type": "output", "name": "Output", "position": { "x": 1280, "y": 80 }, "config": {} }
+    ],
+    "edges": [
+      { "id": "e1", "source": "input", "source_port": "data", "target": "prompt", "target_port": "variables" },
+      { "id": "e2", "source": "prompt", "source_port": "prompt", "target": "llm", "target_port": "prompt" },
+      { "id": "e3", "source": "llm", "source_port": "response", "target": "structured", "target_port": "input" },
+      { "id": "e4", "source": "structured", "source_port": "output", "target": "output", "target_port": "value" }
+    ]
+  }
+}

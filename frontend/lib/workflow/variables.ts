@@ -4,6 +4,8 @@
 //
 // The options follow what the backend can resolve for a node:
 //   {{input}} / {{input.<key>}}  the workflow's run input
+//   {{<variable>}}               a declared workflow variable (its value is
+//                                in the run input, or its default)
 //   {{<node_id>.<port>}}         an output port of an UPSTREAM node (the
 //                                resolver rejects non-upstream nodes)
 
@@ -18,7 +20,7 @@ export interface VariableOption {
 }
 
 export interface VariableGroup {
-  id: "input" | "nodes";
+  id: "input" | "variables" | "nodes";
   label: string;
   options: VariableOption[];
 }
@@ -77,6 +79,11 @@ export function availableVariables(definition: WorkflowDefinition, catalog: Map<
       ...inputKeys.map((k) => ({ expression: `input.${k}`, label: k, description: `The "${k}" field of the run input` })),
     ],
   };
+  const variables: VariableGroup = {
+    id: "variables",
+    label: "Workflow variables",
+    options: (definition.variables ?? []).map((v) => ({ expression: v.name, label: v.name, type: v.type, description: v.description || undefined })),
+  };
   const nodes: VariableGroup = { id: "nodes", label: "Previous nodes", options: [] };
   for (const id of upstreamNodeIds(definition, nodeId)) {
     const n = definition.nodes.find((x) => x.id === id);
@@ -86,7 +93,7 @@ export function availableVariables(definition: WorkflowDefinition, catalog: Map<
       nodes.options.push({ expression: `${n.id}.${p.name}`, label: `${n.name} › ${p.name}`, type: p.type, description: p.description || undefined });
     }
   }
-  return [input, nodes];
+  return [input, variables, nodes];
 }
 
 /** Filters options by what was typed after "{{" (prefix matches first). */

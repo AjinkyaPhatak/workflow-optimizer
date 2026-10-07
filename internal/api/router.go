@@ -67,6 +67,7 @@ func NewRouter(h *handlers.Handlers, tokens auth.TokenService, logger *slog.Logg
 	private("DELETE "+Prefix+"/credentials/{credentialID}", h.DeleteCredential)
 
 	private("GET "+Prefix+"/nodes", h.ListNodes)
+	private("GET "+Prefix+"/templates", h.ListTemplates)
 
 	mux.Handle("/", unmatched(mux, logger))
 

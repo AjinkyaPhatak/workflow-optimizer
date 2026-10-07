@@ -80,7 +80,7 @@ test("hover info, configuration, variable picker and validation focus in the edi
   await page.mouse.move(hb.x + hb.width / 2, hb.y + hb.height / 2);
   const info = page.getByTestId("node-hover");
   await expect(info).toBeVisible();
-  await expect(info).toContainText("Executes generative text inference");
+  await expect(info).toContainText("Sends a prompt to a language model");
   await expect(info).toContainText("Inputs");
   await expect(info).toContainText("prompt");
   await expect(info).toContainText("Outputs");
@@ -99,7 +99,7 @@ test("hover info, configuration, variable picker and validation focus in the edi
   await node(page, "prompt").locator(".wf-node-header").click();
   const panel = page.getByTestId("config-panel");
   await expect(panel.getByRole("heading", { name: "Prompt" })).toBeVisible();
-  await expect(panel).toContainText("Prompt template with placeholder expressions");
+  await expect(panel).toContainText("Builds prompt text from a template");
   const template = panel.locator("#cfg-template");
   await template.click();
   await template.pressSequentially("Summarize: {{inp");
@@ -116,8 +116,7 @@ test("hover info, configuration, variable picker and validation focus in the edi
   await expect(panel.getByRole("heading", { name: "LLM" })).toBeVisible();
   await expect(panel.getByText("Which credential should this node use?")).toBeVisible();
   await expect(panel.getByLabel("Max tokens")).toHaveAttribute("type", "number");
-  await panel.locator("#cfg-model").fill("gpt-5-mini");
-  await panel.locator("#cfg-model").press("Enter");
+  await panel.locator("#cfg-model").selectOption("gpt-5-mini");
   await expect(panel.locator("#cfg-model")).toHaveValue("gpt-5-mini");
 
   // --- validate: problems are explained and located -----------------------------
@@ -125,21 +124,23 @@ test("hover info, configuration, variable picker and validation focus in the edi
   const summary = page.getByTestId("validation-summary");
   await expect(summary).toContainText("problem");
   const list = page.getByTestId("validation-errors");
-  await expect(list).toContainText('Input "prompt" needs a connection.');
+  const unreachable = "This node is not reachable from the start of the workflow.";
+  await expect(list).toContainText(unreachable);
   await expect(list).toContainText("The workflow has no final node.");
   await expect(node(page, "llm")).toHaveClass(/invalid/);
   await expect(node(page, "llm").locator(".wf-node-badge")).toBeVisible();
-  await expect(node(page, "llm").locator(".wf-node-errors")).toContainText('Input "prompt" needs a connection.');
-  await expect(node(page, "llm").locator('.wf-port[data-port="prompt"]')).toHaveClass(/port-error/);
+  // Unconnected: both reachability findings (backend order is not fixed).
+  await expect(node(page, "llm").locator(".wf-node-errors")).toContainText(/not reachable from the start|never reaches the end/);
+  await expect(node(page, "llm").locator(".wf-node-errors")).toContainText("+1 more");
 
   // Clicking a problem selects its node and brings it into view.
   await page.locator(".react-flow__pane").click({ position: { x: 10, y: 10 } });
   await expect(panel).toHaveCount(0);
-  await list.getByRole("button", { name: /Input "prompt" needs a connection/ }).click();
+  await list.locator("li").filter({ has: page.locator(".issue-title", { hasText: /^LLM$/ }) }).getByRole("button", { name: /not reachable/ }).click();
   await expect(panel.getByRole("heading", { name: "LLM" })).toBeVisible();
   await expect(node(page, "llm")).toHaveClass(/selected/);
   await expect(node(page, "llm")).toBeInViewport();
-  await expect(panel.getByTestId("panel-issues")).toContainText('Input "prompt" needs a connection.');
+  await expect(panel.getByTestId("panel-issues")).toContainText(unreachable);
   // Selection only: the edits made before are intact.
   await expect(panel.locator("#cfg-model")).toHaveValue("gpt-5-mini");
   await node(page, "prompt").locator(".wf-node-header").click();

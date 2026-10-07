@@ -14,10 +14,10 @@ describe("variable picker", () => {
   it("offers the workflow input and only upstream nodes' declared outputs", () => {
     const d = sampleDefinition();
     expect(upstreamNodeIds(d, "out")).toEqual(["llm_1", "in"]);
-    expect(expressions(d, "out")).toEqual([["input", "input.query"], ["llm_1.response", "llm_1.usage", "in.data"]]);
+    expect(expressions(d, "out")).toEqual([["input", "input.query"], [], ["llm_1.response", "llm_1.usage", "in.data"]]);
     // The resolver rejects non-upstream nodes, so the first node sees none.
-    expect(expressions(d, "in")[1]).toEqual([]);
-    expect(expressions(d, "llm_1")[1]).toEqual(["in.data"]);
+    expect(expressions(d, "in")[2]).toEqual([]);
+    expect(expressions(d, "llm_1")[2]).toEqual(["in.data"]);
   });
 
   it("lists input keys the workflow already references", () => {
@@ -36,9 +36,9 @@ describe("variable picker", () => {
 
   it("filters by what was typed, prefix matches first", () => {
     const groups = availableVariables(sampleDefinition(), catalog, "out");
-    const [, nodes] = filterVariables(groups, "ll");
+    const [, , nodes] = filterVariables(groups, "ll");
     expect(nodes.options.map((o) => o.expression)).toEqual(["llm_1.response", "llm_1.usage"]);
-    const [input, none] = filterVariables(groups, "usage");
+    const [input, , none] = filterVariables(groups, "usage");
     expect(input.options).toEqual([]);
     expect(none.options.map((o) => o.expression)).toEqual(["llm_1.usage"]);
   });

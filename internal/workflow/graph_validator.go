@@ -32,6 +32,7 @@ const (
 	ErrMissingInputNode         ValidationErrorCode = "MISSING_INPUT_NODE"
 	ErrMissingOutputNode        ValidationErrorCode = "MISSING_OUTPUT_NODE"
 	ErrInvalidVariableReference ValidationErrorCode = "INVALID_VARIABLE_REFERENCE"
+	ErrInvalidVariable          ValidationErrorCode = "INVALID_VARIABLE"
 )
 
 type ValidationError struct {
@@ -111,6 +112,7 @@ func (v *GraphValidator) ValidateWithOptions(d Definition, options ValidationOpt
 		}
 		v.config(n, def, add)
 	}
+	v.variables(d, ns, add)
 	in := map[string]map[string]int{}
 	adj := map[string][]string{}
 	eids := map[string]bool{}
@@ -264,6 +266,16 @@ func (v *GraphValidator) config(n Node, d nodepkg.NodeDefinition, add func(Valid
 		}
 		if !kind(x, f.Type) {
 			add(ErrInvalidNodeConfig, "configuration value has invalid type", n.ID, "", k, nil)
+			continue
+		}
+		if str, isStr := x.(string); isStr && len(VariableReferences(str)) > 0 {
+			continue // resolved at run time
+		}
+		if !f.Allows(x, effectiveConfig(n.Config, d)) {
+			add(ErrInvalidNodeConfig, "configuration value is not one of the allowed options", n.ID, "", k, map[string]any{"value": x})
+		}
+		if num, isNum := x.(float64); isNum && !f.InRange(num) {
+			add(ErrInvalidNodeConfig, "configuration value is out of range", n.ID, "", k, map[string]any{"value": x})
 		}
 	}
 	for _, f := range d.Config {
@@ -272,6 +284,49 @@ func (v *GraphValidator) config(n Node, d nodepkg.NodeDefinition, add func(Valid
 		}
 	}
 }
+
+// variables checks the workflow's declared variables: referenceable,
+// unique names that do not shadow the input namespace or a node (the
+// resolver would read the node instead), known types, defaults of the
+// declared type. Details carry the variable name.
+func (v *GraphValidator) variables(d Definition, nodes map[string]Node, add func(ValidationErrorCode, string, string, string, string, map[string]any)) {
+	seen := map[string]bool{}
+	for _, x := range d.Variables {
+		details := map[string]any{"variable": x.Name}
+		switch {
+		case !ValidVariableName(x.Name):
+			add(ErrInvalidVariable, "variable name must start with a letter or _ and contain only letters, digits and _", "", "", "", details)
+		case x.Name == "input":
+			add(ErrInvalidVariable, "variable name \"input\" is reserved", "", "", "", details)
+		case seen[x.Name]:
+			add(ErrInvalidVariable, "duplicate variable name", "", "", "", details)
+		case nodes[x.Name].ID != "":
+			add(ErrInvalidVariable, "variable name is already a node ID", "", "", "", details)
+		}
+		seen[x.Name] = true
+		if !x.Type.Known() {
+			add(ErrInvalidVariable, "unknown variable type", "", "", "", details)
+		} else if x.Default != nil && !x.Type.Matches(x.Default) {
+			add(ErrInvalidVariable, "default value does not match the variable type", "", "", "", details)
+		}
+	}
+}
+
+// effectiveConfig is the node's configuration with declared defaults filled
+// in, which is what option conditions (ConfigOption.When) are checked against.
+func effectiveConfig(cfg map[string]any, d nodepkg.NodeDefinition) map[string]any {
+	out := make(map[string]any, len(d.Config))
+	for _, f := range d.Config {
+		if f.Default != nil {
+			out[f.Name] = f.Default
+		}
+	}
+	for k, x := range cfg {
+		out[k] = x
+	}
+	return out
+}
+
 func kind(x any, t nodepkg.ValueType) bool {
 	switch t {
 	case nodepkg.ValueTypeString:

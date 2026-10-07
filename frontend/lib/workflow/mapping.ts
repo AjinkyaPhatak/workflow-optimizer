@@ -60,8 +60,8 @@ export function toCanvas(definition: WorkflowDefinition, opts: ToCanvasOptions =
 
 /** Rebuilds the definition from the canvas. `base` supplies what the canvas
  * does not carry (schema version, settings). */
-export function fromCanvas(nodes: CanvasNode[], edges: CanvasEdge[], base: Pick<WorkflowDefinition, "version" | "settings">): WorkflowDefinition {
-  return {
+export function fromCanvas(nodes: CanvasNode[], edges: CanvasEdge[], base: Pick<WorkflowDefinition, "version" | "settings" | "variables">): WorkflowDefinition {
+  const out: WorkflowDefinition = {
     version: base.version,
     nodes: nodes.map((cn): WorkflowNode => {
       const { node, autoPosition: auto } = cn.data;
@@ -85,4 +85,6 @@ export function fromCanvas(nodes: CanvasNode[], edges: CanvasEdge[], base: Pick<
     ),
     settings: structuredClone(base.settings),
   };
+  if (base.variables) out.variables = structuredClone(base.variables);
+  return out;
 }

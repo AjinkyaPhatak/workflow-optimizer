@@ -73,8 +73,8 @@ test("build, validate, publish and execute a workflow in the visual editor", asy
   const panel = page.getByTestId("config-panel");
   await expect(panel.getByRole("heading", { name: "LLM" })).toBeVisible();
   await panel.locator("#cfg-credential_id").selectOption({ label: `${s.credentialName} (openai)` });
-  await panel.locator("#cfg-model").fill("gpt-5-mini");
-  await panel.locator("#cfg-model").press("Enter");
+  // The model is a backend-provided option (Phase B).
+  await panel.locator("#cfg-model").selectOption("gpt-5-mini");
   await panel.locator("#cfg-node-name").fill("Answer");
   await panel.locator("#cfg-node-name").press("Enter");
   await expect(node(page, "llm").locator(".wf-node-title")).toHaveText("Answer");

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -104,6 +105,16 @@ func (s *ExecutionService) Execute(ctx context.Context, user, workflowID uuid.UU
 	}
 	if input == nil {
 		input = map[string]any{}
+	}
+	// Workflow variables: fill defaults into the run input and check the
+	// supplied values; the executor then resolves {{name}} from the input.
+	def, err := DecodeDefinition(v.Definition)
+	if err != nil {
+		return execution.Execution{}, err
+	}
+	input, problems := def.ApplyVariables(input)
+	if len(problems) > 0 {
+		return execution.Execution{}, &InvalidError{Message: "invalid input: " + strings.Join(problems, "; ")}
 	}
 	created, err := s.submitter.Submit(ctx, workflowID, v.ID, input)
 	if err == nil || created.ID != uuid.Nil {

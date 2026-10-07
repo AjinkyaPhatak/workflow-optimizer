@@ -2,33 +2,16 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
 import { ErrorBanner } from "@/components/ui/ErrorBanner";
 import { TopBar } from "@/components/ui/TopBar";
+import { NewWorkflow } from "@/components/workflow/NewWorkflow";
 import { useWorkflowDashboard } from "@/features/workflows/useWorkflowDashboard";
 import { RequireAuth } from "@/lib/auth/RequireAuth";
 
 function Dashboard() {
   const router = useRouter();
   const d = useWorkflowDashboard();
-  const [name, setName] = useState("");
-  const [projectId, setProjectId] = useState("");
-  const [creating, setCreating] = useState(false);
-  const [createError, setCreateError] = useState<unknown>(null);
   const canCreate = d.workspace && d.workspace.role !== "viewer" && (d.projects.length > 0 || d.workspace.role !== "member");
-
-  async function create(e: FormEvent) {
-    e.preventDefault();
-    setCreating(true);
-    setCreateError(null);
-    try {
-      const wf = await d.createWorkflow(name.trim(), projectId || undefined);
-      router.push(`/workflows/${wf.id}/editor`);
-    } catch (err) {
-      setCreateError(err);
-      setCreating(false);
-    }
-  }
 
   return (
     <>
@@ -75,23 +58,7 @@ function Dashboard() {
         </section>
 
         {canCreate && (
-          <form className="card stack" style={{ padding: 16 }} onSubmit={create}>
-            <h3>New workflow</h3>
-            <ErrorBanner error={createError} />
-            <div className="row">
-              <input aria-label="Workflow name" placeholder="Workflow name" value={name} onChange={(e) => setName(e.target.value)} required maxLength={255} />
-              {d.projects.length > 1 && (
-                <select aria-label="Project" style={{ width: 200 }} value={projectId} onChange={(e) => setProjectId(e.target.value)}>
-                  {d.projects.map((p) => (
-                    <option key={p.id} value={p.id}>{p.name}</option>
-                  ))}
-                </select>
-              )}
-              <button className="primary" type="submit" disabled={creating || !name.trim()}>
-                + New Workflow
-              </button>
-            </div>
-          </form>
+          <NewWorkflow projects={d.projects} create={d.createWorkflow} onCreated={(wf) => router.push(`/workflows/${wf.id}/editor`)} />
         )}
       </main>
     </>

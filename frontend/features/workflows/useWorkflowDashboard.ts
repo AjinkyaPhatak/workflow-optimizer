@@ -65,11 +65,11 @@ export function useWorkflowDashboard() {
   /** Creates the workflow (metadata only), creating a first project if the
    * workspace has none. */
   const createWorkflow = useCallback(
-    async (name: string, projectId?: string) => {
+    async (name: string, projectId?: string, templateId?: string) => {
       if (!workspaceId) throw new Error("No workspace");
       let pid = projectId ?? projects[0]?.id;
       if (!pid) pid = (await projectApi.create(workspaceId, "Default")).id;
-      const wf = await workflowApi.create(pid, name);
+      const wf = templateId ? await workflowApi.createFromTemplate(pid, name, templateId) : await workflowApi.create(pid, name);
       reload();
       return wf;
     },

@@ -22,6 +22,17 @@ export function useFocusIssue() {
   return useCallback(
     (issue: Issue) => {
       const { definition, select } = useEditorStore.getState();
+      if (issue.variable !== undefined) {
+        // Variables live in the workflow panel (shown with nothing selected).
+        select([], []);
+        const index = (definition.variables ?? []).findIndex((v) => v.name === issue.variable);
+        requestAnimationFrame(() => {
+          const el = document.getElementById(`var-${Math.max(index, 0)}-name`);
+          el?.scrollIntoView?.({ block: "nearest" });
+          el?.focus({ preventScroll: true });
+        });
+        return;
+      }
       const edge = issue.edgeId ? definition.edges.find((e) => e.id === issue.edgeId) : undefined;
       if (edge) {
         select([], [edge.id]);
@@ -36,7 +47,7 @@ export function useFocusIssue() {
         // The configuration panel renders the field on the next frame.
         requestAnimationFrame(() => {
           const el = document.getElementById(`cfg-${issue.field}`);
-          el?.scrollIntoView({ block: "nearest" });
+          el?.scrollIntoView?.({ block: "nearest" });
           el?.focus({ preventScroll: true });
         });
       }

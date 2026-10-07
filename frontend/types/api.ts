@@ -94,11 +94,24 @@ export interface WorkflowEdge {
   target_port: string;
 }
 
+export type VariableType = "string" | "number" | "boolean" | "object" | "array";
+
+/** A workflow variable (Phase B): a declared input referenced as {{name}}.
+ * default null means every run must supply a value. */
+export interface WorkflowVariable {
+  name: string;
+  type: VariableType;
+  default: unknown;
+  description?: string;
+}
+
 export interface WorkflowDefinition {
   version: number;
   nodes: WorkflowNode[];
   edges: WorkflowEdge[];
   settings: Record<string, unknown>;
+  /** Optional; omitted when the workflow declares none. */
+  variables?: WorkflowVariable[];
 }
 
 export interface ValidationError {
@@ -126,12 +139,27 @@ export interface PortDefinition {
   description: string;
 }
 
+export interface ConfigOption {
+  value: unknown;
+  label: string;
+  /** Offered only when each named field has the given value. */
+  when?: Record<string, unknown>;
+}
+
 export interface ConfigField {
   name: string;
   type: ValueType;
   required: boolean;
   default: unknown;
   description: string;
+  label?: string;
+  /** Accepted values; with allow_custom they are suggestions. */
+  options?: ConfigOption[];
+  allow_custom?: boolean;
+  min?: number;
+  max?: number;
+  step?: number;
+  multiline?: boolean;
 }
 
 export interface NodeDefinition {
@@ -236,6 +264,21 @@ export interface EventPage {
   page: number;
   page_size: number;
   total: number;
+}
+
+// --- templates (Phase B) ------------------------------------------------------
+
+export interface WorkflowTemplate {
+  id: string;
+  name: string;
+  description: string;
+  node_types: string[];
+  definition: WorkflowDefinition;
+}
+
+/** POST /workflows with template_id: the workflow and its first DRAFT. */
+export interface WorkflowFromTemplate extends Workflow {
+  version: VersionSummary;
 }
 
 export interface ExecutionAccepted {
