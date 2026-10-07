@@ -20,7 +20,7 @@ browser only ever talks to one origin and the API needs no CORS.
 - `app/` — routes: `/login`, `/workflows` (dashboard), `/workflows/[workflowId]/editor`, `/workflows/[workflowId]/executions` (execution list), `/executions/[executionId]` (execution debugger, Phase 14).
 - `lib/api/` — the only place that does HTTP (`authApi`, `workflowApi`, `executionApi`, `nodeApi`, `credentialApi`, `projectApi`).
 - `lib/auth/` — the session (the API's bearer token) and the route guard.
-- `lib/workflow/` — pure logic: definition helpers, the workflow ↔ canvas mapper, port-compatibility feedback, variable suggestions.
+- `lib/workflow/` — pure logic: definition helpers, the workflow ↔ canvas mapper, port-compatibility feedback, `{{variable}}` discovery for the picker (`variables.ts`), readable field labels (`labels.ts`), the wording of backend validation findings (`issues.ts`) and copy/paste fragments (`clipboard.ts`).
 - `stores/workflow-editor/` — editor state (working copy, selection, dirty, validation display, undo/redo).
 - `features/` — server state and actions (dashboard, editor session: save / validate / publish, executions).
 - `components/` — canvas, node renderer, palette, configuration panel, validation/run panel, header; `components/executions/` holds the debugger (timeline, node inspector, JSON viewer, event log, status graph).
@@ -31,6 +31,12 @@ The workflow definition is the source of truth. The canvas is derived from it
 (`toCanvas`) and canvas edits are written back through `fromCanvas`; only the
 definition is sent to the API. Node types, ports and configuration fields come
 from `GET /api/v1/nodes`; nothing is hardcoded.
+
+Editor assistance is presentation only: hover cards and the configuration
+panel render the backend NodeDefinition (descriptions, ports, config fields);
+the variable picker lists the references the backend resolver accepts (the run
+input and outputs of upstream nodes) but resolves nothing; validation findings
+come from the backend and are only reworded and located on the canvas.
 
 Saving stores the definition as a new immutable DRAFT version (the API has no
 version update). Publishing validates and publishes that version; only

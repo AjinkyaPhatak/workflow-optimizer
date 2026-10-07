@@ -72,7 +72,7 @@ test("build, validate, publish and execute a workflow in the visual editor", asy
   await node(page, "llm").locator(".wf-node-header").click();
   const panel = page.getByTestId("config-panel");
   await expect(panel.getByRole("heading", { name: "LLM" })).toBeVisible();
-  await panel.locator("#cfg-credential_id").selectOption({ label: `${s.credentialName} (openai, api_key)` });
+  await panel.locator("#cfg-credential_id").selectOption({ label: `${s.credentialName} (openai)` });
   await panel.locator("#cfg-model").fill("gpt-5-mini");
   await panel.locator("#cfg-model").press("Enter");
   await panel.locator("#cfg-node-name").fill("Answer");
@@ -93,14 +93,14 @@ test("build, validate, publish and execute a workflow in the visual editor", asy
   await expect(node(page, "output")).toHaveCount(1);
 
   // --- validate before the output is connected: backend errors are shown ----
-  await page.getByRole("button", { name: "Validate" }).click();
+  await page.getByRole("button", { name: "Validate", exact: true }).click();
   await expect(page.getByTestId("version-status")).toHaveText("v1 · Draft");
   const errors = page.getByTestId("validation-errors");
   await expect(errors).toContainText("MISSING_REQUIRED_INPUT");
   await expect(node(page, "output")).toHaveClass(/invalid/);
   await expect(node(page, "output").locator(".wf-node-errors")).toContainText("value");
   // Clicking an error selects its node.
-  await errors.locator("li", { hasText: "Output" }).first().click();
+  await errors.locator("li").filter({ has: page.locator(".issue-title", { hasText: /^Output$/ }) }).getByRole("button").first().click();
   await expect(panel.getByRole("heading", { name: "Output" })).toBeVisible();
 
   // --- fix, save, validate, publish -----------------------------------------
@@ -111,7 +111,7 @@ test("build, validate, publish and execute a workflow in the visual editor", asy
   await expect(page.getByTestId("version-status")).toHaveText("v2 · Draft");
   await expect(page.getByTestId("dirty")).toHaveCount(0);
 
-  await page.getByRole("button", { name: "Validate" }).click();
+  await page.getByRole("button", { name: "Validate", exact: true }).click();
   await expect(page.getByTestId("validation-ok")).toBeVisible();
   await expect(node(page, "output")).not.toHaveClass(/invalid/);
 

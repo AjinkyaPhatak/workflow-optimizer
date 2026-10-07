@@ -1,42 +1,85 @@
 "use client";
 
-import { useReactFlow } from "@xyflow/react";
 import Link from "next/link";
 import { useState } from "react";
 import { ErrorBanner } from "@/components/ui/ErrorBanner";
 import { useExecution } from "@/features/executions/useExecution";
 import { useEditorContext } from "@/features/workflows/EditorContext";
-import { useEditorStore } from "@/stores/workflow-editor/store";
+import { useFocusIssue, useIssues } from "@/features/workflows/useIssues";
+import type { Issue } from "@/lib/workflow/issues";
+import { useEditorStore, useIsDirty } from "@/stores/workflow-editor/store";
 
 export type BottomTab = "validation" | "run";
 
-function ValidationTab() {
-  const flow = useReactFlow();
-  const validation = useEditorStore((s) => s.validation);
-  const nodes = useEditorStore((s) => s.definition.nodes);
-  const select = useEditorStore((s) => s.select);
+/** Findings grouped by where they are (a node, a connection, the workflow),
+ * in the order the backend reported them. */
+function groupIssues(issues: Issue[]): { key: string; title: string; items: Issue[] }[] {
+  const groups = new Map<string, { key: string; title: string; items: Issue[] }>();
+  for (const i of issues) {
+    const key = i.edgeId ? `edge:${i.edgeId}` : i.nodeId ? `node:${i.nodeId}` : "workflow";
+    const g = groups.get(key) ?? { key, title: i.title, items: [] };
+    g.items.push(i);
+    groups.set(key, g);
+  }
+  return [...groups.values()];
+}
 
-  if (!validation) return <p className="muted">Not validated yet. Validate checks the saved version with the backend graph validator.</p>;
-  if (validation.valid) return <p style={{ color: "var(--ok)" }} data-testid="validation-ok">✓ The workflow is valid and can be published.</p>;
+function ValidationTab() {
+  const { validate, busy } = useEditorContext();
+  const validation = useEditorStore((s) => s.validation);
+  const dirty = useIsDirty();
+  const issues = useIssues();
+  const focus = useFocusIssue();
+
+  if (!validation) {
+    return (
+      <div className="panel-empty">
+        <p className="muted">Not validated yet. Validation checks the saved workflow with the backend and lists anything that must be fixed before publishing.</p>
+        <button onClick={() => void validate()} disabled={busy !== null}>{busy === "validating" ? "Validating…" : "Validate now"}</button>
+      </div>
+    );
+  }
+  const errors = issues.filter((i) => i.severity === "error");
+  const stale = dirty && <p className="small muted stale-note">The workflow has changed since this check. Validate again to refresh.</p>;
+  if (validation.valid && issues.length === 0) {
+    return (
+      <>
+        <p className="validation-ok" data-testid="validation-ok">✓ The workflow is valid and can be published.</p>
+        {stale}
+      </>
+    );
+  }
 
   return (
-    <ol className="validation-list" data-testid="validation-errors">
-      {validation.errors.map((e, i) => {
-        const node = e.node_id ? nodes.find((n) => n.id === e.node_id) : undefined;
-        return (
-          <li
-            key={i}
-            onClick={() => {
-              if (!node) return;
-              select([node.id]);
-              void flow.fitView({ nodes: [{ id: node.id }], duration: 300, maxZoom: 1.2 });
-            }}
-          >
-            <b>{node?.name ?? (e.node_id || "Workflow")}</b>{e.port ? ` · ${e.port}` : ""} — {e.message} <span className="code">{e.code}</span>
+    <div>
+      <div className="validation-summary" data-testid="validation-summary">
+        {errors.length > 0 ? (
+          <b>{errors.length} problem{errors.length === 1 ? "" : "s"} found</b>
+        ) : (
+          <b className="ok-text">✓ Valid</b>
+        )}
+        {issues.length > errors.length && <span className="muted"> · {issues.length - errors.length} warning{issues.length - errors.length === 1 ? "" : "s"}</span>}
+        <span className="muted small"> · Click a problem to show it on the canvas.</span>
+      </div>
+      {stale}
+      <ol className="validation-list" data-testid="validation-errors">
+        {groupIssues(issues).map(({ key, title, items }) => (
+          <li key={key} className={items.some((i) => i.severity === "error") ? "error" : "warning"}>
+            <div className="issue-title">{title}</div>
+            {items.map((i) => (
+              <button key={i.key} type="button" className={i.severity} onClick={() => focus(i)} disabled={!i.nodeId && !i.edgeId}>
+                <span className="issue-icon" aria-hidden>⚠</span>
+                <span className="issue-body">
+                  <span>{i.message}</span>
+                  {i.hint && <span className="issue-hint">{i.hint}</span>}
+                </span>
+                <span className="code">{i.code}</span>
+              </button>
+            ))}
           </li>
-        );
-      })}
-    </ol>
+        ))}
+      </ol>
+    </div>
   );
 }
 
@@ -102,11 +145,12 @@ function RunTab({ workflowId }: { workflowId: string }) {
 
 export function BottomPanel({ tab, onTab, workflowId }: { tab: BottomTab; onTab: (t: BottomTab) => void; workflowId: string }) {
   const errors = useEditorStore((s) => s.validation?.errors.length ?? 0);
+  const checked = useEditorStore((s) => s.validation !== null);
   return (
     <section className="bottom-panel">
       <div className="bottom-tabs" role="tablist">
         <button role="tab" className={tab === "validation" ? "active" : ""} onClick={() => onTab("validation")}>
-          Validation{errors ? ` (${errors})` : ""}
+          Validation{errors ? <span className="tab-count error">{errors}</span> : checked ? <span className="tab-count ok">✓</span> : null}
         </button>
         <button role="tab" className={tab === "run" ? "active" : ""} onClick={() => onTab("run")}>Run</button>
       </div>

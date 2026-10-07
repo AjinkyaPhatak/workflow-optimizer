@@ -49,9 +49,12 @@ function Dashboard() {
 
         <section className="card">
           {d.loading ? (
-            <div className="empty">Loading…</div>
+            <div className="empty"><span className="spinner" aria-hidden /> Loading workflows…</div>
           ) : d.rows.length === 0 ? (
-            <div className="empty">No workflows yet.</div>
+            <div className="empty">
+              <b>No workflows yet</b>
+              <div className="small">{canCreate ? "Create your first workflow below." : "Workflows created in this workspace appear here."}</div>
+            </div>
           ) : (
             <ul className="workflow-list">
               {d.rows.map(({ workflow, project }) => (

@@ -8,6 +8,7 @@ import { create } from "zustand";
 import type { NodeDefinition, Position, ValidationResult, WorkflowDefinition, WorkflowEdge } from "@/types/api";
 import { createNode, emptyDefinition, newEdgeId, normalizeDefinition, stableStringify } from "@/lib/workflow/definition";
 import { fromCanvas, toCanvas, type CanvasNode } from "@/lib/workflow/mapping";
+import { pasteFragment, type Fragment } from "@/lib/workflow/clipboard";
 import { checkConnection, type ConnectionAttempt, type ConnectionCheck } from "@/lib/workflow/ports";
 
 export const HISTORY_LIMIT = 100;
@@ -40,6 +41,9 @@ export interface WorkflowEditorState {
   connect: (c: ConnectionAttempt, catalog: Map<string, NodeDefinition>) => ConnectionCheck;
   removeEdges: (ids: string[]) => void;
   select: (nodeIds: string[], edgeIds?: string[]) => void;
+  selectAll: () => void;
+  /** Pastes a copied fragment as one undoable step and selects it. */
+  paste: (fragment: Fragment) => string[];
 
   /** React Flow change events, applied through the canvas mapper. */
   applyNodeChanges: (changes: NodeChange<CanvasNode>[]) => void;
@@ -169,6 +173,16 @@ export const useEditorStore = create<WorkflowEditorState>((set, get) => {
     },
 
     select: (nodeIds, edgeIds = []) => set({ selectedNodeIds: nodeIds, selectedEdgeIds: edgeIds }),
+    selectAll: () => {
+      const { definition } = get();
+      set({ selectedNodeIds: definition.nodes.map((n) => n.id), selectedEdgeIds: definition.edges.map((e) => e.id) });
+    },
+    paste: (fragment) => {
+      if (!editable() || fragment.nodes.length === 0) return [];
+      const { definition, nodeIds } = pasteFragment(get().definition, fragment);
+      commit(definition, { selectedNodeIds: nodeIds, selectedEdgeIds: [] });
+      return nodeIds;
+    },
 
     applyNodeChanges: (changes) => {
       const state = get();
