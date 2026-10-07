@@ -166,3 +166,18 @@ func TestLLMNodeCancellationPassesThrough(t *testing.T) {
 		t.Fatalf("provider deadline: %v", err)
 	}
 }
+
+// A json port (e.g. the workflow input object) wired to the prompt is sent
+// as JSON text (Phase 13: json ports connect to any port type).
+func TestLLMNodeRendersJSONPromptAsText(t *testing.T) {
+	p := &fakeProvider{resp: providerllm.Response{Content: "ok"}}
+	in := input(uuid.New(), uuid.New(), nil)
+	in.Ports["prompt"] = node.NewJSONValue(map[string]any{"query": "What is quantum computing?"})
+	delete(in.Ports, "system")
+	if _, err := setup(t, p, &fakeResolver{}).Execute(context.Background(), in); err != nil {
+		t.Fatal(err)
+	}
+	if got := p.got.Messages[0].Content; got != `{"query":"What is quantum computing?"}` || p.got.System != "" {
+		t.Fatalf("prompt = %q system = %q", got, p.got.System)
+	}
+}

@@ -2,6 +2,7 @@ package llm
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -100,9 +101,9 @@ func (n *Node) Execute(ctx context.Context, in node.NodeInput) (node.NodeOutput,
 		return node.NodeOutput{}, err
 	}
 	promptVal, _ := in.GetPort("prompt")
-	promptText, _ := promptVal.String()
+	promptText := textOf(promptVal)
 	systemVal, _ := in.GetPort("system")
-	systemText, _ := systemVal.String()
+	systemText := textOf(systemVal)
 
 	if n.deps.Providers == nil {
 		out := node.NewNodeOutput(nil)
@@ -238,4 +239,20 @@ func classifyProviderError(err error) error {
 		e.Source = node.SourceProvider
 		return e
 	}
+}
+
+// textOf returns a string value as is and renders any other value (for
+// example a json port holding the workflow input object) as JSON text.
+func textOf(v node.Value) string {
+	if s, ok := v.String(); ok {
+		return s
+	}
+	if v.Data == nil {
+		return ""
+	}
+	b, err := json.Marshal(v.Data)
+	if err != nil {
+		return ""
+	}
+	return string(b)
 }

@@ -111,3 +111,29 @@ func TestBootstrapProviderRegistry(t *testing.T) {
 		}
 	}
 }
+
+// The canonical V1 graph Input -> LLM -> Output is executable with the
+// built-in catalog (Phase 13: json ports connect to typed ports).
+func TestCanonicalLLMWorkflowIsExecutable(t *testing.T) {
+	a, err := app.Bootstrap(testConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	pos := &workflow.Position{}
+	def := workflow.Definition{
+		Version: workflow.DefinitionSchemaVersion,
+		Nodes: []workflow.Node{
+			{ID: "in", Type: "input", Name: "Input", Position: pos, Config: map[string]any{}},
+			{ID: "llm", Type: "llm", Name: "LLM", Position: pos, Config: map[string]any{"provider": "openai", "model": "gpt-5"}},
+			{ID: "out", Type: "output", Name: "Output", Position: pos, Config: map[string]any{}},
+		},
+		Edges: []workflow.Edge{
+			{ID: "e1", Source: "in", SourcePort: "data", Target: "llm", TargetPort: "prompt"},
+			{ID: "e2", Source: "llm", SourcePort: "response", Target: "out", TargetPort: "value"},
+		},
+		Settings: map[string]any{},
+	}
+	if res := workflow.NewValidator(a.NodeRegistry).Validate(def); !res.Valid {
+		t.Fatalf("canonical workflow invalid: %+v", res.Errors)
+	}
+}

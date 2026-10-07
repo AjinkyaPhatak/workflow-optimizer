@@ -166,7 +166,7 @@ func (v *GraphValidator) ValidateWithOptions(d Definition, options ValidationOpt
 		// Structural adjacency is retained for cycle validation even when the
 		// edge is type-invalid; only typed edges are valid input connections.
 		adj[s.ID] = append(adj[s.ID], t.ID)
-		if sp.Type != tp.Type {
+		if !PortTypesCompatible(sp.Type, tp.Type) {
 			add(ErrIncompatiblePortTypes, "connected port types differ", s.ID, e.ID, e.SourcePort, nil)
 			continue
 		}
@@ -238,6 +238,17 @@ func (v *GraphValidator) ValidateWithOptions(d Definition, options ValidationOpt
 	})
 	return ValidationResult{len(es) == 0, es}
 }
+
+// PortTypesCompatible reports whether an edge may connect an output of type
+// source to an input of type target: the types are equal, or either side is
+// json, the dynamically typed port type (any value is JSON, and a json value
+// may hold any type). Phase 13: without this no built-in workflow could feed
+// the workflow input (json) to an LLM prompt (string) or an LLM response
+// (string) to the output node (json).
+func PortTypesCompatible(source, target nodepkg.ValueType) bool {
+	return source == target || source == nodepkg.ValueTypeJSON || target == nodepkg.ValueTypeJSON
+}
+
 func (v *GraphValidator) def(t string) (nodepkg.NodeDefinition, error) {
 	if v.reg == nil {
 		return nodepkg.NodeDefinition{}, fmt.Errorf("nil registry")

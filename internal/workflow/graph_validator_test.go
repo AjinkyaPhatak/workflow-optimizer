@@ -203,3 +203,25 @@ func TestGraphValidatorGraphSemanticsAndInterpolation(t *testing.T) {
 		t.Fatalf("empty interpolation: %#v", got.Errors)
 	}
 }
+
+// json is the dynamic port type: it connects to and from any type; other
+// types must match exactly.
+func TestPortTypesCompatible(t *testing.T) {
+	cases := []struct {
+		source, target nodemeta.ValueType
+		want           bool
+	}{
+		{nodemeta.ValueTypeString, nodemeta.ValueTypeString, true},
+		{nodemeta.ValueTypeJSON, nodemeta.ValueTypeString, true},
+		{nodemeta.ValueTypeString, nodemeta.ValueTypeJSON, true},
+		{nodemeta.ValueTypeJSON, nodemeta.ValueTypeObject, true},
+		{nodemeta.ValueTypeString, nodemeta.ValueTypeNumber, false},
+		{nodemeta.ValueTypeObject, nodemeta.ValueTypeArray, false},
+		{nodemeta.ValueTypeString, nodemeta.ValueTypeObject, false},
+	}
+	for _, c := range cases {
+		if got := PortTypesCompatible(c.source, c.target); got != c.want {
+			t.Errorf("%s -> %s = %v, want %v", c.source, c.target, got, c.want)
+		}
+	}
+}
