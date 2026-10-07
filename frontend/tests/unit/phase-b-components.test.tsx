@@ -42,7 +42,7 @@ const version = (n: number, status: VersionSummary["status"]): VersionSummary =>
 function session(over: Partial<EditorSession> = {}): EditorSession {
   return {
     loading: false, loadError: null, workflow: { id: "wf", project_id: "p", name: "W", description: null, active_version_id: "v2", created_at: "", updated_at: "" },
-    version: null, catalogList: [...testCatalog.values()], catalog: testCatalog, credentials: [], role: "owner", busy: null, notice: null,
+    version: null, catalogList: [...testCatalog.values()], catalog: testCatalog, credentials: [], connectedAccounts: [], role: "owner", busy: null, notice: null,
     save: vi.fn(), validate: vi.fn(), publish: vi.fn(), canPublish: true, versions: null, refreshVersions: vi.fn(), openVersion: vi.fn(),
     ...over,
   };

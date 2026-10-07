@@ -1,8 +1,8 @@
 "use client";
 
-import { categoryClass, categoryLabel, iconText } from "@/features/nodes/catalog";
+import { categoryClass, iconText, originLabel } from "@/features/nodes/catalog";
 import type { Issue } from "@/lib/workflow/issues";
-import { sideEffectsNote, usesCredential } from "@/lib/workflow/labels";
+import { authNote, sideEffectsNote, usesCredential } from "@/lib/workflow/labels";
 import type { NodeDefinition, PortDefinition } from "@/types/api";
 
 function Ports({ title, ports }: { title: string; ports: PortDefinition[] }) {
@@ -38,6 +38,7 @@ export function NodeInfoCard({ def, title, issues = [] }: { def: NodeDefinition 
     );
   }
   const credential = usesCredential(def);
+  const auth = authNote(def);
   const side = sideEffectsNote(def.side_effects);
   return (
     <div className="node-info" data-testid="node-info">
@@ -47,7 +48,7 @@ export function NodeInfoCard({ def, title, issues = [] }: { def: NodeDefinition 
           <div className="info-title">{title ?? def.name}</div>
           <div className="info-sub">
             {title && title !== def.name ? `${def.name} · ` : ""}
-            {categoryLabel(def.category)}
+            {originLabel(def)}
           </div>
         </div>
       </div>
@@ -57,7 +58,7 @@ export function NodeInfoCard({ def, title, issues = [] }: { def: NodeDefinition 
       {(credential || side) && (
         <div className="info-section info-notes">
           {credential && (
-            <div><span className="info-tag">Credential</span>{credential.required ? "Requires" : "Can use"} a workspace credential.</div>
+            <div><span className="info-tag">Credential</span>{auth ?? `${credential.required ? "Requires" : "Can use"} a workspace credential.`}</div>
           )}
           {side && <div><span className="info-tag warn">Side effects</span>{side}</div>}
         </div>

@@ -22,10 +22,15 @@ func TestBootstrapRegistersAllV1Nodes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Bootstrap error: %v", err)
 	}
-	// Expect 11 V1 nodes registered
+	// Expect the 11 V1 nodes plus the 5 Gmail actions (Phase C3)
 	got := len(a.NodeRegistry.List())
-	if got != 11 {
-		t.Fatalf("expected 11 V1 nodes, got %d", got)
+	if got != 16 {
+		t.Fatalf("expected 16 nodes (11 V1 + 5 Gmail), got %d", got)
+	}
+	for _, typ := range []string{"gmail.search", "gmail.read", "gmail.create_draft", "gmail.send", "gmail.reply"} {
+		if !a.NodeRegistry.HasNodeType(typ) {
+			t.Fatalf("%s is not registered", typ)
+		}
 	}
 	// Provider registry should be non-nil
 	if a.ProviderRegistry == nil {
@@ -59,7 +64,7 @@ func TestValidateWithRegistry_UnknownNodeType(t *testing.T) {
 	}
 	def := workflow.Definition{Version: workflow.DefinitionSchemaVersion,
 		Nodes: []workflow.Node{{
-			ID: "node1", Type: "gmail.send", Name: "gmail", Position: &workflow.Position{X: 0, Y: 0}, Config: map[string]any{},
+			ID: "node1", Type: "notion.search", Name: "notion", Position: &workflow.Position{X: 0, Y: 0}, Config: map[string]any{},
 		}},
 		Edges:    []workflow.Edge{},
 		Settings: map[string]any{},

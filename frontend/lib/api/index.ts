@@ -5,3 +5,4 @@ export { executionApi } from "./executions";
 export { nodeApi } from "./nodes";
 export { projectApi } from "./projects";
 export { workflowApi } from "./workflows";
+export { connectedAccountApi } from "./connectedAccounts";

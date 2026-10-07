@@ -10,9 +10,11 @@ import (
 
 	"workflow-optimizer/internal/application"
 	"workflow-optimizer/internal/auth"
+	"workflow-optimizer/internal/connectedaccount"
 	"workflow-optimizer/internal/credential"
 	"workflow-optimizer/internal/execution"
 	"workflow-optimizer/internal/node"
+	"workflow-optimizer/internal/oauth"
 	"workflow-optimizer/internal/observability"
 	"workflow-optimizer/internal/templates"
 	"workflow-optimizer/internal/workflow"
@@ -308,6 +310,27 @@ type NodeType struct {
 	Inputs      []Port        `json:"inputs"`
 	Outputs     []Port        `json:"outputs"`
 	Config      []ConfigField `json:"config"`
+	// Integration and Auth are present on integration actions (Phase C1).
+	// Auth describes which credential to pick, never its contents.
+	Integration *NodeIntegration `json:"integration,omitempty"`
+	Auth        *NodeAuth        `json:"auth,omitempty"`
+}
+
+// NodeIntegration names the integration action a node type performs.
+type NodeIntegration struct {
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	Action   string `json:"action"`
+	Category string `json:"category,omitempty"`
+	Icon     string `json:"icon,omitempty"`
+	DocsURL  string `json:"docs_url,omitempty"`
+}
+
+// NodeAuth is the kind of workspace credential a node type needs.
+type NodeAuth struct {
+	Required       bool   `json:"required"`
+	Provider       string `json:"provider"`
+	CredentialType string `json:"credential_type"`
 }
 
 func ports(ps []node.PortDefinition) []Port {
@@ -336,8 +359,15 @@ func NewNodeType(d node.NodeDefinition) NodeType {
 	if side == "" {
 		side = "none"
 	}
-	return NodeType{Type: d.Type, Name: d.Name, Category: string(d.Category), Description: d.Description, Role: string(d.Role),
+	out := NodeType{Type: d.Type, Name: d.Name, Category: string(d.Category), Description: d.Description, Role: string(d.Role),
 		SideEffects: side, Inputs: ports(d.Inputs), Outputs: ports(d.Outputs), Config: cfg}
+	if i := d.Integration; i != nil {
+		out.Integration = &NodeIntegration{ID: i.ID, Name: i.Name, Action: i.Action, Category: i.Category, Icon: i.Icon, DocsURL: i.DocsURL}
+	}
+	if a := d.Auth; a != nil {
+		out.Auth = &NodeAuth{Required: a.Required, Provider: a.Provider, CredentialType: a.CredentialType}
+	}
+	return out
 }
 
 // --- observability (Phase 14) -------------------------------------------------
@@ -426,4 +456,57 @@ func NewEvent(e execution.ExecutionEvent) Event {
 		data = map[string]any{}
 	}
 	return Event{ID: e.ID, ExecutionID: e.ExecutionID, NodeID: e.NodeID, Type: string(e.Type), Timestamp: e.Timestamp, Data: data}
+}
+
+// --- connected accounts (Phase C2) ---------------------------------------------
+
+// OAuthProvider is a configured OAuth provider: public metadata only (no
+// client ID or secret, no endpoints).
+type OAuthProvider struct {
+	ID          string   `json:"id"`
+	Name        string   `json:"name"`
+	Description string   `json:"description"`
+	Scopes      []string `json:"scopes"`
+}
+
+func NewOAuthProvider(c oauth.ProviderConfig) OAuthProvider {
+	scopes := c.Scopes
+	if scopes == nil {
+		scopes = []string{}
+	}
+	return OAuthProvider{ID: c.ID, Name: c.Name, Description: c.Description, Scopes: scopes}
+}
+
+// ConnectedAccount is connected-account metadata. There is no field for any
+// token: workflows reference credential_id.
+type ConnectedAccount struct {
+	ID           uuid.UUID  `json:"id"`
+	WorkspaceID  uuid.UUID  `json:"workspace_id"`
+	Provider     string     `json:"provider"`
+	ProviderName string     `json:"provider_name"`
+	DisplayName  string     `json:"display_name"`
+	Email        string     `json:"email"`
+	Status       string     `json:"status"`
+	CredentialID uuid.UUID  `json:"credential_id"`
+	Scopes       []string   `json:"scopes"`
+	CreatedAt    time.Time  `json:"created_at"`
+	UpdatedAt    time.Time  `json:"updated_at"`
+	LastUsedAt   *time.Time `json:"last_used_at"`
+}
+
+func NewConnectedAccount(a connectedaccount.Account, providerName string) ConnectedAccount {
+	scopes := a.Scopes
+	if scopes == nil {
+		scopes = []string{}
+	}
+	return ConnectedAccount{ID: a.ID, WorkspaceID: a.WorkspaceID, Provider: a.Provider, ProviderName: providerName,
+		DisplayName: a.DisplayName, Email: a.Email, Status: string(a.Status), CredentialID: a.CredentialID, Scopes: scopes,
+		CreatedAt: a.CreatedAt, UpdatedAt: a.UpdatedAt, LastUsedAt: a.LastUsedAt}
+}
+
+// AuthorizationStarted is the answer to an authorize request: where to send
+// the browser.
+type AuthorizationStarted struct {
+	AuthorizationURL string    `json:"authorization_url"`
+	ExpiresAt        time.Time `json:"expires_at"`
 }

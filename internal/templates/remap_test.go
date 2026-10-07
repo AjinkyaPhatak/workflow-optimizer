@@ -15,3 +15,14 @@ func TestRemapFollowsRenamedNodes(t *testing.T) {
 		t.Fatalf("list: %#v", l)
 	}
 }
+
+func TestFreshIDsAreReferenceSafeForIntegrationTypes(t *testing.T) {
+	taken := map[string]bool{}
+	id := freshID("gmail.create_draft", taken)
+	if !reference.MatchString("{{"+id+".draft}}") || reference.FindStringSubmatch("{{" + id + ".draft}}")[1] != id {
+		t.Fatalf("node ID %q cannot be referenced as {{%s.port}}", id, id)
+	}
+	if len(id) != len("gmail_create_draft_0000") || id[:len("gmail_create_draft_")] != "gmail_create_draft_" {
+		t.Fatalf("id %q", id)
+	}
+}

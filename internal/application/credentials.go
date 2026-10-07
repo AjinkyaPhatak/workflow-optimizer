@@ -58,6 +58,9 @@ func (s *CredentialService) Create(ctx context.Context, user uuid.UUID, in Creat
 	if !slices.Contains(s.providers.List(), in.Provider) {
 		return credential.Credential{}, &InvalidError{Message: "unknown provider"}
 	}
+	if in.Type == credential.TypeOAuth2 {
+		return credential.Credential{}, &InvalidError{Message: "OAuth credentials are created by connecting an account"}
+	}
 	if !s.canEncrypt {
 		return credential.Credential{}, ErrUnavailable
 	}
@@ -89,6 +92,10 @@ func (s *CredentialService) Delete(ctx context.Context, user, id uuid.UUID) erro
 	}
 	if _, err := s.access.Require(ctx, user, c.WorkspaceID, workspace.ActionManageCredentials, "credential"); err != nil {
 		return err
+	}
+	if c.CredentialType == credential.TypeOAuth2 {
+		// Its tokens are managed with the connected account (Phase C2).
+		return &ConflictError{Code: "CREDENTIAL_IN_USE", Message: "this credential belongs to a connected account; disconnect the account instead"}
 	}
 	if err := s.service.Delete(ctx, c.WorkspaceID, id); errors.Is(err, credential.ErrNotFound) {
 		return notFound("credential")

@@ -56,6 +56,14 @@ export function typeLabel(t: ValueType): string {
   }
 }
 
+/** "Requires a google credential (OAuth)." from a node's auth metadata. */
+export function authNote(def: Pick<NodeDefinition, "auth">): string | undefined {
+  const a = def.auth;
+  if (!a) return undefined;
+  const kind = a.credential_type === "OAUTH2" ? "connected account" : `${a.credential_type.toLowerCase().replace(/_/g, " ")} credential`;
+  return `${a.required ? "Requires" : "Can use"} a ${a.provider} ${kind}.`;
+}
+
 export function usesCredential(def: Pick<NodeDefinition, "config">): ConfigField | undefined {
   return def.config.find((f) => f.name === CREDENTIAL_FIELD);
 }

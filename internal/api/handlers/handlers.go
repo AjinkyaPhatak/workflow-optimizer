@@ -35,6 +35,9 @@ type Handlers struct {
 	Workflows   *application.WorkflowService
 	Executions  *application.ExecutionService
 	Credentials *application.CredentialService
+	// ConnectedAccounts serves connected accounts and the OAuth flow
+	// (Phase C2).
+	ConnectedAccounts *application.ConnectedAccountService
 	// Observability serves the execution debugger (Phase 14).
 	Observability *application.ObservabilityService
 	Nodes         NodeCatalog

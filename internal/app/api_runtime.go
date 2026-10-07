@@ -18,6 +18,7 @@ import (
 	"workflow-optimizer/internal/execution"
 	"workflow-optimizer/internal/infrastructure/postgres"
 	redisinfra "workflow-optimizer/internal/infrastructure/redis"
+	"workflow-optimizer/internal/oauth"
 	"workflow-optimizer/internal/observability"
 	"workflow-optimizer/internal/queue"
 	"workflow-optimizer/internal/workflow"
@@ -44,6 +45,12 @@ type APIRuntime struct {
 //	                                         -> graph validator (node registry)
 //	                                         -> credential.Service (AES-256-GCM)
 func NewAPI(ctx context.Context, cfg config.Config, logger *slog.Logger) (*APIRuntime, error) {
+	return NewAPIWith(ctx, cfg, logger, Extensions{})
+}
+
+// NewAPIWith is NewAPI with optional extensions (OAuth providers,
+// integrations).
+func NewAPIWith(ctx context.Context, cfg config.Config, logger *slog.Logger, ext Extensions) (*APIRuntime, error) {
 	if err := cfg.ValidateAPI(); err != nil {
 		return nil, err
 	}
@@ -71,14 +78,14 @@ func NewAPI(ctx context.Context, cfg config.Config, logger *slog.Logger) (*APIRu
 		return nil, fmt.Errorf("app: open Redis: %w", err)
 	}
 	rt := &APIRuntime{cfg: cfg, store: store, redis: redisClient, logger: logger}
-	if err := rt.build(enc, tokens); err != nil {
+	if err := rt.build(enc, tokens, ext); err != nil {
 		rt.Close()
 		return nil, err
 	}
 	return rt, nil
 }
 
-func (rt *APIRuntime) build(enc credential.SecretEncryptor, tokens auth.TokenService) error {
+func (rt *APIRuntime) build(enc credential.SecretEncryptor, tokens auth.TokenService, ext Extensions) error {
 	pricing, err := observability.ParsePricing(rt.cfg.ModelPricing)
 	if err != nil {
 		return fmt.Errorf("app: %w", err)
@@ -86,14 +93,14 @@ func (rt *APIRuntime) build(enc credential.SecretEncryptor, tokens auth.TokenSer
 	// The API applies cancellations of RUNNING executions itself (Phase 10
 	// RequestCancel); it reports them as events like the workers do.
 	recorder := observability.NewRecorder(postgres.NewExecutionEventRepository(rt.store), rt.logger, observability.NewMetrics())
-	credentialRepo := postgres.NewCredentialRepository(rt.store)
-	credentials, err := credential.NewService(credentialRepo, enc)
+	chain, err := newCredentialChain(rt.cfg, rt.store, enc, ext, rt.logger)
 	if err != nil {
 		return err
 	}
+	credentialRepo, credentials := chain.repo, chain.service
 	// The same bootstrap as the worker: the API validates against exactly the
 	// node registry the workers execute with.
-	engine, err := BootstrapWith(rt.cfg, Dependencies{Credentials: credentials})
+	engine, err := BootstrapWith(rt.cfg, chain.dependencies(ext))
 	if err != nil {
 		return err
 	}
@@ -118,7 +125,14 @@ func (rt *APIRuntime) build(enc credential.SecretEncryptor, tokens auth.TokenSer
 	identities := postgres.NewIdentityRepository(rt.store)
 	access := application.NewAccess(identities)
 	workflows := application.NewWorkflowService(access, postgres.NewWorkflowRepository(rt.store),
-		workflow.NewValidator(engine.NodeRegistry))
+		workflow.NewValidator(engine.NodeRegistry)).WithCredentialCheck(credentialRepo)
+	// OAuth states live in Redis next to the queue's keys, single-use and
+	// expiring on their own.
+	states, err := redisinfra.NewOAuthStateStore(rt.redis, rt.cfg.RedisQueueName+":oauth-state")
+	if err != nil {
+		return err
+	}
+	connected := application.NewConnectedAccountService(access, chain.accounts, oauth.NewFlow(chain.providers, states, 0), chain.providers, rt.logger)
 	executions := application.NewExecutionService(application.ExecutionDeps{
 		Workflows:  workflows,
 		Submitter:  submitter,
@@ -135,8 +149,9 @@ func (rt *APIRuntime) build(enc credential.SecretEncryptor, tokens auth.TokenSer
 		Executions: executions,
 		Observability: application.NewObservabilityService(executions, postgres.NewExecutionEventRepository(rt.store),
 			postgres.NewExecutionListRepository(rt.store), pricing, policy),
-		Credentials: application.NewCredentialService(access, credentials, credentialRepo, engine.ProviderRegistry, enc != nil),
-		Nodes:       engine.NodeRegistry,
+		Credentials:       application.NewCredentialService(access, credentials, credentialRepo, engine.ProviderRegistry, enc != nil),
+		ConnectedAccounts: connected,
+		Nodes:             engine.NodeRegistry,
 		Ready: []handlers.Check{
 			{Name: "postgres", Check: rt.store.Pool.Ping},
 			{Name: "redis", Check: rt.redis.Ping},

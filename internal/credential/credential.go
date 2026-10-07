@@ -59,6 +59,10 @@ var (
 	ErrProviderMismatch = errors.New("credential: provider mismatch")
 	// ErrInvalid: the credential (or the request for it) is unusable.
 	ErrInvalid = errors.New("credential: invalid")
+	// ErrRevoked: the authorization behind an OAuth credential is gone
+	// (disconnected, revoked or refused by the provider). Only connecting the
+	// account again fixes it.
+	ErrRevoked = errors.New("credential: authorization revoked")
 )
 
 // Repository is the persistence boundary for credentials. It stores and
@@ -71,6 +75,9 @@ type Repository interface {
 	// with this ID).
 	Delete(ctx context.Context, workspaceID, id uuid.UUID) error
 	ListByWorkspace(ctx context.Context, workspaceID uuid.UUID) ([]Credential, error)
+	// UpdateData replaces the encrypted envelope of the workspace's
+	// credential (ErrNotFound if it has none with this ID).
+	UpdateData(ctx context.Context, workspaceID, id uuid.UUID, encryptedData json.RawMessage) error
 }
 
 // SecretEncryptor is the narrow encryption boundary (authenticated
@@ -119,4 +126,77 @@ type ResolvedCredential struct {
 // not found. provider is the provider the credential will be used with.
 type Resolver interface {
 	Resolve(ctx context.Context, workspaceID, credentialID uuid.UUID, provider string) (ResolvedCredential, error)
+}
+
+// OAuthToken is OAuth credential material (Phase C2), held in runtime memory
+// only and encrypted at rest inside the credential's envelope. Tokens are
+// Secrets: they never print or marshal.
+type OAuthToken struct {
+	AccessToken  Secret
+	RefreshToken Secret
+	TokenType    string
+	// Expiry is when the access token stops working; zero when the provider
+	// did not say (the token is then treated as valid until refused).
+	Expiry            time.Time
+	Scopes            []string
+	ProviderAccountID string
+}
+
+// Expired reports whether the access token has expired at now.
+func (t OAuthToken) Expired(now time.Time) bool {
+	return !t.Expiry.IsZero() && !now.Before(t.Expiry)
+}
+
+// ExpiresWithin reports whether the access token expires within d of now
+// (or already has): the point at which it should be refreshed.
+func (t OAuthToken) ExpiresWithin(now time.Time, d time.Duration) bool {
+	return !t.Expiry.IsZero() && !now.Add(d).Before(t.Expiry)
+}
+
+// Valid reports whether the access token can be used at now.
+func (t OAuthToken) Valid(now time.Time) bool {
+	return !t.AccessToken.Empty() && !t.Expired(now)
+}
+
+// Merge applies a refresh result: the new access token, expiry and type,
+// keeping the current refresh token, scopes and account when the provider
+// omits them (most providers do not rotate refresh tokens on every refresh).
+func (t OAuthToken) Merge(refreshed OAuthToken) OAuthToken {
+	out := refreshed
+	if out.RefreshToken.Empty() {
+		out.RefreshToken = t.RefreshToken
+	}
+	if len(out.Scopes) == 0 {
+		out.Scopes = t.Scopes
+	}
+	if out.ProviderAccountID == "" {
+		out.ProviderAccountID = t.ProviderAccountID
+	}
+	if out.TokenType == "" {
+		out.TokenType = t.TokenType
+	}
+	return out
+}
+
+func toPayload(t OAuthToken) *oauthPayload {
+	p := &oauthPayload{
+		AccessToken: t.AccessToken.Reveal(), RefreshToken: t.RefreshToken.Reveal(), TokenType: t.TokenType,
+		Scopes: append([]string(nil), t.Scopes...), ProviderAccountID: t.ProviderAccountID,
+	}
+	if !t.Expiry.IsZero() {
+		e := t.Expiry.UTC()
+		p.Expiry = &e
+	}
+	return p
+}
+
+func fromPayload(p oauthPayload) OAuthToken {
+	t := OAuthToken{
+		AccessToken: NewSecret(p.AccessToken), RefreshToken: NewSecret(p.RefreshToken), TokenType: p.TokenType,
+		Scopes: p.Scopes, ProviderAccountID: p.ProviderAccountID,
+	}
+	if p.Expiry != nil {
+		t.Expiry = *p.Expiry
+	}
+	return t
 }

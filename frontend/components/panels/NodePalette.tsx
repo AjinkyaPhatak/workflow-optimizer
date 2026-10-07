@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react"
 import { NodeInfoCard } from "@/components/nodes/NodeInfoCard";
 import { Popover, type AnchorRect } from "@/components/ui/Popover";
 import { useEditorContext } from "@/features/workflows/EditorContext";
-import { NODE_DRAG_TYPE, categoryClass, categoryLabel, groupByCategory, iconText, searchNodes } from "@/features/nodes/catalog";
+import { NODE_DRAG_TYPE, actionName, categoryClass, categoryLabel, groupByCategory, iconText, originLabel, searchNodes } from "@/features/nodes/catalog";
 import { useEditorStore } from "@/stores/workflow-editor/store";
 import type { NodeDefinition } from "@/types/api";
 
@@ -110,9 +110,13 @@ export function NodePalette({ onAdd }: { onAdd: (def: NodeDefinition) => void })
         {groups.map(([category, defs]) => (
           <section key={category}>
             {!searching && <h3>{categoryLabel(category)}</h3>}
-            {defs.map((d) => {
+            {defs.map((d, n) => {
               const i = indexOf.get(d.type) ?? 0;
-              return (
+              // Integration actions get their integration as a sub-heading
+              // ("Google" > "Gmail" > "Search Emails").
+              const sub = !searching && d.integration && d.integration.name !== defs[n - 1]?.integration?.name
+                ? <h4 className="palette-sub" key={`sub-${d.integration.id}`}>{d.integration.name}</h4> : null;
+              return [sub, (
                 <div
                   key={d.type}
                   id={`palette-opt-${d.type}`}
@@ -146,10 +150,10 @@ export function NodePalette({ onAdd }: { onAdd: (def: NodeDefinition) => void })
                   }}
                 >
                   <span className={`node-icon ${categoryClass(d.category)}`}>{iconText(d)}</span>
-                  <span className="palette-name">{d.name}</span>
-                  {searching && <span className="palette-cat">{categoryLabel(d.category)}</span>}
+                  <span className="palette-name">{searching ? d.name : actionName(d)}</span>
+                  {searching && <span className="palette-cat">{originLabel(d)}</span>}
                 </div>
-              );
+              )];
             })}
           </section>
         ))}

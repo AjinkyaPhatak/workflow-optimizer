@@ -170,3 +170,49 @@ func TestObservabilityConfig(t *testing.T) {
 		t.Fatal("malformed OBSERVABILITY_EXPOSE_NODE_DATA accepted")
 	}
 }
+
+func TestGoogleOAuthConfig(t *testing.T) {
+	base := map[string]string{"DATABASE_URL": "postgres://x", "REDIS_URL": "redis://x", "AUTH_TOKEN_SECRET": strings.Repeat("s", 32)}
+	with := func(extra map[string]string) config.Config {
+		m := map[string]string{}
+		for k, v := range base {
+			m[k] = v
+		}
+		for k, v := range extra {
+			m[k] = v
+		}
+		cfg, err := config.LoadFrom(env(m))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return cfg
+	}
+	// Not configured: valid, Google simply is not offered.
+	cfg := with(nil)
+	if cfg.GoogleOAuthConfigured() || cfg.ValidateAPI() != nil || cfg.ValidateWorker() != nil {
+		t.Fatal("Google OAuth is optional")
+	}
+	full := map[string]string{"GOOGLE_CLIENT_ID": " id.apps.googleusercontent.com ", "GOOGLE_CLIENT_SECRET": "secret",
+		"GOOGLE_OAUTH_REDIRECT_URI": "http://localhost:3000/api/v1/oauth/callback/google"}
+	cfg = with(full)
+	if !cfg.GoogleOAuthConfigured() || cfg.GoogleClientID != "id.apps.googleusercontent.com" || cfg.ValidateAPI() != nil || cfg.ValidateWorker() != nil {
+		t.Fatalf("configured: %+v", cfg)
+	}
+	for name, m := range map[string]map[string]string{
+		"partial":        {"GOOGLE_CLIENT_ID": "id"},
+		"no secret":      {"GOOGLE_CLIENT_ID": "id", "GOOGLE_OAUTH_REDIRECT_URI": full["GOOGLE_OAUTH_REDIRECT_URI"]},
+		"wrong callback": {"GOOGLE_CLIENT_ID": "id", "GOOGLE_CLIENT_SECRET": "s", "GOOGLE_OAUTH_REDIRECT_URI": "http://localhost:3000/oauth/google"},
+		"relative":       {"GOOGLE_CLIENT_ID": "id", "GOOGLE_CLIENT_SECRET": "s", "GOOGLE_OAUTH_REDIRECT_URI": "/api/v1/oauth/callback/google"},
+	} {
+		cfg := with(m)
+		if cfg.GoogleOAuthConfigured() && name == "partial" {
+			t.Fatal("partial is not configured")
+		}
+		if err := cfg.ValidateAPI(); err == nil || !strings.Contains(err.Error(), "GOOGLE_") {
+			t.Errorf("%s: %v", name, err)
+		}
+		if err := cfg.ValidateWorker(); err == nil {
+			t.Errorf("%s accepted by the worker", name)
+		}
+	}
+}

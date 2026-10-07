@@ -67,7 +67,42 @@ type NodeDefinition struct {
 	Config      []ConfigField    `json:"config,omitempty"`
 	// SideEffects declares whether re-running the node is safe (Phase 10).
 	SideEffects SideEffects `json:"side_effects,omitempty"`
+	// Integration identifies the third-party integration action this node
+	// performs (Phase C1); nil for built-in nodes. Descriptive only:
+	// execution never reads it.
+	Integration *IntegrationRef `json:"integration,omitempty"`
+	// Auth declares the workspace credential the node uses (Phase C1); nil
+	// when the node does not declare one.
+	Auth *AuthRequirement `json:"auth,omitempty"`
 }
+
+// IntegrationRef links a node type to the integration action it implements.
+// The node type is always "<ID>.<Action>".
+type IntegrationRef struct {
+	ID     string `json:"id"`
+	Name   string `json:"name"`
+	Action string `json:"action"`
+	// Category groups integrations in the UI ("Google").
+	Category string `json:"category,omitempty"`
+	Icon     string `json:"icon,omitempty"`
+	DocsURL  string `json:"docs_url,omitempty"`
+}
+
+// AuthRequirement says which workspace credential a node uses. A workflow
+// stores only the credential's ID (the CredentialConfigField); the secret is
+// resolved at run time through the credential service.
+type AuthRequirement struct {
+	Required bool `json:"required"`
+	// Provider is the provider the credential must belong to
+	// (credential.Credential.Provider), e.g. "openai" or "google".
+	Provider string `json:"provider"`
+	// CredentialType is the accepted credential.Type, e.g. "API_KEY" or
+	// "OAUTH2".
+	CredentialType string `json:"credential_type"`
+}
+
+// CredentialConfigField is the config field holding a credential reference.
+const CredentialConfigField = "credential_id"
 
 // GetInputPort looks up an input port definition by name.
 func (d NodeDefinition) GetInputPort(name string) (PortDefinition, bool) {
@@ -112,6 +147,20 @@ func (d NodeDefinition) Validate() error {
 	}
 	if !d.SideEffects.Valid() {
 		return fmt.Errorf("%w: unknown side effects %q", ErrInvalidDefinition, d.SideEffects)
+	}
+
+	if d.Integration != nil {
+		if d.Integration.ID == "" || d.Integration.Action == "" || d.Type != d.Integration.ID+"."+d.Integration.Action {
+			return fmt.Errorf("%w: integration node type %q must be <integration>.<action>", ErrInvalidDefinition, d.Type)
+		}
+	}
+	if d.Auth != nil {
+		if d.Auth.Provider == "" || d.Auth.CredentialType == "" {
+			return fmt.Errorf("%w: auth requirement of %q needs a provider and a credential type", ErrInvalidDefinition, d.Type)
+		}
+		if _, ok := d.GetConfigField(CredentialConfigField); !ok {
+			return fmt.Errorf("%w: %q declares auth but has no %q config field", ErrInvalidDefinition, d.Type, CredentialConfigField)
+		}
 	}
 
 	seenInputs := make(map[string]struct{}, len(d.Inputs))

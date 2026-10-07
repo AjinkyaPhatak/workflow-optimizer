@@ -11,9 +11,9 @@
 // Published versions are never modified.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ApiError, authApi, credentialApi, nodeApi, projectApi, workflowApi } from "@/lib/api";
+import { ApiError, authApi, connectedAccountApi, credentialApi, nodeApi, projectApi, workflowApi } from "@/lib/api";
 import { isDirty, useEditorStore } from "@/stores/workflow-editor/store";
-import type { Credential, NodeDefinition, Role, ValidationResult, VersionSummary, Workflow } from "@/types/api";
+import type { ConnectedAccount, Credential, NodeDefinition, Role, ValidationResult, VersionSummary, Workflow } from "@/types/api";
 
 export type BusyAction = "saving" | "validating" | "publishing" | null;
 
@@ -25,6 +25,8 @@ export interface EditorSession {
   catalogList: NodeDefinition[];
   catalog: Map<string, NodeDefinition>;
   credentials: Credential[];
+  /** The workspace's connected accounts (metadata only), for OAuth nodes. */
+  connectedAccounts: ConnectedAccount[];
   role: Role | null;
   busy: BusyAction;
   /** Last action outcome for the header ("Saved v3", errors, ...). */
@@ -48,6 +50,7 @@ export function useEditorSession(workflowId: string): EditorSession {
   const [version, setVersion] = useState<VersionSummary | null>(null);
   const [catalogList, setCatalogList] = useState<NodeDefinition[]>([]);
   const [credentials, setCredentials] = useState<Credential[]>([]);
+  const [connectedAccounts, setConnectedAccounts] = useState<ConnectedAccount[]>([]);
   const [role, setRole] = useState<Role | null>(null);
   const [busy, setBusy] = useState<BusyAction>(null);
   const [notice, setNotice] = useState<EditorSession["notice"]>(null);
@@ -69,7 +72,10 @@ export function useEditorSession(workflowId: string): EditorSession {
           nodeApi.list(),
         ]);
         const myRole = me.workspaces.find((w) => w.id === project.workspace_id)?.role ?? null;
-        const creds = await credentialApi.list(project.workspace_id).catch(() => ({ items: [] as Credential[] }));
+        const [creds, accounts] = await Promise.all([
+          credentialApi.list(project.workspace_id).catch(() => ({ items: [] as Credential[] })),
+          connectedAccountApi.list(project.workspace_id).catch(() => ({ items: [] as ConnectedAccount[] })),
+        ]);
         const latest = versions.items[0] ?? null;
         const full = latest ? await workflowApi.getVersion(workflowId, latest.id) : null;
         if (cancelled) return;
@@ -77,6 +83,7 @@ export function useEditorSession(workflowId: string): EditorSession {
         setRole(myRole);
         setCatalogList(nodes.items);
         setCredentials(creds.items);
+        setConnectedAccounts(accounts.items);
         setVersion(latest);
         useEditorStore.getState().load(full?.definition ?? null, myRole === "viewer" ? "readonly" : "editing");
       } catch (e) {
@@ -205,7 +212,7 @@ export function useEditorSession(workflowId: string): EditorSession {
   );
 
   return {
-    loading, loadError, workflow, version, catalogList, catalog, credentials, role, busy, notice,
+    loading, loadError, workflow, version, catalogList, catalog, credentials, connectedAccounts, role, busy, notice,
     save, validate, publish,
     canPublish: role === "owner" || role === "admin",
     versions, refreshVersions, openVersion,

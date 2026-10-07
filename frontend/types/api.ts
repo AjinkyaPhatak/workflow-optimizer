@@ -172,6 +172,28 @@ export interface NodeDefinition {
   inputs: PortDefinition[];
   outputs: PortDefinition[];
   config: ConfigField[];
+  /** Present on third-party integration actions ("<integration>.<action>"). */
+  integration?: NodeIntegration;
+  /** Which kind of workspace credential the node uses (never its contents). */
+  auth?: NodeAuth;
+}
+
+export interface NodeIntegration {
+  id: string;
+  name: string;
+  action: string;
+  /** Groups integrations in the palette ("Google"). */
+  category?: string;
+  icon?: string;
+  docs_url?: string;
+}
+
+export interface NodeAuth {
+  required: boolean;
+  /** Credential provider the credential must belong to, e.g. "google". */
+  provider: string;
+  /** Accepted credential type, e.g. "API_KEY" or "OAUTH2". */
+  credential_type: string;
 }
 
 // --- executions --------------------------------------------------------------
@@ -296,6 +318,40 @@ export interface Credential {
   credential_type: string;
   created_at: string;
   updated_at: string;
+}
+
+// --- connected accounts (Phase C2) ------------------------------------------------
+
+/** A configured OAuth provider (public metadata only). */
+export interface OAuthProvider {
+  id: string;
+  name: string;
+  description: string;
+  scopes: string[];
+}
+
+export type ConnectedAccountStatus = "ACTIVE" | "EXPIRED" | "REVOKED" | "ERROR" | "DISCONNECTED";
+
+/** A connected external account. Metadata only: tokens never leave the
+ * backend. Workflows reference credential_id. */
+export interface ConnectedAccount {
+  id: UUID;
+  workspace_id: UUID;
+  provider: string;
+  provider_name: string;
+  display_name: string;
+  email: string;
+  status: ConnectedAccountStatus;
+  credential_id: UUID;
+  scopes: string[];
+  created_at: string;
+  updated_at: string;
+  last_used_at: string | null;
+}
+
+export interface AuthorizationStarted {
+  authorization_url: string;
+  expires_at: string;
 }
 
 export interface List<T> {

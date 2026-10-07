@@ -418,3 +418,21 @@ pre.json { background: var(--subtle); border: 1px solid var(--border); border-ra
 .template-card { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; text-align: left; white-space: normal; padding: 12px; min-height: 96px; font-weight: 400; }
 .template-card.selected { border-color: var(--accent); background: var(--accent-weak); box-shadow: 0 0 0 2px var(--accent-weak); }
 .template-flow { color: var(--accent); margin-top: auto; }
+
+/* --- Connected accounts (Phase C2) --- */
+.topbar-link { color: var(--muted); font-size: 14px; }
+.notice { padding: 10px 14px; border-radius: var(--radius); font-size: 14px; }
+.notice.ok { background: var(--ok-weak); color: var(--ok); }
+.notice.error { background: var(--danger-weak); color: var(--danger); }
+.provider-card { padding: 16px 20px; display: flex; flex-direction: column; gap: 8px; }
+.provider-card h2 { margin: 0; font-size: 16px; }
+.account-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.account-row { display: flex; align-items: center; gap: 12px; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius); }
+.account-who { display: flex; flex-direction: column; }
+.account-status { font-size: 13px; }
+.account-status.ok { color: var(--ok); }
+.account-status.bad { color: var(--danger); }
+.account-status.off { color: var(--muted); }
+
+/* --- Gmail / integration groups in the palette (Phase C3) --- */
+.palette h4.palette-sub { margin: 6px 0 2px 4px; font-size: 11px; font-weight: 600; color: var(--muted); text-transform: none; }

@@ -41,6 +41,18 @@ func (m *memRepo) Get(_ context.Context, id uuid.UUID) (credential.Credential, e
 	return c, nil
 }
 
+func (m *memRepo) UpdateData(_ context.Context, ws, id uuid.UUID, data json.RawMessage) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	c, ok := m.rows[id]
+	if !ok || c.WorkspaceID != ws {
+		return credential.ErrNotFound
+	}
+	c.EncryptedData = data
+	m.rows[id] = c
+	return nil
+}
+
 func (m *memRepo) Delete(_ context.Context, ws, id uuid.UUID) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()

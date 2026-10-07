@@ -12,6 +12,7 @@ export function TopBar() {
     <header className="topbar">
       <Link href="/workflows" className="brand"><BrandMark size={22} />Workflow Optimizer</Link>
       <span className="spacer" />
+      <Link href="/settings/connected-accounts" className="topbar-link">Connected accounts</Link>
       {session && <span className="muted small">{session.user.name}</span>}
       <button
         onClick={() => {

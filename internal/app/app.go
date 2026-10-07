@@ -8,6 +8,8 @@ import (
 
 	"workflow-optimizer/internal/config"
 	"workflow-optimizer/internal/credential"
+	"workflow-optimizer/internal/integration"
+	"workflow-optimizer/internal/integration/gmail"
 	"workflow-optimizer/internal/node"
 	"workflow-optimizer/internal/node/condition"
 	nodehttp "workflow-optimizer/internal/node/http"
@@ -29,6 +31,10 @@ type Application struct {
 	Config           config.Config
 	NodeRegistry     node.Registry
 	ProviderRegistry providerllm.Registry
+	// IntegrationRegistry is discovery metadata of the installed
+	// integrations (Phase C1); their actions are nodes in NodeRegistry.
+	// Production installs none yet.
+	IntegrationRegistry integration.Registry
 }
 
 // Dependencies are the runtime collaborators Bootstrap cannot create without
@@ -41,6 +47,13 @@ type Dependencies struct {
 	// HTTPClient is the shared client of the HTTP-based providers (nil: the
 	// provider's default, TLS-verifying client).
 	HTTPClient *http.Client
+	// Integrations are installed after the built-in nodes: metadata into
+	// the integration registry, actions into the node registry (Phase C1).
+	// Production passes none; tests install the fake integration here.
+	Integrations []integration.Module
+	// Gmail configures the Gmail API client (tests point it at a mock API;
+	// the zero value is the real API).
+	Gmail gmail.Options
 }
 
 // Bootstrap composes the application without runtime dependencies (no
@@ -108,14 +121,30 @@ func BootstrapWith(cfg config.Config, deps Dependencies) (*Application, error) {
 		}
 	}
 
-	// 5. Validate registry-wide consistency
+	// 5. Install integrations: their actions are ordinary nodes. Gmail
+	// (Phase C3) is part of the production catalog; it uses Google connected
+	// accounts, offered only when Google OAuth is configured.
+	integrationReg := integration.NewRegistry()
+	gmailModule, err := gmail.Module(deps.Credentials, deps.Gmail)
+	if err != nil {
+		return nil, fmt.Errorf("bootstrap gmail: %w", err)
+	}
+	for _, m := range append([]integration.Module{gmailModule}, deps.Integrations...) {
+		if err := integration.Install(integrationReg, nodeReg, m); err != nil {
+			return nil, fmt.Errorf("bootstrap install integration %q: %w", m.Integration.ID, err)
+		}
+	}
+	integrationReg.Freeze()
+
+	// 6. Validate registry-wide consistency
 	if err := nodeReg.Validate(); err != nil {
 		return nil, fmt.Errorf("bootstrap registry validation failed: %w", err)
 	}
 
 	return &Application{
-		Config:           cfg,
-		NodeRegistry:     nodeReg,
-		ProviderRegistry: providerReg,
+		Config:              cfg,
+		NodeRegistry:        nodeReg,
+		ProviderRegistry:    providerReg,
+		IntegrationRegistry: integrationReg,
 	}, nil
 }

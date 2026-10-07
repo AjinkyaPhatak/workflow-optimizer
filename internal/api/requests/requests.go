@@ -279,3 +279,13 @@ func (r CreateCredential) String() string {
 
 // GoString redacts the secret under %#v.
 func (r CreateCredential) GoString() string { return r.String() }
+
+// AuthorizeConnectedAccount is POST /connected-accounts/{provider}/authorize.
+type AuthorizeConnectedAccount struct {
+	WorkspaceID string `json:"workspace_id"`
+}
+
+// Validate returns the workspace ID.
+func (r AuthorizeConnectedAccount) Validate() (uuid.UUID, error) {
+	return ParseUUID("workspace_id", r.WorkspaceID)
+}

@@ -76,6 +76,15 @@ func NewWorkerRuntime(ctx context.Context, cfg config.Config, application *Appli
 // -> LLM node -> node registry), and starts the worker runtime on the same
 // pool.
 func NewWorker(ctx context.Context, cfg config.Config, logger *slog.Logger) (*WorkerRuntime, error) {
+	return NewWorkerWith(ctx, cfg, logger, Extensions{})
+}
+
+// NewWorkerWith is NewWorker with optional extensions (OAuth providers,
+// integrations).
+func NewWorkerWith(ctx context.Context, cfg config.Config, logger *slog.Logger, ext Extensions) (*WorkerRuntime, error) {
+	if logger == nil {
+		logger = slog.Default()
+	}
 	if err := cfg.ValidateWorker(); err != nil {
 		return nil, err
 	}
@@ -83,19 +92,19 @@ func NewWorker(ctx context.Context, cfg config.Config, logger *slog.Logger) (*Wo
 	if err != nil {
 		return nil, err
 	}
-	if enc == nil && logger != nil {
+	if enc == nil {
 		logger.Warn("CREDENTIAL_ENCRYPTION_KEY is not set: credentials cannot be resolved; provider nodes will fail with CREDENTIAL_DECRYPTION_FAILED")
 	}
 	store, err := postgres.Open(ctx, cfg.DatabaseURL)
 	if err != nil {
 		return nil, fmt.Errorf("app: open PostgreSQL: %w", err)
 	}
-	credentials, err := credential.NewService(postgres.NewCredentialRepository(store), enc)
+	chain, err := newCredentialChain(cfg, store, enc, ext, logger)
 	if err != nil {
 		store.Close()
 		return nil, err
 	}
-	application, err := BootstrapWith(cfg, Dependencies{Credentials: credentials})
+	application, err := BootstrapWith(cfg, chain.dependencies(ext))
 	if err != nil {
 		store.Close()
 		return nil, err

@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 
 	"workflow-optimizer/internal/execution"
+	"workflow-optimizer/internal/integration"
 )
 
 // DefaultEventWriteTimeout bounds one event append.
@@ -143,8 +144,15 @@ func (r *Recorder) ExecutionCancelled(ctx context.Context, id uuid.UUID, attempt
 	r.emit(ctx, slog.LevelWarn, event(id, nil, execution.EventExecutionCancelled, data), "reason", reason)
 }
 
+// nodeData identifies a node in an event. Integration actions ("gmail.send")
+// are also identified by integration and action (Phase C1), derived from the
+// node type alone: no credential or config is ever read here.
 func nodeData(n execution.NodeRef) map[string]any {
-	return map[string]any{"node_type": n.Type, "invocation": n.Invocation}
+	m := map[string]any{"node_type": n.Type, "invocation": n.Invocation}
+	if i, a, ok := integration.SplitNodeType(n.Type); ok {
+		m["integration"], m["action"] = i, a
+	}
+	return m
 }
 
 func (r *Recorder) NodeStarted(ctx context.Context, id uuid.UUID, n execution.NodeRef) {

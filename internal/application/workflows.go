@@ -5,9 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 
 	"github.com/google/uuid"
 
+	"workflow-optimizer/internal/credential"
+	"workflow-optimizer/internal/node"
 	"workflow-optimizer/internal/templates"
 	"workflow-optimizer/internal/workflow"
 	"workflow-optimizer/internal/workspace"
@@ -50,6 +53,45 @@ type WorkflowService struct {
 	access    *Access
 	store     WorkflowStore
 	validator GraphValidator
+	// credentials, when set, makes saving check that every literal
+	// credential_id names a credential of the workflow's workspace.
+	credentials CredentialLocator
+}
+
+// WithCredentialCheck makes CreateVersion refuse credential references to
+// credentials that do not exist in the workflow's workspace (Phase C2).
+func (s *WorkflowService) WithCredentialCheck(locator CredentialLocator) *WorkflowService {
+	s.credentials = locator
+	return s
+}
+
+// checkCredentials reports node credential references that are not
+// credentials of workspaceID. References that are not literal IDs are left
+// to the validator and to run time.
+func (s *WorkflowService) checkCredentials(ctx context.Context, workspaceID uuid.UUID, def workflow.Definition) error {
+	if s.credentials == nil {
+		return nil
+	}
+	var problems []workflow.ValidationError
+	for _, n := range def.Nodes {
+		raw, _ := n.Config[node.CredentialConfigField].(string)
+		id, err := uuid.Parse(strings.TrimSpace(raw))
+		if err != nil {
+			continue
+		}
+		c, err := s.credentials.Get(ctx, id)
+		if err != nil && !errors.Is(err, credential.ErrNotFound) {
+			return err
+		}
+		if err != nil || c.WorkspaceID != workspaceID {
+			problems = append(problems, workflow.ValidationError{Code: workflow.ErrInvalidNodeConfig,
+				Message: "credential not found in this workspace", NodeID: n.ID, Port: node.CredentialConfigField})
+		}
+	}
+	if len(problems) > 0 {
+		return &ValidationFailedError{Errors: problems}
+	}
+	return nil
 }
 
 // NewWorkflowService wires the authorizer, the store and the graph validator.
@@ -230,7 +272,8 @@ func (s *WorkflowService) validate(def workflow.Definition, mode workflow.Valida
 // and graph structure through the graph validator, in draft mode: a draft
 // may still be incomplete) and stores it as a new immutable DRAFT version.
 func (s *WorkflowService) CreateVersion(ctx context.Context, user, workflowID uuid.UUID, raw json.RawMessage) (workflow.Version, error) {
-	if _, _, err := s.workflow(ctx, user, workflowID, workspace.ActionWrite); err != nil {
+	_, workspaceID, err := s.workflow(ctx, user, workflowID, workspace.ActionWrite)
+	if err != nil {
 		return workflow.Version{}, err
 	}
 	def, err := DecodeDefinition(raw)
@@ -239,6 +282,9 @@ func (s *WorkflowService) CreateVersion(ctx context.Context, user, workflowID uu
 	}
 	if res := s.validate(def, workflow.ValidationDraft); !res.Valid {
 		return workflow.Version{}, &ValidationFailedError{Errors: res.Errors}
+	}
+	if err := s.checkCredentials(ctx, workspaceID, def); err != nil {
+		return workflow.Version{}, err
 	}
 	canonical, err := json.Marshal(def)
 	if err != nil {

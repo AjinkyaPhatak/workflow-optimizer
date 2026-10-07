@@ -119,7 +119,13 @@ func Instantiate(id string) (workflow.Definition, error) {
 	return def, nil
 }
 
+// idUnsafe matches what a node ID cannot contain: references are
+// {{id.port}}, so an integration type such as "gmail.send" becomes the
+// prefix "gmail_send".
+var idUnsafe = regexp.MustCompile(`[^A-Za-z0-9_]+`)
+
 func freshID(prefix string, taken map[string]bool) string {
+	prefix = idUnsafe.ReplaceAllString(prefix, "_")
 	for {
 		b := make([]byte, 2)
 		if _, err := rand.Read(b); err != nil {

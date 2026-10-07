@@ -51,7 +51,7 @@ LLM node -> provider registry ("openai") -> OpenAI provider (Chat Completions)
 
 ## REST API (Phase 12)
 
-`go run ./cmd/api` serves `/api/v1` on `API_ADDR` (default `:8080`). It needs `DATABASE_URL`, `REDIS_URL`, `AUTH_TOKEN_SECRET` (at least 32 bytes) and, to store credentials, `CREDENTIAL_ENCRYPTION_KEY`; `AUTH_TOKEN_TTL` defaults to 24h. Apply the migrations first (`000005` adds workflow soft delete); the processes do not migrate.
+`go run ./cmd/api` serves `/api/v1` on `API_ADDR` (default `:8080`). It needs `DATABASE_URL`, `REDIS_URL`, `AUTH_TOKEN_SECRET` (at least 32 bytes) and, to store credentials, `CREDENTIAL_ENCRYPTION_KEY`; `AUTH_TOKEN_TTL` defaults to 24h. Apply the migrations first (`000005` adds workflow soft delete, `000007` connected accounts); the processes do not migrate.
 
 ```
 HTTP -> handler -> application service -> repositories / queue.Submitter -> PostgreSQL, Redis -> worker -> graph executor
@@ -86,3 +86,114 @@ Observability describes execution and never controls it. The execution row, its 
 - **Workflow variables**: the definition's optional `variables` list (`name`, `type`, `default`, `description`). Nodes reference them as `{{name}}`. When an execution is submitted, defaults are filled into the run input and supplied values are type-checked; a variable without a default must be supplied (400 otherwise). Definitions without variables serialize exactly as before, so the schema version is still 1.
 - **Templates**: `GET /api/v1/templates` lists ready-made workflow definitions (`internal/templates/catalog/*.json`); `POST /api/v1/workflows` with `template_id` creates the workflow and its first DRAFT version from a copy with fresh node and edge IDs.
 - **Versions**: unchanged model (every save is a new immutable DRAFT; publishing makes a version active). The editor shows the history and can open any version as the working copy.
+
+## Integration framework (Phase C1)
+
+Third-party integrations are ordinary workflow nodes; the executor knows
+nothing about them (`internal/integration`).
+
+- **Naming**: an action's node type is `<integration>.<action>`, both lower
+  snake case (`gmail.send`, `google_docs.append`). Built-in types have no dot.
+- **Metadata** (`integration.Integration`, `Action`): name, category, icon,
+  docs link, auth (`Provider` + `CredentialType`, e.g. `google` + `OAUTH2`),
+  and per action its ports, config and side effects (`none`, `idempotent`,
+  `unsafe`). `Integration.Definition` turns an action into a normal
+  `node.NodeDefinition` carrying `integration` and `auth`, which
+  `GET /api/v1/nodes` returns. No new endpoint, table or env var.
+- **Registries**: `integration.Registry` is discovery metadata only; the node
+  registry stays the only executable registry. `integration.Install`
+  registers a `Module` (metadata + one node per action) into both.
+  `app.Dependencies.Integrations` is the install point; production installs
+  none yet.
+- **Credentials**: workflows store only `credential_id`.
+  `integration.ActionNode` resolves it through `credential.Resolver`
+  (workspace, provider and credential type checked), hands the
+  `ResolvedCredential` to a provider-specific `Connector`, and keeps nothing.
+  Integration configs can never declare secret fields (`api_key`,
+  `access_token`, ...); the validator rejects unknown config keys.
+- **Errors**: clients return `integration.Error` with a `Kind`
+  (`AUTHENTICATION_FAILED`, `PERMISSION_DENIED`, `RATE_LIMITED`,
+  `RESOURCE_NOT_FOUND`, `INVALID_REQUEST`, `PROVIDER_UNAVAILABLE`, `TIMEOUT`,
+  `MALFORMED_RESPONSE`, `INTEGRATION_ERROR`); `FromHTTPStatus` maps status
+  codes. Only rate limits, unavailability and timeouts are retryable, and the
+  Phase 10 engine still refuses to repeat an `unsafe` action unless the
+  failure was not applied (429). `Error()` never prints the wrapped cause.
+- **Observability**: node events of integration actions carry `integration`
+  and `action`; the error code is the normalized kind.
+- **Fake integration**: `internal/integration/fake` (`test_integration.read`,
+  `test_integration.write`) is test-only and never registered in production.
+
+## Connected accounts and OAuth (Phase C2)
+
+Provider-neutral OAuth 2.0 (authorization code + PKCE) and connected accounts.
+No provider is configured by default: `GET /api/v1/oauth/providers` is empty
+and the Connected accounts page says so. Providers are `oauth.Provider`
+implementations registered through `app.Extensions` (tests use
+`internal/oauth/fake`).
+
+- **Connect**: `POST /api/v1/connected-accounts/{provider}/authorize`
+  (`{workspace_id}`, owners/admins) stores a single-use state in Redis (10
+  minutes, keyed by its SHA-256, holding workspace, user, provider, PKCE
+  verifier and the hash of a browser binding), sets the binding as an
+  HttpOnly `SameSite=Lax` cookie scoped to the callback path, and returns
+  the provider URL. The provider redirects to the public
+  `GET /api/v1/oauth/callback/{provider}`, which takes the state atomically,
+  checks provider, expiry and browser binding, re-checks that the user may
+  still manage credentials in the workspace, exchanges the code, and
+  redirects to `/settings/connected-accounts?connected=...` or `?error=<kind>`.
+  The callback must reach the API through the frontend origin (the Next.js
+  `/api/v1` proxy) so the relative redirect lands on the frontend.
+- **Storage**: tokens (access, refresh, expiry, scopes, account ID) are
+  encrypted inside the existing credential envelope (AES-256-GCM) of an
+  `OAUTH2` credential. `connected_accounts` (migration `000007`) holds
+  metadata only and references that credential; a composite foreign key
+  keeps both in one workspace. Workflows reference `credential_id`, exactly
+  like API keys.
+- **Run time**: `oauth.TokenManager` is every node's `credential.Resolver`.
+  It returns a valid access token, refreshing it (once per credential per
+  process, concurrent resolutions wait) when it expires within 2 minutes,
+  keeping the refresh token when the provider omits one, and storing the
+  result encrypted. A revoked grant removes the tokens and marks the account
+  `REVOKED` (`CREDENTIAL_REVOKED`, not retried); a provider outage is
+  retryable.
+- **Disconnect**: `DELETE /api/v1/connected-accounts/{id}` revokes at the
+  provider (best effort), removes the tokens and marks the account
+  `DISCONNECTED`; workflows using it fail with `CREDENTIAL_REVOKED`.
+  Connecting the same external account again (`provider_account_id`)
+  reactivates the same account and credential.
+- **Saving workflows** now rejects a `credential_id` that is not a credential
+  of the workflow's workspace.
+
+## Gmail (Phase C3)
+
+Gmail is the first real integration: five nodes on the C1 framework that use
+Google connected accounts (C2). Nodes never see OAuth: the token manager
+hands the Gmail client a valid access token (refreshing it when needed).
+
+| Node | Side effects | Output |
+|---|---|---|
+| `gmail.search` | none | `messages` [{`message_id`, `thread_id`, `sender`, `subject`, `snippet`, `timestamp`, `unread`}], `count` |
+| `gmail.read` | none | `message_id`, `thread_id`, `sender`, `recipients` [], `subject`, `body` (plain text; HTML-only mail converted), `timestamp` (RFC 3339), `attachments` [{`filename`, `mime_type`, `size`, `attachment_id`}] |
+| `gmail.create_draft` | unsafe | `draft_id`, `message_id`, `status` = `draft` |
+| `gmail.send` | unsafe | `message_id`, `thread_id`, `status` = `sent` |
+| `gmail.reply` | unsafe | `message_id`, `thread_id`, `status` = `sent` (same thread, to Reply-To/From, `Re:` subject, In-Reply-To/References) |
+
+Gmail has no idempotency key, so the three writing actions are `unsafe`: the
+Phase 10 engine never repeats them after a failure that may have applied
+(5xx, timeout), only after a refusal (429 / rate-limit 403). Errors map to the
+integration kinds: 401 `AUTHENTICATION_FAILED`, 403 `PERMISSION_DENIED`, 404
+`RESOURCE_NOT_FOUND`, other 4xx `INVALID_REQUEST`, 429 `RATE_LIMITED`
+(Retry-After kept), 5xx `PROVIDER_UNAVAILABLE`, timeouts `TIMEOUT`,
+unreadable answers `MALFORMED_RESPONSE`. A Google `invalid_grant` on refresh
+marks the account REVOKED and fails with `CREDENTIAL_REVOKED` (not retried).
+
+**Scopes** (minimum): `openid` and `email` (the account's stable ID `sub`,
+used as `provider_account_id`, and its address as the label);
+`gmail.readonly` (search, read); `gmail.compose` (drafts, send, reply). Not
+requested: full mailbox access (`https://mail.google.com/`) or
+`gmail.modify`. Authorization asks for offline access with PKCE.
+
+**Configuration**: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`,
+`GOOGLE_OAUTH_REDIRECT_URI` (all or none; see `.env.example`), read by both the
+API and the worker (the worker refreshes tokens). Without them Google is not
+offered; the Gmail nodes stay in the catalog and ask for a Google account.

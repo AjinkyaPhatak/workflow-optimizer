@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState, type KeyboardEvent } from "react";
 import { useEditorContext } from "@/features/workflows/EditorContext";
 import { useFocusIssue, useIssues } from "@/features/workflows/useIssues";
@@ -8,7 +9,8 @@ import type { Issue } from "@/lib/workflow/issues";
 import { effectiveConfig, fieldControl, labelOf, optionsFor, typeLabel } from "@/lib/workflow/labels";
 import { availableVariables } from "@/lib/workflow/variables";
 import { useEditorStore } from "@/stores/workflow-editor/store";
-import type { ConfigField, ConfigOption, Credential, WorkflowNode } from "@/types/api";
+import { accountLabel, statusLabel } from "@/lib/connectedAccounts";
+import type { ConfigField, ConfigOption, ConnectedAccount, Credential, WorkflowNode } from "@/types/api";
 import { VariableField } from "./VariableField";
 import { VariablesEditor } from "./VariablesEditor";
 
@@ -131,6 +133,40 @@ function CredentialSelect({ id, value, provider, credentials, onCommit, disabled
   );
 }
 
+/** The account picker of nodes that use connected accounts (OAuth). The
+ * node stores the account's credential_id; the account itself (and its
+ * tokens) is managed on the Connected accounts page. */
+function AccountSelect({ id, value, provider, accounts, onCommit, disabled, invalid, describedBy }: {
+  id: string; value: string; provider: string; accounts: ConnectedAccount[]; onCommit: (v: string | undefined) => void;
+  disabled?: boolean; invalid?: boolean; describedBy?: string;
+}) {
+  const options = accounts.filter((a) => a.provider === provider);
+  const selected = options.find((a) => a.credential_id === value);
+  return (
+    <>
+      <select
+        id={id} value={value} disabled={disabled} aria-invalid={invalid || undefined} aria-describedby={describedBy}
+        onChange={(e) => onCommit(e.target.value || undefined)}
+      >
+        <option value="">{options.length ? "Select an account…" : "No account connected"}</option>
+        {options.map((a) => (
+          <option key={a.id} value={a.credential_id}>
+            {accountLabel(a)}{a.status === "ACTIVE" ? "" : ` (${statusLabel(a.status).toLowerCase()})`}
+          </option>
+        ))}
+        {value && !selected && <option value={value}>Unknown account ({value.slice(0, 8)}…)</option>}
+      </select>
+      {selected && selected.status !== "ACTIVE" && (
+        <div className="field-error" role="alert">This account is {statusLabel(selected.status).toLowerCase()}. Reconnect it to run this node.</div>
+      )}
+      <div className="hint">
+        {options.length === 0 ? "No account of this provider is connected. " : ""}
+        <Link href="/settings/connected-accounts">Manage connected accounts</Link>
+      </div>
+    </>
+  );
+}
+
 /** A dropdown of the backend's options for the field (only those whose
  * conditions hold for this node). With allow_custom, "Custom..." switches to
  * a text input for any other value. */
@@ -186,7 +222,7 @@ function BooleanField({ id, value, def, onCommit, disabled }: { id: string; valu
 }
 
 function FieldEditor({ node, field, issues }: { node: WorkflowNode; field: ConfigField; issues: Issue[] }) {
-  const { credentials, catalog } = useEditorContext();
+  const { credentials, connectedAccounts, catalog } = useEditorContext();
   const definition = useEditorStore((s) => s.definition);
   const readonly = useEditorStore((s) => s.mode === "readonly");
   const setConfig = useEditorStore((s) => s.setConfigValue);
@@ -205,8 +241,13 @@ function FieldEditor({ node, field, issues }: { node: WorkflowNode; field: Confi
 
   let input;
   if (control === "credential") {
-    const provider = typeof node.config.provider === "string" ? node.config.provider : undefined;
-    input = (
+    // Integration actions declare their credential provider; the LLM node
+    // picks one with its provider setting.
+    const provider = def?.auth?.provider ?? (typeof node.config.provider === "string" ? node.config.provider : undefined);
+    input = def?.auth?.credential_type === "OAUTH2" ? (
+      <AccountSelect id={id} value={typeof value === "string" ? value : ""} provider={def.auth.provider} accounts={connectedAccounts ?? []}
+        onCommit={commit} disabled={readonly} invalid={invalid} describedBy={describedBy} />
+    ) : (
       <CredentialSelect id={id} value={typeof value === "string" ? value : ""} provider={provider} credentials={credentials}
         onCommit={commit} disabled={readonly} invalid={invalid} describedBy={describedBy} />
     );

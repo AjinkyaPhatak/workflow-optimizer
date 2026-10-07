@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -78,8 +79,30 @@ func (r *CredentialRepository) Get(ctx context.Context, id uuid.UUID) (credentia
 // is not found (and not deleted).
 func (r *CredentialRepository) Delete(ctx context.Context, workspaceID, id uuid.UUID) error {
 	tag, err := r.pool.Exec(ctx, `DELETE FROM credentials WHERE id = $1 AND workspace_id = $2`, id, workspaceID)
+	var pgErr *pgconn.PgError
+	// 23001 restrict_violation (ON DELETE RESTRICT) or 23503.
+	if errors.As(err, &pgErr) && (pgErr.Code == "23001" || pgErr.Code == pgForeignKeyViolation) {
+		return fmt.Errorf("%w: credential %s backs a connected account; disconnect it instead", credential.ErrInvalid, id)
+	}
 	if err != nil {
 		return fmt.Errorf("delete credential %s: %w", id, err)
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("%w: %s", credential.ErrNotFound, id)
+	}
+	return nil
+}
+
+// UpdateData replaces the encrypted envelope of the workspace's credential
+// (Phase C2: OAuth refresh, reconnect, disconnect).
+func (r *CredentialRepository) UpdateData(ctx context.Context, workspaceID, id uuid.UUID, data json.RawMessage) error {
+	if len(data) == 0 {
+		return fmt.Errorf("%w: encrypted data is required", credential.ErrInvalid)
+	}
+	tag, err := r.pool.Exec(ctx, `UPDATE credentials SET encrypted_data = $3, updated_at = now() WHERE id = $1 AND workspace_id = $2`,
+		id, workspaceID, []byte(data))
+	if err != nil {
+		return fmt.Errorf("update credential %s: %w", id, err)
 	}
 	if tag.RowsAffected() == 0 {
 		return fmt.Errorf("%w: %s", credential.ErrNotFound, id)

@@ -11,17 +11,36 @@ export function categoryLabel(category: string): string {
   return category.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) || "Other";
 }
 
-/** Groups definitions by category (known categories first, then the rest). */
+/** The palette group of a node: integration actions are grouped by their
+ * integration's category ("Google"), everything else by node category. */
+export function paletteGroup(d: Pick<NodeDefinition, "category" | "integration">): string {
+  return d.integration?.category || d.category || "other";
+}
+
+/** The action name of an integration node ("Search Emails" for "Gmail:
+ * Search Emails"); other nodes keep their name. */
+export function actionName(d: Pick<NodeDefinition, "name" | "integration">): string {
+  const prefix = d.integration ? `${d.integration.name}: ` : "";
+  return prefix && d.name.startsWith(prefix) ? d.name.slice(prefix.length) : d.name;
+}
+
+/** Where a node comes from, for labels: "Google · Gmail" or "AI". */
+export function originLabel(d: Pick<NodeDefinition, "category" | "integration">): string {
+  return d.integration ? `${d.integration.category || categoryLabel(d.category)} · ${d.integration.name}` : categoryLabel(d.category);
+}
+
+/** Groups definitions by palette group (known categories first, then the
+ * rest); integration actions are ordered by integration, then name. */
 export function groupByCategory(defs: NodeDefinition[]): [string, NodeDefinition[]][] {
   const groups = new Map<string, NodeDefinition[]>();
   for (const d of defs) {
-    const c = d.category || "other";
+    const c = paletteGroup(d);
     groups.set(c, [...(groups.get(c) ?? []), d]);
   }
   const rank = (c: string) => (CATEGORY_ORDER.includes(c) ? CATEGORY_ORDER.indexOf(c) : CATEGORY_ORDER.length);
   return [...groups.entries()]
     .sort(([a], [b]) => rank(a) - rank(b) || a.localeCompare(b))
-    .map(([c, ds]) => [c, ds.sort((x, y) => x.name.localeCompare(y.name))]);
+    .map(([c, ds]) => [c, ds.sort((x, y) => (x.integration?.name ?? "").localeCompare(y.integration?.name ?? "") || x.name.localeCompare(y.name))]);
 }
 
 export function categoryClass(category: string): string {
@@ -49,6 +68,7 @@ export function searchNodes(defs: NodeDefinition[], query: string): NodeDefiniti
       d.type.toLowerCase(),
       categoryLabel(d.category).toLowerCase(),
       d.description.toLowerCase(),
+      `${d.integration?.name ?? ""} ${d.integration?.category ?? ""}`.toLowerCase(),
       [...d.inputs, ...d.outputs].map((p) => p.name).join(" ").toLowerCase(),
     ];
     let score = 0;

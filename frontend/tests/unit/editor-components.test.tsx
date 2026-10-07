@@ -22,6 +22,7 @@ const session = (): EditorSession => ({
     { id: "c-1", workspace_id: "w", name: "Work OpenAI", provider: "openai", credential_type: "api_key", created_at: "", updated_at: "" },
     { id: "c-2", workspace_id: "w", name: "Other", provider: "anthropic", credential_type: "api_key", created_at: "", updated_at: "" },
   ],
+  connectedAccounts: [],
   role: "owner", busy: null, notice: null,
   save: vi.fn(), validate: vi.fn(), publish: vi.fn(), canPublish: true,
   versions: null, refreshVersions: vi.fn(), openVersion: vi.fn(),

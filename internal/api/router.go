@@ -18,7 +18,8 @@ const Prefix = "/api/v1"
 //
 //	request ID -> access log -> panic recovery -> route -> [bearer auth] -> handler
 //
-// /health, /ready, /auth/register and /auth/login are public; everything else
+// /health, /ready, /auth/register, /auth/login and the OAuth callback are
+// public; everything else
 // requires a bearer token, and resources are authorized per workspace by the
 // application services.
 func NewRouter(h *handlers.Handlers, tokens auth.TokenService, logger *slog.Logger) http.Handler {
@@ -65,6 +66,16 @@ func NewRouter(h *handlers.Handlers, tokens auth.TokenService, logger *slog.Logg
 	private("POST "+Prefix+"/credentials", h.CreateCredential)
 	private("GET "+Prefix+"/credentials", h.ListCredentials)
 	private("DELETE "+Prefix+"/credentials/{credentialID}", h.DeleteCredential)
+
+	// Connected accounts and OAuth (Phase C2). The callback is a browser
+	// redirect from the provider: it carries no bearer token and is
+	// authorized by its single-use, browser-bound state instead.
+	private("GET "+Prefix+"/oauth/providers", h.ListOAuthProviders)
+	private("GET "+Prefix+"/connected-accounts", h.ListConnectedAccounts)
+	private("GET "+Prefix+"/connected-accounts/{accountID}", h.GetConnectedAccount)
+	private("DELETE "+Prefix+"/connected-accounts/{accountID}", h.DisconnectConnectedAccount)
+	private("POST "+Prefix+"/connected-accounts/{provider}/authorize", h.AuthorizeConnectedAccount)
+	public("GET "+Prefix+"/oauth/callback/{provider}", h.OAuthCallback)
 
 	private("GET "+Prefix+"/nodes", h.ListNodes)
 	private("GET "+Prefix+"/templates", h.ListTemplates)
