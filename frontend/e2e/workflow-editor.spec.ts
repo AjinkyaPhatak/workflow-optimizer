@@ -153,7 +153,8 @@ test("build, validate, publish and execute a workflow in the visual editor", asy
   await expect(output).toContainText("What is quantum computing?");
 
   // The provider was called by the worker with the stored credential.
-  const calls = await (await request.get(`http://127.0.0.1:${MOCK_OPENAI_PORT}/__calls`)).json();
+  const all: { prompt: string }[] = await (await request.get(`http://127.0.0.1:${MOCK_OPENAI_PORT}/__calls`)).json();
+  const calls = all.filter((c) => c.prompt.includes("What is quantum computing?"));
   expect(calls).toHaveLength(1);
   expect(calls[0]).toMatchObject({ authorized: true, model: "gpt-5-mini" });
   expect(calls[0].prompt).toContain("What is quantum computing?");

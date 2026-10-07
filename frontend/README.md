@@ -17,13 +17,15 @@ browser only ever talks to one origin and the API needs no CORS.
 
 ## Structure
 
-- `app/` — routes: `/login`, `/workflows` (dashboard), `/workflows/[workflowId]/editor`.
+- `app/` — routes: `/login`, `/workflows` (dashboard), `/workflows/[workflowId]/editor`, `/workflows/[workflowId]/executions` (execution list), `/executions/[executionId]` (execution debugger, Phase 14).
 - `lib/api/` — the only place that does HTTP (`authApi`, `workflowApi`, `executionApi`, `nodeApi`, `credentialApi`, `projectApi`).
 - `lib/auth/` — the session (the API's bearer token) and the route guard.
 - `lib/workflow/` — pure logic: definition helpers, the workflow ↔ canvas mapper, port-compatibility feedback, variable suggestions.
 - `stores/workflow-editor/` — editor state (working copy, selection, dirty, validation display, undo/redo).
 - `features/` — server state and actions (dashboard, editor session: save / validate / publish, executions).
-- `components/` — canvas, node renderer, palette, configuration panel, validation/run panel, header.
+- `components/` — canvas, node renderer, palette, configuration panel, validation/run panel, header; `components/executions/` holds the debugger (timeline, node inspector, JSON viewer, event log, status graph).
+
+The debugger only shows persisted data: the execution snapshot, node records and events from the API. `features/executions/timeline.ts` builds the timeline; `poller.ts` polls every 2 s while the execution is PENDING or RUNNING and stops once it is finished.
 
 The workflow definition is the source of truth. The canvas is derived from it
 (`toCanvas`) and canvas edits are written back through `fromCanvas`; only the

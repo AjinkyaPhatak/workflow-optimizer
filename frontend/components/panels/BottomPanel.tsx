@@ -1,6 +1,7 @@
 "use client";
 
 import { useReactFlow } from "@xyflow/react";
+import Link from "next/link";
 import { useState } from "react";
 import { ErrorBanner } from "@/components/ui/ErrorBanner";
 import { useExecution } from "@/features/executions/useExecution";
@@ -78,6 +79,7 @@ function RunTab({ workflowId }: { workflowId: string }) {
             <div className="row">
               <b>Execution</b>
               <code className="small">{execution.id.slice(0, 8)}</code>
+              <Link href={`/executions/${execution.id}`} data-testid="open-debugger">Open in debugger</Link>
               <span className={`badge ${execution.status === "COMPLETED" ? "published" : execution.status === "FAILED" ? "failed" : ""}`} data-testid="execution-status">
                 {execution.status}
               </span>

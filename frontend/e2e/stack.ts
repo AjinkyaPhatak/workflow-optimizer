@@ -18,6 +18,10 @@ import pg from "pg";
 export const API_PORT = Number(process.env.E2E_API_PORT ?? 18180);
 export const MOCK_OPENAI_PORT = Number(process.env.E2E_OPENAI_PORT ?? 18190);
 export const MOCK_REPLY_PREFIX = "Mock answer to: ";
+/** Prompts containing this fail once with 503 (a retryable provider error). */
+export const MOCK_FAIL_ONCE = "flaky";
+/** Test prices (USD per million tokens) so cost estimates are visible. */
+export const MODEL_PRICING = { "gpt-5-mini": { input_per_million: 1000, output_per_million: 2000 } };
 
 // Playwright and the scripts run from frontend/; the backend is its parent.
 const repoRoot = resolve(process.cwd(), "..");
@@ -88,6 +92,11 @@ function startMockOpenAI(expectedKey: string): Promise<Server> {
       const authorized = req.headers.authorization === `Bearer ${expectedKey}`;
       calls.push({ authorized, model: parsed.model ?? "", prompt });
       res.setHeader("Content-Type", "application/json");
+      if (prompt.includes(MOCK_FAIL_ONCE) && calls.filter((c) => c.prompt === prompt).length === 1) {
+        res.statusCode = 503;
+        res.end(JSON.stringify({ error: { type: "server_error", code: "overloaded" } }));
+        return;
+      }
       if (!req.url?.endsWith("/chat/completions") || !authorized) {
         res.statusCode = authorized ? 404 : 401;
         res.end(JSON.stringify({ error: { type: "invalid_request_error", code: authorized ? "not_found" : "invalid_api_key" } }));
@@ -197,6 +206,7 @@ export async function startStack(): Promise<{ seed: Seed; stop: () => Promise<vo
       CREDENTIAL_ENCRYPTION_KEY: randomBytes(32).toString("base64"),
       OPENAI_BASE_URL: `http://127.0.0.1:${MOCK_OPENAI_PORT}/v1`,
       DEFAULT_MAX_ATTEMPTS: "1",
+      MODEL_PRICING: JSON.stringify(MODEL_PRICING),
     };
     for (const name of ["api", "worker"]) {
       const c = spawn(`${bin}-${name}${exe}`, [], { env, stdio: process.env.E2E_VERBOSE ? "inherit" : "ignore" });

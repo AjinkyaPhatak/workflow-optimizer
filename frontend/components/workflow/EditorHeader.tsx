@@ -48,6 +48,7 @@ export function EditorHeader({ onExecute }: { onExecute: () => void }) {
       >
         {busy === "publishing" ? "Publishing…" : "Publish"}
       </button>
+      {workflow && <Link className="button" href={`/workflows/${workflow.id}/executions`}>Executions</Link>}
       <button className="primary" onClick={onExecute} disabled={readonly}>Execute</button>
     </header>
   );

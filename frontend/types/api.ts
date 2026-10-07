@@ -187,6 +187,57 @@ export interface NodeExecution {
   error: ExecutionError | null;
 }
 
+// --- observability (Phase 14) ------------------------------------------------
+
+export interface TokenUsage {
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+}
+
+/** GET /executions/{id}: the execution plus aggregates derived from its node
+ * records. estimated_cost_usd is an estimate, not billing. */
+export interface ExecutionDetails extends Execution {
+  duration_ms: number | null;
+  node_count: number;
+  retries: number;
+  usage: TokenUsage | null;
+  estimated_cost_usd: number | null;
+}
+
+/** GET /executions/{id}/nodes item. input/output are redacted copies. */
+export interface NodeExecutionDetails extends NodeExecution {
+  execution_id: UUID;
+  created_at: string;
+  input?: Record<string, unknown>;
+  output?: Record<string, unknown>;
+  provider: string | null;
+  model: string | null;
+  usage: TokenUsage | null;
+  estimated_cost_usd: number | null;
+}
+
+export type ExecutionEventType =
+  | "EXECUTION_STARTED" | "EXECUTION_COMPLETED" | "EXECUTION_FAILED" | "EXECUTION_CANCELLED"
+  | "NODE_STARTED" | "NODE_COMPLETED" | "NODE_FAILED" | "NODE_SKIPPED"
+  | "RETRY_SCHEDULED" | "RETRY_STARTED";
+
+export interface ExecutionEvent {
+  id: UUID;
+  execution_id: UUID;
+  node_id: string | null;
+  type: ExecutionEventType;
+  timestamp: string;
+  data: Record<string, unknown>;
+}
+
+export interface EventPage {
+  events: ExecutionEvent[];
+  page: number;
+  page_size: number;
+  total: number;
+}
+
 export interface ExecutionAccepted {
   execution_id: UUID;
   status: ExecutionStatus;
