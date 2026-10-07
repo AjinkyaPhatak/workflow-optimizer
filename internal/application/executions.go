@@ -106,6 +106,12 @@ func (s *ExecutionService) Execute(ctx context.Context, user, workflowID uuid.UU
 		input = map[string]any{}
 	}
 	created, err := s.submitter.Submit(ctx, workflowID, v.ID, input)
+	if err == nil || created.ID != uuid.Nil {
+		// Correlates the request (request_id, added by the context logger)
+		// with the execution the workers will report on.
+		s.logger.InfoContext(ctx, "execution submitted", "event", "execution_submitted",
+			"execution_id", created.ID.String(), "workflow_id", workflowID.String(), "version_id", v.ID.String())
+	}
 	var dispatchErr *queue.DispatchError
 	if errors.As(err, &dispatchErr) {
 		// Persisted PENDING; the retry scheduler re-dispatches executions
@@ -140,19 +146,6 @@ func (s *ExecutionService) execution(ctx context.Context, user, id uuid.UUID, ac
 		return execution.Execution{}, err
 	}
 	return e, nil
-}
-
-// Get returns the execution.
-func (s *ExecutionService) Get(ctx context.Context, user, id uuid.UUID) (execution.Execution, error) {
-	return s.execution(ctx, user, id, workspace.ActionRead)
-}
-
-// Nodes returns the execution's node records, oldest first.
-func (s *ExecutionService) Nodes(ctx context.Context, user, id uuid.UUID) ([]execution.NodeExecution, error) {
-	if _, err := s.execution(ctx, user, id, workspace.ActionRead); err != nil {
-		return nil, err
-	}
-	return s.nodes.ListByExecution(ctx, id)
 }
 
 // Cancel requests cancellation through the lifecycle service: a RUNNING

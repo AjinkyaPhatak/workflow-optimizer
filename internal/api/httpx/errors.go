@@ -9,6 +9,7 @@ import (
 
 	"workflow-optimizer/internal/api/responses"
 	"workflow-optimizer/internal/application"
+	"workflow-optimizer/internal/observability"
 )
 
 // API error codes.
@@ -96,15 +97,11 @@ func WriteError(w http.ResponseWriter, r *http.Request, logger *slog.Logger, err
 	WriteJSON(w, e.Status, responses.ErrorBody{Error: responses.ErrorDetail{Code: e.Code, Message: e.Message, Details: e.Details}})
 }
 
-type requestIDKey struct{}
-
-// WithRequestID stores the request ID in ctx.
+// WithRequestID stores the request ID in ctx (the observability context key,
+// so loggers wrapped by observability.NewContextLogger include it).
 func WithRequestID(ctx context.Context, id string) context.Context {
-	return context.WithValue(ctx, requestIDKey{}, id)
+	return observability.WithRequestID(ctx, id)
 }
 
 // RequestID returns the request ID in ctx ("" when none).
-func RequestID(ctx context.Context) string {
-	id, _ := ctx.Value(requestIDKey{}).(string)
-	return id
-}
+func RequestID(ctx context.Context) string { return observability.RequestID(ctx) }

@@ -157,7 +157,7 @@ func TestRollbackWithWaitingRetryIsClaimableByPhase8(t *testing.T) {
 	if err := m.Up(); err != nil {
 		t.Fatalf("UP again: %v", err)
 	}
-	if v, dirty, _ := m.Version(); v != 5 || dirty { // head: 000005 (Phase 12)
+	if v, dirty, _ := m.Version(); v != 6 || dirty { // head: 000006 (Phase 14)
 		t.Fatalf("after up: %d dirty=%v", v, dirty)
 	}
 	got := e.get(t, waiting)

@@ -16,7 +16,12 @@ const (
 // ParsePage reads ?page= (default 1) and ?page_size= (default 20, at most
 // 100).
 func ParsePage(r *http.Request) (application.Page, error) {
-	p := application.Page{Number: 1, Size: DefaultPageSize}
+	return ParsePageDefault(r, DefaultPageSize)
+}
+
+// ParsePageDefault is ParsePage with another default page size.
+func ParsePageDefault(r *http.Request, defaultSize int) (application.Page, error) {
+	p := application.Page{Number: 1, Size: defaultSize}
 	q := r.URL.Query()
 	if v := q.Get("page"); v != "" {
 		n, err := strconv.Atoi(v)

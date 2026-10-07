@@ -35,9 +35,11 @@ type Handlers struct {
 	Workflows   *application.WorkflowService
 	Executions  *application.ExecutionService
 	Credentials *application.CredentialService
-	Nodes       NodeCatalog
-	Ready       []Check
-	Logger      *slog.Logger
+	// Observability serves the execution debugger (Phase 14).
+	Observability *application.ObservabilityService
+	Nodes         NodeCatalog
+	Ready         []Check
+	Logger        *slog.Logger
 }
 
 func (h *Handlers) fail(w http.ResponseWriter, r *http.Request, err error) {

@@ -56,6 +56,10 @@ type RunnerConfig struct {
 	// runs nodes without a workspace: workspace-scoped resources such as
 	// credentials then cannot be resolved (they fail closed).
 	Workspaces WorkspaceLookup
+
+	// Observer (Phase 14) is told about lifecycle facts after they are
+	// durable. It cannot influence the run. Nil observes nothing.
+	Observer ExecutionObserver
 }
 
 // Runner drives one claimed execution attempt through its lifecycle:
@@ -77,6 +81,7 @@ type RunnerConfig struct {
 // is a persisted schedule that a scheduler dispatches when due.
 type Runner struct {
 	cfg     RunnerConfig
+	obs     ExecutionObserver
 	service *LifecycleService
 	machine ExecutionStateMachine
 	nodes   NodeExecutionStateMachine
@@ -96,6 +101,7 @@ func NewRunner(cfg RunnerConfig) (*Runner, error) {
 	service := NewLifecycleServiceWithOptions(cfg.Executions, cfg.Persistence)
 	return &Runner{
 		cfg:     cfg,
+		obs:     observerOrNop(cfg.Observer),
 		service: service,
 		machine: service.machine,
 		nodes:   NewNodeExecutionStateMachineWithOptions(cfg.NodeExecutions, cfg.Persistence),
@@ -110,6 +116,7 @@ type claimedAttempt struct {
 	id    uuid.UUID
 	owner uuid.UUID // the claim token: fences every write of this attempt
 	exec  Execution // snapshot right after the claim
+	start time.Time // when this Run claimed the attempt
 }
 
 // Run claims and executes one attempt of a PENDING execution. If the claim
@@ -117,7 +124,7 @@ type claimedAttempt struct {
 // cancelled, the database gave up) nothing else happens and the claim error is
 // returned. A failed attempt that is retried returns *RetryScheduledError.
 func (r *Runner) Run(ctx context.Context, executionID uuid.UUID) (ExecutionResult, error) {
-	a := claimedAttempt{id: executionID, owner: uuid.New()}
+	a := claimedAttempt{id: executionID, owner: uuid.New(), start: time.Now()}
 	var lease *LeaseGrant
 	if r.cfg.Lease != nil {
 		grant := *r.cfg.Lease
@@ -142,7 +149,17 @@ func (r *Runner) Run(ctx context.Context, executionID uuid.UUID) (ExecutionResul
 		if err != nil {
 			return ExecutionResult{}, r.explainFinalizationFailure(ctx, a, err)
 		}
+		r.obs.ExecutionCancelled(ctx, executionID, exec.Attempt, "cancel_requested")
 		return ExecutionResult{}, fmt.Errorf("%w: %w", ErrExecutionCancelled, ErrCancelRequested)
+	}
+	if exec.Attempt > 1 {
+		r.obs.RetryStarted(ctx, executionID, nil, exec.Attempt)
+	} else {
+		var queued time.Duration
+		if exec.StartedAt != nil && !exec.CreatedAt.IsZero() {
+			queued = exec.StartedAt.Sub(exec.CreatedAt)
+		}
+		r.obs.ExecutionStarted(ctx, executionID, exec.Attempt, exec.MaxAttempts, queued)
 	}
 
 	runCtx := ctx
@@ -198,6 +215,9 @@ func (r *Runner) Run(ctx context.Context, executionID uuid.UUID) (ExecutionResul
 		sideEffects: r.cfg.Graph.SideEffects,
 		machine:     r.nodes,
 		ids:         map[string]uuid.UUID{},
+		obs:         r.obs,
+		running:     map[string]runningNode{},
+		invocations: map[string]int{},
 	}
 	result, graphErr := r.cfg.Graph.ExecuteWithOptions(runCtx, def, exec.Input, ExecuteOptions{
 		Observer:         recorder,
@@ -262,6 +282,7 @@ func (r *Runner) finalize(ctx context.Context, a claimedAttempt, result Executio
 		if err := r.service.completeAs(ctx, a.id, a.owner, workflowOutput(result)); err != nil {
 			return r.explainFinalizationFailure(ctx, a, fmt.Errorf("record completion: %w", err))
 		}
+		r.obs.ExecutionCompleted(ctx, a.id, a.exec.Attempt, time.Since(a.start))
 		return nil
 	case errors.Is(cause, ErrLeaseLost), errors.Is(graphErr, ErrLeaseLost):
 		// Ownership lost (heartbeat, or a node write fenced out as stale).
@@ -281,6 +302,7 @@ func (r *Runner) finalize(ctx context.Context, a claimedAttempt, result Executio
 		if err := r.service.cancelAs(ctx, a.id, a.owner, meta); err != nil {
 			return r.explainFinalizationFailure(ctx, a, errors.Join(causeErr, fmt.Errorf("record cancellation: %w", err)))
 		}
+		r.obs.ExecutionCancelled(ctx, a.id, a.exec.Attempt, reason)
 		return causeErr
 	case errors.Is(ctx.Err(), context.DeadlineExceeded):
 		execErr := ErrorFromExecution(graphErr)
@@ -312,11 +334,13 @@ func (r *Runner) failOrRetry(ctx context.Context, a claimedAttempt, execErr Exec
 		err := r.service.scheduleRetry(ctx, a.id, a.owner, d.Delay, execErr, interrupted, nil)
 		switch {
 		case err == nil:
+			r.obs.RetryScheduled(ctx, a.id, nil, a.exec.Attempt+1, d.Delay, execErr)
 			return &RetryScheduledError{ExecutionID: a.id, Attempt: a.exec.Attempt, Delay: d.Delay, Err: cause}
 		case errors.Is(err, ErrCancelRequested):
 			if cerr := r.service.cancelAs(ctx, a.id, a.owner, map[string]any{"reason": "cancel_requested"}); cerr != nil {
 				return r.explainFinalizationFailure(ctx, a, errors.Join(cause, cerr))
 			}
+			r.obs.ExecutionCancelled(ctx, a.id, a.exec.Attempt, "cancel_requested")
 			return fmt.Errorf("%w: %w", ErrCancelRequested, cause)
 		case errors.Is(err, ErrRetryAfterDeadline):
 			d = FailureDecision{Action: ActionFail, DeadLetter: DeadLetterDeadlineExceeded}
@@ -333,6 +357,7 @@ func (r *Runner) fail(ctx context.Context, a claimedAttempt, execErr ExecutionEr
 	if err := r.service.failAs(ctx, a.id, a.owner, execErr, interrupted, dead); err != nil {
 		return r.explainFinalizationFailure(ctx, a, errors.Join(cause, fmt.Errorf("record failure: %w", err)))
 	}
+	r.obs.ExecutionFailed(ctx, a.id, a.exec.Attempt, execErr, dead)
 	if dead != "" {
 		return &DeadLetteredError{ExecutionID: a.id, Attempt: a.exec.Attempt, Reason: dead, Err: cause}
 	}
@@ -389,9 +414,22 @@ type nodeRecorder struct {
 	sideEffects func(nodeType string) node.SideEffects
 	machine     NodeExecutionStateMachine
 	ids         map[string]uuid.UUID
+
+	// Phase 14: events are reported after each node write succeeded.
+	obs         ExecutionObserver
+	running     map[string]runningNode
+	invocations map[string]int // invocations started in this Run
 }
 
-var _ NodeObserver = (*nodeRecorder)(nil)
+type runningNode struct {
+	ref   NodeRef
+	start time.Time
+}
+
+var (
+	_ NodeObserver         = (*nodeRecorder)(nil)
+	_ NodeProgressObserver = (*nodeRecorder)(nil)
+)
 
 func (n *nodeRecorder) begin(ctx context.Context, nodeID, nodeType string, input map[string]any) error {
 	rec := NodeExecution{
@@ -410,8 +448,36 @@ func (n *nodeRecorder) begin(ctx context.Context, nodeID, nodeType string, input
 	return nil
 }
 
+// started reports a node invocation whose RUNNING record was just written; a
+// second invocation within this Run is an in-place retry.
+func (n *nodeRecorder) started(ctx context.Context, nodeID, nodeType string, invocation int) {
+	if n.invocations[nodeID] > 0 {
+		id := nodeID
+		n.obs.RetryStarted(ctx, n.executionID, &id, invocation)
+	}
+	n.invocations[nodeID]++
+	ref := NodeRef{ID: nodeID, Type: nodeType, Invocation: invocation}
+	n.running[nodeID] = runningNode{ref: ref, start: time.Now()}
+	n.obs.NodeStarted(ctx, n.executionID, ref)
+}
+
 func (n *nodeRecorder) NodeStarted(ctx context.Context, nodeID, nodeType string, input node.NodeInput) error {
-	return n.begin(ctx, nodeID, nodeType, nodeInputMap(input))
+	if err := n.begin(ctx, nodeID, nodeType, nodeInputMap(input)); err != nil {
+		return err
+	}
+	n.started(ctx, nodeID, nodeType, input.Attempt)
+	return nil
+}
+
+// NodeReused implements NodeProgressObserver.
+func (n *nodeRecorder) NodeReused(ctx context.Context, nodeID, _ string) {
+	n.obs.NodeSkipped(ctx, n.executionID, nodeID, "completed_in_previous_attempt")
+}
+
+// NodeRetryScheduled implements NodeProgressObserver.
+func (n *nodeRecorder) NodeRetryScheduled(ctx context.Context, nodeID string, _ int, delay time.Duration, failure error) {
+	id := nodeID
+	n.obs.RetryScheduled(ctx, n.executionID, &id, n.running[nodeID].ref.Invocation+1, delay, nodeFailure(nodeID, failure))
 }
 
 func (n *nodeRecorder) NodeFinished(ctx context.Context, nodeID string, output node.NodeOutput, err error) error {
@@ -419,15 +485,24 @@ func (n *nodeRecorder) NodeFinished(ctx context.Context, nodeID string, output n
 	if !ok {
 		return fmt.Errorf("%w: node %q finished without a started record", ErrNodeExecutionNotFound, nodeID)
 	}
+	run := n.running[nodeID]
 	if err == nil {
 		values := output.Ports
 		if values == nil {
 			values = map[string]node.Value{}
 		}
-		return n.machine.Transition(ctx, id, NodeStatusCompleted, NodeTransitionUpdate{Output: portsMap(output.Ports), OutputValues: values})
+		if terr := n.machine.Transition(ctx, id, NodeStatusCompleted, NodeTransitionUpdate{Output: portsMap(output.Ports), OutputValues: values}); terr != nil {
+			return terr
+		}
+		n.obs.NodeCompleted(ctx, n.executionID, run.ref, time.Since(run.start))
+		return nil
 	}
 	nodeErr := nodeFailure(nodeID, err)
-	return n.machine.Transition(ctx, id, NodeStatusFailed, NodeTransitionUpdate{Error: &nodeErr})
+	if terr := n.machine.Transition(ctx, id, NodeStatusFailed, NodeTransitionUpdate{Error: &nodeErr}); terr != nil {
+		return terr
+	}
+	n.obs.NodeFailed(ctx, n.executionID, run.ref, nodeErr, time.Since(run.start))
+	return nil
 }
 
 // NodeFailedBeforeExecute records a node whose configuration or inputs could
@@ -436,8 +511,14 @@ func (n *nodeRecorder) NodeFailedBeforeExecute(ctx context.Context, nodeID, node
 	if beginErr := n.begin(ctx, nodeID, nodeType, nil); beginErr != nil {
 		return beginErr
 	}
+	n.started(ctx, nodeID, nodeType, n.invocations[nodeID]+1)
 	nodeErr := nodeFailure(nodeID, &NodeExecutionError{NodeID: nodeID, NodeType: nodeType, Stage: stage, Err: err})
-	return n.machine.Transition(ctx, n.ids[nodeID], NodeStatusFailed, NodeTransitionUpdate{Error: &nodeErr})
+	if terr := n.machine.Transition(ctx, n.ids[nodeID], NodeStatusFailed, NodeTransitionUpdate{Error: &nodeErr}); terr != nil {
+		return terr
+	}
+	run := n.running[nodeID]
+	n.obs.NodeFailed(ctx, n.executionID, run.ref, nodeErr, time.Since(run.start))
+	return nil
 }
 
 // nodeFailure builds the node-level ExecutionError, keeping node-reported

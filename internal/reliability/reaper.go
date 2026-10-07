@@ -39,6 +39,8 @@ type Reaper struct {
 	// Notify, when set, is told about each dead-lettered execution (e.g. to
 	// publish a non-authoritative Redis dead-letter notice).
 	Notify func(ctx context.Context, n DeadLetterNotice)
+	// Observer, when set, is told about each applied recovery (Phase 14).
+	Observer execution.ExecutionObserver
 }
 
 // NewReaper validates the configuration. backoff may be nil (worker losses
@@ -115,6 +117,7 @@ func (r *Reaper) RunOnce(ctx context.Context) (int, error) {
 		recovered++
 		r.Logger.Warn("recovered orphaned attempt", "execution_id", c.ExecutionID, "attempt", c.Attempt,
 			"owner", c.Owner, "reason", c.Reason, "to", res.Plan.To, "retry_in", res.Plan.RetryDelay, "dead_letter", res.Plan.DeadLetter)
+		r.observe(ctx, c, res.Plan)
 		if res.Plan.DeadLetter != "" && r.Notify != nil {
 			r.Notify(ctx, DeadLetterNotice{ExecutionID: c.ExecutionID, Attempt: c.Attempt, Reason: res.Plan.DeadLetter, Code: res.Plan.Error.Code})
 		}
@@ -129,4 +132,19 @@ func (r *Reaper) Run(ctx context.Context) {
 			r.Logger.Error("reaper pass failed", "error", err)
 		}
 	})
+}
+
+// observe reports an applied recovery as the matching execution event.
+func (r *Reaper) observe(ctx context.Context, c RecoveryCandidate, p RecoveryPlan) {
+	if r.Observer == nil {
+		return
+	}
+	switch p.To {
+	case execution.StatusPending:
+		r.Observer.RetryScheduled(ctx, c.ExecutionID, nil, c.Attempt+1, p.RetryDelay, p.Error)
+	case execution.StatusFailed:
+		r.Observer.ExecutionFailed(ctx, c.ExecutionID, c.Attempt, p.Error, p.DeadLetter)
+	case execution.StatusCancelled:
+		r.Observer.ExecutionCancelled(ctx, c.ExecutionID, c.Attempt, "cancel_requested")
+	}
 }

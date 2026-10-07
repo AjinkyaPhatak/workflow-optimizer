@@ -85,6 +85,17 @@ type Config struct {
 	AuthTokenSecret string
 	// AuthTokenTTL is the lifetime of issued tokens (AUTH_TOKEN_TTL).
 	AuthTokenTTL time.Duration
+
+	// Observability (Phase 14).
+
+	// ModelPricing is the JSON price table used to ESTIMATE LLM cost
+	// (MODEL_PRICING, e.g. {"gpt-5":{"input_per_million":1.25,
+	// "output_per_million":10}}). Empty: no cost estimates.
+	ModelPricing string
+	// ExposeNodeData lets the execution debugger show (redacted) node inputs
+	// and outputs (OBSERVABILITY_EXPOSE_NODE_DATA, default true; "false"
+	// hides them).
+	ExposeNodeData bool
 }
 
 // Reliability is the Phase 10 retry, timeout and recovery configuration.
@@ -134,6 +145,8 @@ func LoadFrom(getenv func(string) string) (Config, error) {
 		APIAddr:                 DefaultAPIAddr,
 		AuthTokenSecret:         getenv("AUTH_TOKEN_SECRET"),
 		AuthTokenTTL:            DefaultAuthTokenTTL,
+		ModelPricing:            getenv("MODEL_PRICING"),
+		ExposeNodeData:          true,
 	}
 	var problems []string
 	readInt := func(key string, dst *int) {
@@ -201,6 +214,14 @@ func LoadFrom(getenv func(string) string) (Config, error) {
 		cfg.APIAddr = v
 	}
 	readDuration("AUTH_TOKEN_TTL", &cfg.AuthTokenTTL)
+	if v, ok := lookup(getenv, "OBSERVABILITY_EXPOSE_NODE_DATA"); ok {
+		b, err := strconv.ParseBool(v)
+		if err != nil {
+			problems = append(problems, fmt.Sprintf("OBSERVABILITY_EXPOSE_NODE_DATA %q is not a boolean", v))
+		} else {
+			cfg.ExposeNodeData = b
+		}
+	}
 	if len(problems) > 0 {
 		return cfg, fmt.Errorf("%w: %s", ErrInvalidConfig, strings.Join(problems, "; "))
 	}

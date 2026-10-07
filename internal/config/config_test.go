@@ -156,3 +156,17 @@ func TestAPIConfig(t *testing.T) {
 		t.Fatal("malformed AUTH_TOKEN_TTL accepted")
 	}
 }
+
+func TestObservabilityConfig(t *testing.T) {
+	cfg, err := config.LoadFrom(env(nil))
+	if err != nil || !cfg.ExposeNodeData || cfg.ModelPricing != "" {
+		t.Fatalf("defaults = %v %q %v", cfg.ExposeNodeData, cfg.ModelPricing, err)
+	}
+	cfg, err = config.LoadFrom(env(map[string]string{"OBSERVABILITY_EXPOSE_NODE_DATA": "false", "MODEL_PRICING": `{"m":{"input_per_million":1}}`}))
+	if err != nil || cfg.ExposeNodeData || cfg.ModelPricing == "" {
+		t.Fatalf("explicit = %v %q %v", cfg.ExposeNodeData, cfg.ModelPricing, err)
+	}
+	if _, err := config.LoadFrom(env(map[string]string{"OBSERVABILITY_EXPOSE_NODE_DATA": "sometimes"})); err == nil {
+		t.Fatal("malformed OBSERVABILITY_EXPOSE_NODE_DATA accepted")
+	}
+}

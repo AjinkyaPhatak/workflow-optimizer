@@ -8,6 +8,7 @@ import (
 	"workflow-optimizer/internal/api/httpx"
 	"workflow-optimizer/internal/api/middleware"
 	"workflow-optimizer/internal/auth"
+	"workflow-optimizer/internal/observability"
 )
 
 // Prefix is the versioned API root.
@@ -21,9 +22,8 @@ const Prefix = "/api/v1"
 // requires a bearer token, and resources are authorized per workspace by the
 // application services.
 func NewRouter(h *handlers.Handlers, tokens auth.TokenService, logger *slog.Logger) http.Handler {
-	if logger == nil {
-		logger = slog.Default()
-	}
+	// Every context-aware log line carries the request's X-Request-ID.
+	logger = observability.NewContextLogger(logger)
 	if h.Logger == nil {
 		h.Logger = logger
 	}
@@ -59,6 +59,8 @@ func NewRouter(h *handlers.Handlers, tokens auth.TokenService, logger *slog.Logg
 	private("GET "+Prefix+"/executions/{executionID}", h.GetExecution)
 	private("GET "+Prefix+"/executions/{executionID}/nodes", h.ListNodeExecutions)
 	private("POST "+Prefix+"/executions/{executionID}/cancel", h.CancelExecution)
+	private("GET "+Prefix+"/executions/{executionID}/events", h.ListEvents)
+	private("GET "+Prefix+"/workflows/{workflowID}/executions", h.ListWorkflowExecutions)
 
 	private("POST "+Prefix+"/credentials", h.CreateCredential)
 	private("GET "+Prefix+"/credentials", h.ListCredentials)

@@ -219,8 +219,10 @@ func (n nodeRepo) insert(rec execution.NodeExecution) error {
 	if rec.Status != execution.NodeStatusPending {
 		return execution.ErrInvalidExecution
 	}
+	// A node may be recorded again (in-place or execution retries, Phase 10)
+	// once its earlier record is finished; never twice at the same time.
 	for _, other := range n.nodes {
-		if other.ExecutionID == rec.ExecutionID && other.NodeID == rec.NodeID {
+		if other.ExecutionID == rec.ExecutionID && other.NodeID == rec.NodeID && !other.Status.IsTerminal() {
 			return execution.ErrInvalidExecution
 		}
 	}

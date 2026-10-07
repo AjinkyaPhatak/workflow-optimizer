@@ -29,6 +29,7 @@ type LifecycleService struct {
 	opts     PersistenceOptions
 	defaults ExecutionDefaults
 	cancels  CancellationStore
+	obs      ExecutionObserver
 }
 
 // ExecutionDefaults configures new executions (Phase 10). Zero values keep
@@ -52,6 +53,14 @@ func (s *LifecycleService) WithDefaults(d ExecutionDefaults) *LifecycleService {
 func (s *LifecycleService) WithCancellations(store CancellationStore) *LifecycleService {
 	c := *s
 	c.cancels = store
+	return &c
+}
+
+// WithObserver returns a copy of the service that reports the cancellations
+// it applies (Phase 14).
+func (s *LifecycleService) WithObserver(o ExecutionObserver) *LifecycleService {
+	c := *s
+	c.obs = o
 	return &c
 }
 
@@ -166,7 +175,10 @@ func (s *LifecycleService) RequestCancel(ctx context.Context, id uuid.UUID) erro
 	err = s.cancel(ctx, id, map[string]any{"reason": "cancel_requested"})
 	var te *TransitionError
 	if errors.As(err, &te) && te.From == StatusPending {
-		return nil // recorded; enforced at the next claim
+		return nil // recorded; enforced at the next claim (the Runner reports it)
+	}
+	if err == nil {
+		observerOrNop(s.obs).ExecutionCancelled(ctx, id, 0, "cancel_requested")
 	}
 	return err
 }

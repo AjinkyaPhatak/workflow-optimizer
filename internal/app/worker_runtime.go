@@ -16,6 +16,7 @@ import (
 	"workflow-optimizer/internal/infrastructure/encryption"
 	"workflow-optimizer/internal/infrastructure/postgres"
 	redisinfra "workflow-optimizer/internal/infrastructure/redis"
+	"workflow-optimizer/internal/observability"
 	"workflow-optimizer/internal/queue"
 	"workflow-optimizer/internal/reliability"
 	"workflow-optimizer/internal/retry"
@@ -40,6 +41,10 @@ type WorkerRuntime struct {
 	scheduler *reliability.Scheduler
 	reaper    *reliability.Reaper
 	owner     string
+
+	// Phase 14: execution events, structured execution logs and metrics.
+	recorder *observability.Recorder
+	metrics  *observability.Metrics
 }
 
 // NewWorkerRuntime validates cfg, connects to PostgreSQL and Redis, and builds
@@ -155,6 +160,8 @@ func (rt *WorkerRuntime) build(application *Application) error {
 		return err
 	}
 	rt.owner = workerOwner()
+	rt.metrics = observability.NewMetrics()
+	rt.recorder = observability.NewRecorder(postgres.NewExecutionEventRepository(rt.store), rt.logger, rt.metrics)
 	executions := postgres.NewExecutionRepository(rt.store)
 	runner, err := execution.NewRunner(execution.RunnerConfig{
 		Executions:     executions,
@@ -173,6 +180,9 @@ func (rt *WorkerRuntime) build(application *Application) error {
 		Lease:       &execution.LeaseGrant{Owner: rt.owner, Duration: rel.WorkerLeaseDuration},
 		// Each run is scoped to its workflow's workspace (credential isolation).
 		Workspaces: postgres.NewWorkflowVersionRepository(rt.store),
+		// Events are recorded after each durable change; a recording failure
+		// is logged and never affects the run.
+		Observer: rt.recorder,
 	})
 	if err != nil {
 		return err
@@ -207,6 +217,7 @@ func (rt *WorkerRuntime) build(application *Application) error {
 		return err
 	}
 	rt.reaper.Notify = notify
+	rt.reaper.Observer = rt.recorder
 	rt.queue, rt.pool = q, pool
 	return nil
 }
@@ -235,6 +246,7 @@ func (rt *WorkerRuntime) Run(ctx context.Context) error {
 	go func() { defer background.Done(); rt.reaper.Run(ctx) }()
 	err := rt.pool.Run(ctx, rt.cfg.WorkerShutdownTimeout)
 	background.Wait()
+	rt.logger.Info("worker metrics", rt.metrics.Snapshot().LogAttrs()...)
 	rt.logger.Info("worker runtime stopped", "error", err)
 	return err
 }
@@ -243,6 +255,9 @@ func (rt *WorkerRuntime) Run(ctx context.Context) error {
 // operational tooling that drives them directly).
 func (rt *WorkerRuntime) Scheduler() *reliability.Scheduler { return rt.scheduler }
 func (rt *WorkerRuntime) Reaper() *reliability.Reaper       { return rt.reaper }
+
+// Metrics exposes the worker's execution metrics (Phase 14).
+func (rt *WorkerRuntime) Metrics() *observability.Metrics { return rt.metrics }
 
 // Health reports whether Redis is reachable and how many workers run.
 func (rt *WorkerRuntime) Health(ctx context.Context) worker.Health {
@@ -259,7 +274,8 @@ func (rt *WorkerRuntime) Submitter() (*queue.Submitter, error) {
 	rel := rt.cfg.Reliability.OrDefaults()
 	service := execution.NewLifecycleService(postgres.NewExecutionRepository(rt.store)).
 		WithDefaults(execution.ExecutionDefaults{MaxAttempts: rel.MaxAttempts, Timeout: rel.ExecutionTimeout}).
-		WithCancellations(rt.rel)
+		WithCancellations(rt.rel).
+		WithObserver(rt.recorder)
 	return queue.NewSubmitter(service, dispatcher)
 }
 

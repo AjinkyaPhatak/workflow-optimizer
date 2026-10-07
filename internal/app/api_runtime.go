@@ -18,6 +18,7 @@ import (
 	"workflow-optimizer/internal/execution"
 	"workflow-optimizer/internal/infrastructure/postgres"
 	redisinfra "workflow-optimizer/internal/infrastructure/redis"
+	"workflow-optimizer/internal/observability"
 	"workflow-optimizer/internal/queue"
 	"workflow-optimizer/internal/workflow"
 )
@@ -78,6 +79,13 @@ func NewAPI(ctx context.Context, cfg config.Config, logger *slog.Logger) (*APIRu
 }
 
 func (rt *APIRuntime) build(enc credential.SecretEncryptor, tokens auth.TokenService) error {
+	pricing, err := observability.ParsePricing(rt.cfg.ModelPricing)
+	if err != nil {
+		return fmt.Errorf("app: %w", err)
+	}
+	// The API applies cancellations of RUNNING executions itself (Phase 10
+	// RequestCancel); it reports them as events like the workers do.
+	recorder := observability.NewRecorder(postgres.NewExecutionEventRepository(rt.store), rt.logger, observability.NewMetrics())
 	credentialRepo := postgres.NewCredentialRepository(rt.store)
 	credentials, err := credential.NewService(credentialRepo, enc)
 	if err != nil {
@@ -100,7 +108,8 @@ func (rt *APIRuntime) build(enc credential.SecretEncryptor, tokens auth.TokenSer
 	rel := rt.cfg.Reliability.OrDefaults()
 	lifecycle := execution.NewLifecycleService(postgres.NewExecutionRepository(rt.store)).
 		WithDefaults(execution.ExecutionDefaults{MaxAttempts: rel.MaxAttempts, Timeout: rel.ExecutionTimeout}).
-		WithCancellations(postgres.NewReliabilityRepository(rt.store))
+		WithCancellations(postgres.NewReliabilityRepository(rt.store)).
+		WithObserver(recorder)
 	submitter, err := queue.NewSubmitter(lifecycle, dispatcher)
 	if err != nil {
 		return err
@@ -110,18 +119,22 @@ func (rt *APIRuntime) build(enc credential.SecretEncryptor, tokens auth.TokenSer
 	access := application.NewAccess(identities)
 	workflows := application.NewWorkflowService(access, postgres.NewWorkflowRepository(rt.store),
 		workflow.NewValidator(engine.NodeRegistry))
+	executions := application.NewExecutionService(application.ExecutionDeps{
+		Workflows:  workflows,
+		Submitter:  submitter,
+		Executions: postgres.NewExecutionRepository(rt.store),
+		Nodes:      postgres.NewNodeExecutionRepository(rt.store),
+		Canceller:  lifecycle,
+		Workspaces: postgres.NewWorkflowVersionRepository(rt.store),
+		Logger:     rt.logger,
+	})
+	policy := application.ObservabilityPolicy{ExposeNodeInputs: rt.cfg.ExposeNodeData, ExposeNodeOutputs: rt.cfg.ExposeNodeData}
 	h := &handlers.Handlers{
-		Auth:      application.NewAuthService(identities, tokens),
-		Workflows: workflows,
-		Executions: application.NewExecutionService(application.ExecutionDeps{
-			Workflows:  workflows,
-			Submitter:  submitter,
-			Executions: postgres.NewExecutionRepository(rt.store),
-			Nodes:      postgres.NewNodeExecutionRepository(rt.store),
-			Canceller:  lifecycle,
-			Workspaces: postgres.NewWorkflowVersionRepository(rt.store),
-			Logger:     rt.logger,
-		}),
+		Auth:       application.NewAuthService(identities, tokens),
+		Workflows:  workflows,
+		Executions: executions,
+		Observability: application.NewObservabilityService(executions, postgres.NewExecutionEventRepository(rt.store),
+			postgres.NewExecutionListRepository(rt.store), pricing, policy),
 		Credentials: application.NewCredentialService(access, credentials, credentialRepo, engine.ProviderRegistry, enc != nil),
 		Nodes:       engine.NodeRegistry,
 		Ready: []handlers.Check{

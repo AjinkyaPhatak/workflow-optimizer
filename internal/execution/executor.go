@@ -44,6 +44,16 @@ type NodeObserver interface {
 	NodeFailedBeforeExecute(ctx context.Context, nodeID, nodeType string, stage Stage, err error) error
 }
 
+// NodeProgressObserver may additionally be implemented by a NodeObserver
+// (Phase 14) to learn what the executor decides between invocations: a node
+// skipped because it completed in an earlier attempt (its output is reused),
+// and an in-place retry scheduled after delay. It only observes: it cannot
+// influence either decision.
+type NodeProgressObserver interface {
+	NodeReused(ctx context.Context, nodeID, nodeType string)
+	NodeRetryScheduled(ctx context.Context, nodeID string, failures int, delay time.Duration, failure error)
+}
+
 // GraphExecutor is the Phase 7 sequential DAG executor. It assumes the
 // definition has passed Phase 6 executable validation; it only guards against
 // impossible states instead of re-validating the graph.
@@ -155,6 +165,7 @@ func (e *GraphExecutor) ExecuteWithOptions(ctx context.Context, definition workf
 		return ExecutionResult{}, err
 	}
 
+	progress, _ := observer.(NodeProgressObserver)
 	state := newExecutionState(len(plan.Order))
 	for _, id := range plan.Order {
 		if out, done := opts.Completed[id]; done {
@@ -163,6 +174,9 @@ func (e *GraphExecutor) ExecuteWithOptions(ctx context.Context, definition workf
 				out = node.NewNodeOutput(nil)
 			}
 			state.record(id, out)
+			if progress != nil {
+				progress.NodeReused(ctx, id, bound[id].spec.Type)
+			}
 			continue
 		}
 		if err := ctx.Err(); err != nil {
@@ -224,7 +238,11 @@ func (e *GraphExecutor) ExecuteWithOptions(ctx context.Context, definition workf
 				break
 			}
 			failure := &NodeExecutionError{NodeID: id, NodeType: b.spec.Type, Stage: StageExecute, Err: err, SideEffects: b.def.SideEffects}
-			if !waitForNodeRetry(ctx, opts.NodeRetry, b.def, failures+1, failure) {
+			onScheduled := func(time.Duration) {}
+			if progress != nil {
+				onScheduled = func(d time.Duration) { progress.NodeRetryScheduled(ctx, id, failures+1, d, failure) }
+			}
+			if !waitForNodeRetry(ctx, opts.NodeRetry, b.def, failures+1, failure, onScheduled) {
 				return fail(StageExecute, err)
 			}
 		}
@@ -274,7 +292,7 @@ func invokeNodeWithTimeout(ctx context.Context, impl node.Node, in node.NodeInpu
 // the node runs again in place, and waits for the policy's delay. It never
 // retries once ctx is done (cancellation and the execution deadline win) and
 // never schedules a retry that would start after ctx's deadline.
-func waitForNodeRetry(ctx context.Context, policy NodeRetryPolicy, def node.NodeDefinition, failures int, failure error) bool {
+func waitForNodeRetry(ctx context.Context, policy NodeRetryPolicy, def node.NodeDefinition, failures int, failure error, onScheduled func(time.Duration)) bool {
 	if policy == nil || ctx.Err() != nil {
 		return false
 	}
@@ -285,6 +303,7 @@ func waitForNodeRetry(ctx context.Context, policy NodeRetryPolicy, def node.Node
 	if deadline, has := ctx.Deadline(); has && time.Until(deadline) <= delay {
 		return false
 	}
+	onScheduled(delay)
 	if delay <= 0 {
 		return ctx.Err() == nil
 	}

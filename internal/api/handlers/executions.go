@@ -6,6 +6,7 @@ import (
 	"workflow-optimizer/internal/api/httpx"
 	"workflow-optimizer/internal/api/requests"
 	"workflow-optimizer/internal/api/responses"
+	"workflow-optimizer/internal/execution"
 )
 
 // Execute handles POST /api/v1/workflows/{workflowID}/execute. It persists a
@@ -39,12 +40,12 @@ func (h *Handlers) GetExecution(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	e, err := h.Executions.Get(r.Context(), user(r), id)
+	d, err := h.Observability.GetExecution(r.Context(), user(r), id)
 	if err != nil {
 		h.fail(w, r, err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, responses.NewExecution(e))
+	httpx.WriteJSON(w, http.StatusOK, responses.NewExecutionDetails(d))
 }
 
 // ListNodeExecutions handles GET /api/v1/executions/{executionID}/nodes.
@@ -53,14 +54,61 @@ func (h *Handlers) ListNodeExecutions(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	ns, err := h.Executions.Nodes(r.Context(), user(r), id)
+	ns, err := h.Observability.GetNodeExecutions(r.Context(), user(r), id)
 	if err != nil {
 		h.fail(w, r, err)
 		return
 	}
-	out := responses.List[responses.NodeExecution]{Items: make([]responses.NodeExecution, 0, len(ns))}
+	out := responses.List[responses.NodeExecutionDetails]{Items: make([]responses.NodeExecutionDetails, 0, len(ns))}
 	for _, n := range ns {
-		out.Items = append(out.Items, responses.NewNodeExecution(n))
+		out.Items = append(out.Items, responses.NewNodeExecutionDetails(n))
+	}
+	httpx.WriteJSON(w, http.StatusOK, out)
+}
+
+// ListEvents handles GET /api/v1/executions/{executionID}/events
+// (?page=&page_size=, at most 100 per page; chronological).
+func (h *Handlers) ListEvents(w http.ResponseWriter, r *http.Request) {
+	id, ok := h.pathID(w, r, "executionID")
+	if !ok {
+		return
+	}
+	page, err := httpx.ParsePageDefault(r, 50)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	events, total, err := h.Observability.GetEvents(r.Context(), user(r), id, execution.EventQuery{Page: page.Number, PageSize: page.Size})
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	out := responses.Events{Events: make([]responses.Event, 0, len(events)), Page: page.Number, PageSize: page.Size, Total: total}
+	for _, e := range events {
+		out.Events = append(out.Events, responses.NewEvent(e))
+	}
+	httpx.WriteJSON(w, http.StatusOK, out)
+}
+
+// ListWorkflowExecutions handles GET /api/v1/workflows/{workflowID}/executions.
+func (h *Handlers) ListWorkflowExecutions(w http.ResponseWriter, r *http.Request) {
+	id, ok := h.pathID(w, r, "workflowID")
+	if !ok {
+		return
+	}
+	page, err := httpx.ParsePage(r)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	execs, total, err := h.Observability.ListExecutions(r.Context(), user(r), id, page)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	out := responses.PageOf[responses.Execution]{Items: make([]responses.Execution, 0, len(execs)), Page: page.Number, PageSize: page.Size, Total: total}
+	for _, e := range execs {
+		out.Items = append(out.Items, responses.NewExecution(e))
 	}
 	httpx.WriteJSON(w, http.StatusOK, out)
 }

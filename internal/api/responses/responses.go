@@ -12,6 +12,7 @@ import (
 	"workflow-optimizer/internal/credential"
 	"workflow-optimizer/internal/execution"
 	"workflow-optimizer/internal/node"
+	"workflow-optimizer/internal/observability"
 	"workflow-optimizer/internal/workflow"
 	"workflow-optimizer/internal/workspace"
 )
@@ -282,4 +283,92 @@ func NewNodeType(d node.NodeDefinition) NodeType {
 	}
 	return NodeType{Type: d.Type, Name: d.Name, Category: string(d.Category), Description: d.Description, Role: string(d.Role),
 		SideEffects: side, Inputs: ports(d.Inputs), Outputs: ports(d.Outputs), Config: cfg}
+}
+
+// --- observability (Phase 14) -------------------------------------------------
+
+// TokenUsage is provider-reported token consumption.
+type TokenUsage struct {
+	InputTokens  int64 `json:"input_tokens"`
+	OutputTokens int64 `json:"output_tokens"`
+	TotalTokens  int64 `json:"total_tokens"`
+}
+
+func newUsage(u *application.TokenUsage) *TokenUsage {
+	if u == nil {
+		return nil
+	}
+	return &TokenUsage{InputTokens: u.InputTokens, OutputTokens: u.OutputTokens, TotalTokens: u.TotalTokens}
+}
+
+func durationMS(d *time.Duration) *int64 {
+	if d == nil {
+		return nil
+	}
+	ms := d.Milliseconds()
+	return &ms
+}
+
+// ExecutionDetails is GET /executions/{id}: the execution plus aggregates
+// derived from its node records. estimated_cost_usd is an estimate from
+// configured model prices, not billing.
+type ExecutionDetails struct {
+	Execution
+	DurationMS       *int64      `json:"duration_ms"`
+	NodeCount        int         `json:"node_count"`
+	Retries          int         `json:"retries"`
+	Usage            *TokenUsage `json:"usage"`
+	EstimatedCostUSD *float64    `json:"estimated_cost_usd"`
+}
+
+func NewExecutionDetails(d application.ExecutionDetails) ExecutionDetails {
+	return ExecutionDetails{Execution: NewExecution(d.Execution), DurationMS: durationMS(d.Duration), NodeCount: d.NodeCount,
+		Retries: d.Retries, Usage: newUsage(d.Usage), EstimatedCostUSD: d.EstimatedCost}
+}
+
+// NodeExecutionDetails is one node record for the debugger. Input and output
+// are redacted copies (absent when the policy hides them).
+type NodeExecutionDetails struct {
+	NodeExecution
+	ExecutionID      uuid.UUID      `json:"execution_id"`
+	CreatedAt        time.Time      `json:"created_at"`
+	Input            map[string]any `json:"input,omitempty"`
+	Output           map[string]any `json:"output,omitempty"`
+	Provider         *string        `json:"provider"`
+	Model            *string        `json:"model"`
+	Usage            *TokenUsage    `json:"usage"`
+	EstimatedCostUSD *float64       `json:"estimated_cost_usd"`
+}
+
+func NewNodeExecutionDetails(d application.NodeExecutionDetails) NodeExecutionDetails {
+	n := NewNodeExecution(d.Record)
+	n.DurationMS = durationMS(d.Duration)
+	return NodeExecutionDetails{NodeExecution: n, ExecutionID: d.Record.ExecutionID, CreatedAt: d.Record.CreatedAt,
+		Input: d.Input, Output: d.Output, Provider: d.Provider, Model: d.Model, Usage: newUsage(d.Usage), EstimatedCostUSD: d.EstimatedCost}
+}
+
+// Event is one execution event.
+type Event struct {
+	ID          uuid.UUID      `json:"id"`
+	ExecutionID uuid.UUID      `json:"execution_id"`
+	NodeID      *string        `json:"node_id"`
+	Type        string         `json:"type"`
+	Timestamp   time.Time      `json:"timestamp"`
+	Data        map[string]any `json:"data"`
+}
+
+// Events is GET /executions/{id}/events.
+type Events struct {
+	Events   []Event `json:"events"`
+	Page     int     `json:"page"`
+	PageSize int     `json:"page_size"`
+	Total    int     `json:"total"`
+}
+
+func NewEvent(e execution.ExecutionEvent) Event {
+	data := observability.RedactMap(e.Data)
+	if data == nil {
+		data = map[string]any{}
+	}
+	return Event{ID: e.ID, ExecutionID: e.ExecutionID, NodeID: e.NodeID, Type: string(e.Type), Timestamp: e.Timestamp, Data: data}
 }
