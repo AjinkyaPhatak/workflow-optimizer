@@ -36,6 +36,18 @@ const (
 type Message struct {
 	Role    Role   `json:"role"`
 	Content string `json:"content"`
+	// Images are pictures sent with the message (Phase D3; user messages
+	// only, for models that accept images).
+	Images []Image `json:"images,omitempty"`
+}
+
+// Image is a picture sent to the model: an https URL the provider fetches,
+// or inline bytes with their MIME type.
+type Image struct {
+	URL      string `json:"url,omitempty"`
+	MIMEType string `json:"mime_type,omitempty"`
+	// Data is never serialized (it can be megabytes, and may be private).
+	Data []byte `json:"-"`
 }
 
 // Request is a provider-neutral generation request.

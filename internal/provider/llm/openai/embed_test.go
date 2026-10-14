@@ -64,3 +64,30 @@ func TestEmbedFailures(t *testing.T) {
 		t.Fatal("no inputs")
 	}
 }
+
+// Phase D3: a message with images is sent as text and image parts.
+func TestImagesInRequest(t *testing.T) {
+	s, p := newServer(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = fmt.Fprint(w, `{"model":"gpt-4o","choices":[{"message":{"content":"A receipt"},"finish_reason":"stop"}]}`)
+	})
+	req := llm.Request{Model: "gpt-4o", Credential: cred(), Messages: []llm.Message{{Role: llm.RoleUser, Content: "What is this?",
+		Images: []llm.Image{{MIMEType: "image/png", Data: []byte{1, 2, 3}}, {URL: "https://example.test/a.jpg"}}}}}
+	if _, err := p.Generate(context.Background(), req); err != nil {
+		t.Fatal(err)
+	}
+	msg := s.bodies[0]["messages"].([]any)[0].(map[string]any)
+	parts := msg["content"].([]any)
+	if len(parts) != 3 || fmt.Sprint(parts[0]) != "map[text:What is this? type:text]" ||
+		fmt.Sprint(parts[1]) != "map[image_url:map[url:data:image/png;base64,AQID] type:image_url]" ||
+		fmt.Sprint(parts[2]) != "map[image_url:map[url:https://example.test/a.jpg] type:image_url]" {
+		t.Fatalf("parts: %v", parts)
+	}
+	// Without images, content stays plain text.
+	req.Messages[0].Images = nil
+	if _, err := p.Generate(context.Background(), req); err != nil {
+		t.Fatal(err)
+	}
+	if c := s.bodies[1]["messages"].([]any)[0].(map[string]any)["content"]; c != "What is this?" {
+		t.Fatalf("plain content: %v", c)
+	}
+}

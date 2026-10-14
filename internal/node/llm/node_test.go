@@ -84,7 +84,7 @@ func TestLLMNodeBuildsRequestAndOutput(t *testing.T) {
 	}
 	got := p.got
 	if got.Model != "m-1" || got.System != "Answer tersely" || *got.Temperature != 0.3 || *got.MaxTokens != 50 ||
-		len(got.Messages) != 1 || got.Messages[0] != (providerllm.Message{Role: providerllm.RoleUser, Content: "What is 2+2?"}) ||
+		len(got.Messages) != 1 || got.Messages[0].Role != providerllm.RoleUser || got.Messages[0].Content != "What is 2+2?" || len(got.Messages[0].Images) != 0 ||
 		got.Credential.Secret.Reveal() != secret {
 		t.Fatalf("request = %+v", got)
 	}

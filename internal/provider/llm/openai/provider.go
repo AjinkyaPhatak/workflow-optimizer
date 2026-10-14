@@ -3,6 +3,7 @@ package openai
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -84,9 +85,38 @@ func New(opts Options) (*Provider, error) {
 	return &Provider{baseURL: base, client: client}, nil
 }
 
+// chatMessage content is text, or for messages with images a list of
+// parts: {type: text} and {type: image_url, image_url: {url}}.
 type chatMessage struct {
 	Role    string `json:"role"`
-	Content string `json:"content"`
+	Content any    `json:"content"`
+}
+
+type imageURL struct {
+	URL string `json:"url"`
+}
+
+type contentPart struct {
+	Type     string    `json:"type"`
+	Text     string    `json:"text,omitempty"`
+	ImageURL *imageURL `json:"image_url,omitempty"`
+}
+
+// content is a message's text, with its images as parts (bytes as a data
+// URL).
+func content(m llm.Message) any {
+	if len(m.Images) == 0 {
+		return m.Content
+	}
+	parts := []contentPart{{Type: "text", Text: m.Content}}
+	for _, img := range m.Images {
+		u := img.URL
+		if len(img.Data) > 0 {
+			u = "data:" + img.MIMEType + ";base64," + base64.StdEncoding.EncodeToString(img.Data)
+		}
+		parts = append(parts, contentPart{Type: "image_url", ImageURL: &imageURL{URL: u}})
+	}
+	return parts
 }
 
 type chatRequest struct {
@@ -180,7 +210,7 @@ func toChatRequest(req llm.Request) chatRequest {
 		msgs = append(msgs, chatMessage{Role: string(llm.RoleSystem), Content: req.System})
 	}
 	for _, m := range req.Messages {
-		msgs = append(msgs, chatMessage{Role: string(m.Role), Content: m.Content})
+		msgs = append(msgs, chatMessage{Role: string(m.Role), Content: content(m)})
 	}
 	return chatRequest{Model: req.Model, Messages: msgs, Temperature: req.Temperature, MaxCompletionTokens: req.MaxTokens}
 }

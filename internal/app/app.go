@@ -114,7 +114,7 @@ func BootstrapWith(cfg config.Config, deps Dependencies) (*Application, error) {
 	}
 	llmDeps := llm.Dependencies{}
 	if deps.Credentials != nil {
-		llmDeps = llm.Dependencies{Providers: providerReg, Credentials: deps.Credentials}
+		llmDeps = llm.Dependencies{Providers: providerReg, Credentials: deps.Credentials, Files: deps.Files}
 	}
 
 	// 2. Construct Node Registry

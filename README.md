@@ -462,3 +462,17 @@ returns `context` (numbered passages ready for an LLM prompt), `results`
 document ID derives from the node's idempotency key, so a retried run finds
 the first document). The **Knowledge** page (`/knowledge`) creates bases,
 adds files or text, shows indexing status with Retry, and has a test search.
+
+## Images in the LLM node (Phase D3)
+
+The LLM node sends images with the prompt to models that accept them
+(OpenAI GPT-4o, GPT-4.1, GPT-5...): the **Image** setting (a picker of the
+workspace's PNG, JPEG, GIF and WebP files), **Image URLs** (one `https://`
+URL per line, `{{variables}}` filled in) and the `images` input (a file ID
+or URL, an object with `file_id` or `url`, or a list of these). Up to 10
+images per request; files are read from the execution's workspace (20 MB
+each, 30 MB together) and sent inline as data URLs; URLs are fetched by the
+provider. A file of another workspace is not found, a non-image file or a
+non-https URL fails with `INVALID_INPUT` before any provider call.
+Provider-neutral: `llm.Message.Images`; the OpenAI provider sends text and
+`image_url` content parts.
