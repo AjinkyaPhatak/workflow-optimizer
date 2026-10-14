@@ -5,6 +5,7 @@ import (
 	"sort"
 
 	"workflow-optimizer/internal/node"
+	"workflow-optimizer/internal/workflow"
 )
 
 // resolveInputs builds the runtime input ports for one node from its incoming
@@ -61,8 +62,11 @@ func resolveInputs(
 				return nil, fmt.Errorf("%w: edge %q from node %q has not produced a result", ErrMissingUpstreamResult, e.ID, e.Source)
 			}
 			v, ok := out.GetPort(e.SourcePort)
+			if !ok && state.Failed[e.Source] {
+				continue // a handled failure (Phase E2): its outputs are absent
+			}
 			if !ok {
-				srcPort, declared := bound[e.Source].def.GetOutputPort(e.SourcePort)
+				srcPort, declared := workflow.OutputPort(bound[e.Source].def, bound[e.Source].spec, e.SourcePort)
 				if declared && !srcPort.Required {
 					continue // optional output not emitted: this edge is inactive
 				}

@@ -84,6 +84,19 @@ export interface WorkflowNode {
   name: string;
   position: Position | null;
   config: Record<string, unknown>;
+  /** Execution settings (Phase E2); absent for the defaults. */
+  settings?: NodeSettings;
+}
+
+export type OnErrorMode = "stop" | "continue" | "error_output";
+
+/** Per-node error handling and retries (Phase E2). */
+export interface NodeSettings {
+  on_error?: OnErrorMode;
+  /** Attempts after a temporary failure, 1 to 5 (absent: server default). */
+  retry_attempts?: number;
+  /** Pause between attempts, 0 to 30000 ms. */
+  retry_delay_ms?: number;
 }
 
 export interface WorkflowEdge {

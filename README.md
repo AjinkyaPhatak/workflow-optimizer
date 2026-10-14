@@ -476,3 +476,48 @@ provider. A file of another workspace is not found, a non-image file or a
 non-https URL fails with `INVALID_INPUT` before any provider call.
 Provider-neutral: `llm.Message.Images`; the OpenAI provider sends text and
 `image_url` content parts.
+
+## Branching (Phase E1)
+
+The engine runs a node only if at least one of its incoming connections is
+**active**: its source ran and emitted that output. A connection is inactive
+when its source was skipped, or did not emit that (optional) output, e.g.
+the untaken side of a Condition. A node whose every connection is inactive
+is **skipped**, and so is everything only it feeds; a node with at least one
+active input runs (inactive inputs are unset), so **Merge** continues with
+whichever branch ran. A node that fails to emit a *required* output is still
+a failure. `{{variables}}` pointing at a skipped node resolve to nothing
+(empty text, or null as a whole value). Skips are reported as `NODE_SKIPPED`
+events with reason `branch_not_taken` (reused nodes keep
+`completed_in_previous_attempt`) and the run view shows them as Skipped;
+skipped nodes have no node execution record. A skipped output node gives no
+workflow output.
+
+**Condition** checks Value (or, when empty, the connected input) against
+Compare with an operator: equals, does not equal, contains (text, or an item
+of a list), does not contain, starts/ends with, greater/less than (or equal),
+is empty / not empty, is true / false, matches a regex; text comparisons
+ignore case unless Case sensitive, numbers compare numerically. More rules (a
+JSON list) combine with all (AND) or any (OR). It emits the input on exactly
+one of `true`/`false`, plus `result`. Unconfigured, it branches on whether
+the input is truthy (as before). **Switch** (`switch`) compares one value with
+Case 1–4 (first match wins) and continues on that route or `otherwise`, plus
+`route`. **Merge** adds `value` (the first data that arrived) and modes
+combine (unchanged default), first available and list.
+
+## Error handling per node (Phase E2)
+
+Each node may carry `settings` beside its `config` in the definition:
+`on_error` (`stop`, the default; `continue`; `error_output`),
+`retry_attempts` (1–5) and `retry_delay_ms` (0–30000); the validator checks
+them (`INVALID_NODE_SETTINGS`). With **continue** a failure (including a
+settings/`{{variable}}` resolution failure) is recorded (the node shows
+FAILED, a `NODE_FAILED` event) and the run goes on: what only that node
+feeds is skipped, and the execution can still complete. **error_output**
+also gives the node an extra `error` output (`{code, message, node_id}`) to
+connect a handler branch; it exists only with that setting
+(`workflow.OutputPort`), and switching the setting off in the editor removes
+its connections. Retry settings override the server default for that node
+(fixed pause, or the server's longer Retry-After) but never change *which*
+failures are retried: only temporary ones, and never a write that may have
+applied. The editor's **When this node fails** section edits them.

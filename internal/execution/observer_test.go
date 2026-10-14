@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 
 	"workflow-optimizer/internal/execution"
+	"workflow-optimizer/internal/node"
 	"workflow-optimizer/internal/workflow"
 )
 
@@ -258,5 +259,26 @@ func TestEventsForBranchNotTaken(t *testing.T) {
 	}
 	if strings.Contains(got, "NODE_STARTED:Big") {
 		t.Fatalf("a skipped node started: %s", got)
+	}
+}
+
+// Phase E2: a handled failure is recorded and reported, and the execution
+// still completes.
+func TestEventsForHandledFailure(t *testing.T) {
+	def := chainInAOut()
+	def.Nodes[1].Settings = &workflow.NodeSettings{OnError: workflow.OnErrorOutput}
+	def.Nodes = append(def.Nodes, probe("H"), exit("oH"))
+	def.Edges = append(def.Edges, edge("A", "error", "H", "in"), edge("H", "out", "oH", "value"))
+	r, log := observedRunner(t, def, nil)
+	r.env.rec.hooks["A"] = func(context.Context) error { return node.NewNodeError(node.ErrCodeInvalidInput, "bad", false) }
+	id := r.create(t, map[string]any{})
+	if _, err := r.runner.Run(context.Background(), id); err != nil {
+		t.Fatal(err)
+	}
+	got := log.String()
+	for _, want := range []string{"NODE_FAILED:A", "NODE_SKIPPED:out", "NODE_COMPLETED:H", "EXECUTION_COMPLETED"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("events %s: missing %s", got, want)
+		}
 	}
 }

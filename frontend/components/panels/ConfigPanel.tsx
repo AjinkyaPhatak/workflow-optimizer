@@ -1,5 +1,6 @@
 "use client";
 
+import { FailureSettings } from "@/components/panels/FailureSettings";
 import { DynamicSelect, KeyValueField } from "@/components/panels/SettingFields";
 import { useFieldOptions } from "@/features/nodes/useFieldOptions";
 import Link from "next/link";
@@ -422,6 +423,7 @@ export function ConfigPanel() {
             </div>
           </div>
         )}
+        {def && def.role !== "entry" && def.role !== "exit" && <FailureSettings node={node} def={def} readonly={readonly} />}
         {!readonly && (
           <div className="section">
             <button className="danger" onClick={() => removeNodes([node.id])}>Delete node</button>

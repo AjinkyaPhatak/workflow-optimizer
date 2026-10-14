@@ -33,6 +33,7 @@ const (
 	ErrMissingOutputNode        ValidationErrorCode = "MISSING_OUTPUT_NODE"
 	ErrInvalidVariableReference ValidationErrorCode = "INVALID_VARIABLE_REFERENCE"
 	ErrInvalidVariable          ValidationErrorCode = "INVALID_VARIABLE"
+	ErrInvalidNodeSettings      ValidationErrorCode = "INVALID_NODE_SETTINGS"
 )
 
 type ValidationError struct {
@@ -111,6 +112,7 @@ func (v *GraphValidator) ValidateWithOptions(d Definition, options ValidationOpt
 			exits = append(exits, n.ID)
 		}
 		v.config(n, def, add)
+		nodeSettings(n, add)
 	}
 	v.variables(d, ns, add)
 	in := map[string]map[string]int{}
@@ -139,7 +141,7 @@ func (v *GraphValidator) ValidateWithOptions(d Definition, options ValidationOpt
 		if e.Source == e.Target {
 			add(ErrSelfReference, "edge connects node to itself", s.ID, e.ID, "", nil)
 		}
-		sp, out := ds[s.ID].GetOutputPort(e.SourcePort)
+		sp, out := OutputPort(ds[s.ID], s, e.SourcePort)
 		_, sin := ds[s.ID].GetInputPort(e.SourcePort)
 		tp, inp := ds[t.ID].GetInputPort(e.TargetPort)
 		_, tout := ds[t.ID].GetOutputPort(e.TargetPort)
@@ -422,5 +424,24 @@ func malformedInterpolation(text string) bool {
 			return true
 		}
 		rest = rest[end+2:]
+	}
+}
+
+// nodeSettings checks a node's execution settings (Phase E2).
+func nodeSettings(n Node, add func(ValidationErrorCode, string, string, string, string, map[string]any)) {
+	st := n.Settings
+	if st == nil {
+		return
+	}
+	switch st.OnError {
+	case "", OnErrorStop, OnErrorContinue, OnErrorOutput:
+	default:
+		add(ErrInvalidNodeSettings, "on_error must be stop, continue or error_output", n.ID, "", "on_error", nil)
+	}
+	if st.RetryAttempts != nil && (*st.RetryAttempts < 1 || *st.RetryAttempts > MaxRetryAttempts) {
+		add(ErrInvalidNodeSettings, "retry attempts must be from 1 to 5", n.ID, "", "retry_attempts", nil)
+	}
+	if st.RetryDelayMS != nil && (*st.RetryDelayMS < 0 || *st.RetryDelayMS > MaxRetryDelayMS) {
+		add(ErrInvalidNodeSettings, "retry delay must be from 0 to 30000 ms", n.ID, "", "retry_delay_ms", nil)
 	}
 }

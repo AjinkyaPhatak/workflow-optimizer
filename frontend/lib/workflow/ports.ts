@@ -3,7 +3,20 @@
 // immediately, but the backend graph validator stays authoritative and runs
 // on save, validate and publish.
 
-import type { NodeDefinition, ValueType, WorkflowDefinition } from "@/types/api";
+import type { NodeDefinition, PortDefinition, ValueType, WorkflowDefinition, WorkflowNode } from "@/types/api";
+
+/** The extra output of a node set to "go to the error output" (Phase E2). */
+export const ERROR_PORT: PortDefinition = {
+  name: "error", type: "json", required: false, multiple: false, description: "The failure, when the node fails: code, message, node_id",
+};
+
+/** A node's outputs: its type's, plus the error output when its settings
+ * route failures there (same rule as workflow.OutputPort). */
+export function nodeOutputs(def: NodeDefinition | undefined, node: Pick<WorkflowNode, "settings">): PortDefinition[] {
+  const outs = def?.outputs ?? [];
+  if (node.settings?.on_error === "error_output" && !outs.some((p) => p.name === ERROR_PORT.name)) return [...outs, ERROR_PORT];
+  return outs;
+}
 
 /** Same rule as workflow.PortTypesCompatible: equal types, or either side json. */
 export function portTypesCompatible(source: ValueType, target: ValueType): boolean {
@@ -31,7 +44,7 @@ export function checkConnection(
   const sourceDef = catalog.get(source.type);
   const targetDef = catalog.get(target.type);
   if (!sourceDef || !targetDef) return { ok: false, reason: "Unknown node type" };
-  const out = sourceDef.outputs.find((p) => p.name === c.sourcePort);
+  const out = nodeOutputs(sourceDef, source).find((p) => p.name === c.sourcePort);
   const inp = targetDef.inputs.find((p) => p.name === c.targetPort);
   if (!out) return { ok: false, reason: `"${c.sourcePort}" is not an output of ${sourceDef.name}` };
   if (!inp) return { ok: false, reason: `"${c.targetPort}" is not an input of ${targetDef.name}` };

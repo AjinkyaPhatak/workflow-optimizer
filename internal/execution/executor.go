@@ -205,19 +205,40 @@ func (e *GraphExecutor) ExecuteWithOptions(ctx context.Context, definition workf
 		failBeforeExecute := func(stage Stage, cause error) (ExecutionResult, error) {
 			if observer != nil {
 				if obsErr := observer.NodeFailedBeforeExecute(ctx, id, b.spec.Type, stage, cause); obsErr != nil {
-					cause = errors.Join(cause, obsErr)
+					return fail(stage, errors.Join(cause, obsErr))
 				}
 			}
 			return fail(stage, cause)
 		}
-
-		cfg, err := resolveConfig(b.spec.Config, variableScope{nodeID: id, plan: &plan, results: state.Results, skipped: state.Skipped, input: input})
-		if err != nil {
-			return failBeforeExecute(StageResolveConfig, err)
+		// handled reports a failure the node's settings let the run survive
+		// (Phase E2): it is recorded, and the run goes on.
+		handled := func(stage Stage, cause error) bool {
+			if b.spec.OnErrorMode() == workflow.OnErrorStop || ctx.Err() != nil {
+				return false
+			}
+			state.record(id, failedOutput(b.spec, &NodeExecutionError{NodeID: id, NodeType: b.spec.Type, Stage: stage, Err: cause, SideEffects: b.def.SideEffects}))
+			state.Failed[id] = true
+			return true
 		}
-		ports, err := resolveInputs(id, b.def, &plan, state, bound)
+
+		stage := StageResolveConfig
+		cfg, err := resolveConfig(b.spec.Config, variableScope{nodeID: id, plan: &plan, results: state.Results, skipped: state.Skipped, input: input})
+		var ports map[string]node.Value
+		if err == nil {
+			stage = StageResolveInputs
+			ports, err = resolveInputs(id, b.def, &plan, state, bound)
+		}
 		if err != nil {
-			return failBeforeExecute(StageResolveInputs, err)
+			if b.spec.OnErrorMode() != workflow.OnErrorStop && ctx.Err() == nil {
+				if observer != nil {
+					if obsErr := observer.NodeFailedBeforeExecute(ctx, id, b.spec.Type, stage, err); obsErr != nil {
+						return fail(stage, errors.Join(err, obsErr))
+					}
+				}
+				handled(stage, err)
+				continue
+			}
+			return failBeforeExecute(stage, err)
 		}
 		if b.def.Role == node.SemanticRoleEntry && input != nil {
 			if _, wired := ports[EntryInputPort]; !wired {
@@ -258,7 +279,10 @@ func (e *GraphExecutor) ExecuteWithOptions(ctx context.Context, definition workf
 			if progress != nil {
 				onScheduled = func(d time.Duration) { progress.NodeRetryScheduled(ctx, id, failures+1, d, failure) }
 			}
-			if !waitForNodeRetry(ctx, opts.NodeRetry, b.def, failures+1, failure, onScheduled) {
+			if !waitForNodeRetry(ctx, nodeRetryPolicy(opts.NodeRetry, b.spec), b.def, failures+1, failure, onScheduled) {
+				if handled(StageExecute, err) {
+					break
+				}
 				return fail(StageExecute, err)
 			}
 		}
@@ -392,11 +416,61 @@ func inactive(id string, plan *Plan, state *ExecutionState, bound map[string]bou
 		if _, emitted := out.GetPort(e.SourcePort); emitted {
 			return false
 		}
+		if state.Failed[e.Source] {
+			continue // a handled failure (Phase E2) emits only its error output
+		}
 		// A required output that was not emitted is a broken node, not a
 		// branch: the node runs and input resolution reports it.
-		if p, declared := bound[e.Source].def.GetOutputPort(e.SourcePort); !declared || p.Required {
+		if p, declared := workflow.OutputPort(bound[e.Source].def, bound[e.Source].spec, e.SourcePort); !declared || p.Required {
 			return false
 		}
 	}
 	return true
+}
+
+// failedOutput is what a failed node set to continue leaves for the run
+// (Phase E2): nothing (so whatever only it feeds is skipped), or for
+// OnErrorOutput the failure on the error output.
+func failedOutput(spec workflow.Node, err error) node.NodeOutput {
+	out := node.NewNodeOutput(nil)
+	if spec.OnErrorMode() == workflow.OnErrorOutput {
+		e := ErrorFromExecution(err)
+		out.SetPort(workflow.ErrorPort, node.NewObjectValue(map[string]any{"code": string(e.Code), "message": e.Message, "node_id": spec.ID}))
+	}
+	return out
+}
+
+// fixedBackoff waits the same time between attempts, or a server's longer
+// Retry-After.
+type fixedBackoff time.Duration
+
+func (f fixedBackoff) Delay(_ int, retryAfter time.Duration) time.Duration {
+	if retryAfter > time.Duration(f) {
+		return retryAfter
+	}
+	return time.Duration(f)
+}
+
+// nodeRetryPolicy applies a node's own retry settings (Phase E2) over the
+// default policy. Which failures are retried does not change: only
+// temporary ones, and never a write that may have been applied.
+func nodeRetryPolicy(def NodeRetryPolicy, spec workflow.Node) NodeRetryPolicy {
+	st := spec.Settings
+	if st == nil || (st.RetryAttempts == nil && st.RetryDelayMS == nil) {
+		return def
+	}
+	p := NodeRetry{MaxInvocations: 3, Backoff: fixedBackoff(time.Second), MaxInlineDelay: time.Duration(workflow.MaxRetryDelayMS) * time.Millisecond}
+	if base, ok := def.(NodeRetry); ok {
+		p.MaxInvocations, p.Backoff = base.MaxInvocations, base.Backoff
+	}
+	if st.RetryAttempts != nil {
+		p.MaxInvocations = *st.RetryAttempts
+	}
+	if st.RetryDelayMS != nil {
+		p.Backoff = fixedBackoff(time.Duration(*st.RetryDelayMS) * time.Millisecond)
+	}
+	if p.Backoff == nil {
+		p.Backoff = fixedBackoff(time.Second)
+	}
+	return p
 }

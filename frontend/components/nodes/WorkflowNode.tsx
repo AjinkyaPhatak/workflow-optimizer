@@ -1,5 +1,6 @@
 "use client";
 
+import { nodeOutputs } from "@/lib/workflow/ports";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import { memo } from "react";
 import { useCanvasState } from "@/components/canvas/CanvasContext";
@@ -80,7 +81,7 @@ function WorkflowNodeView({ id, data, selected, dragging }: NodeProps<CanvasNode
       </div>
       <div className="wf-ports">
         <div>{def?.inputs.map((p) => port(p, "in"))}</div>
-        <div>{def?.outputs.map((p) => port(p, "out"))}</div>
+        <div>{nodeOutputs(def, data.node).map((p) => port(p, "out"))}</div>
       </div>
       {nodeIssues.length > 0 && (
         <div className={`wf-node-errors ${hasError ? "" : "warning"}`}>

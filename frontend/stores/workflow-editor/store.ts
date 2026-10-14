@@ -5,7 +5,7 @@
 
 import { applyEdgeChanges, applyNodeChanges, type EdgeChange, type NodeChange } from "@xyflow/react";
 import { create } from "zustand";
-import type { NodeDefinition, Position, ValidationResult, WorkflowDefinition, WorkflowEdge, WorkflowVariable } from "@/types/api";
+import type { NodeDefinition, NodeSettings, Position, ValidationResult, WorkflowDefinition, WorkflowEdge, WorkflowVariable } from "@/types/api";
 import { createNode, emptyDefinition, newEdgeId, normalizeDefinition, stableStringify } from "@/lib/workflow/definition";
 import { fromCanvas, toCanvas, type CanvasNode } from "@/lib/workflow/mapping";
 import { pasteFragment, type Fragment } from "@/lib/workflow/clipboard";
@@ -38,6 +38,8 @@ export interface WorkflowEditorState {
   moveNode: (id: string, position: Position) => void;
   renameNode: (id: string, name: string) => void;
   setConfigValue: (id: string, key: string, value: unknown) => void;
+  /** Phase E2: merges execution settings (undefined values remove a key). */
+  setNodeSettings: (id: string, patch: Partial<NodeSettings>) => void;
   /** Replaces the workflow variables (one undoable step); [] removes them. */
   setVariables: (variables: WorkflowVariable[]) => void;
   connect: (c: ConnectionAttempt, catalog: Map<string, NodeDefinition>) => ConnectionCheck;
@@ -145,6 +147,32 @@ export const useEditorStore = create<WorkflowEditorState>((set, get) => {
         config[key] = value;
       }
       commit({ ...definition, nodes: definition.nodes.map((n) => (n.id === id ? { ...n, config } : n)) });
+    },
+
+    setNodeSettings: (id, patch) => {
+      const { definition } = get();
+      const node = definition.nodes.find((n) => n.id === id);
+      if (!node) return;
+      const settings: NodeSettings = { ...(node.settings ?? {}) };
+      const bag = settings as Record<string, unknown>;
+      for (const [k, v] of Object.entries(patch) as [string, unknown][]) {
+        if (v === undefined || v === "" || (k === "on_error" && v === "stop")) delete bag[k];
+        else bag[k] = v;
+      }
+      if (stableStringify(settings) === stableStringify(node.settings ?? {})) return;
+      let edges = definition.edges;
+      if (settings.on_error !== "error_output") {
+        // The error output is gone: so are its connections.
+        edges = edges.filter((e) => !(e.source === id && e.source_port === "error"));
+      }
+      const nodes = definition.nodes.map((n) => {
+        if (n.id !== id) return n;
+        const next = { ...n };
+        if (Object.keys(settings).length) next.settings = settings;
+        else delete next.settings;
+        return next;
+      });
+      commit({ ...definition, nodes, edges });
     },
 
     setVariables: (variables) => {

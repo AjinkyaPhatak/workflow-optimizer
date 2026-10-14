@@ -119,6 +119,9 @@ type Node struct {
 	Name     string         `json:"name"`
 	Position *Position      `json:"position"`
 	Config   map[string]any `json:"config"`
+	// Settings are execution settings (Phase E2: error handling, retries);
+	// nil for the defaults.
+	Settings *NodeSettings `json:"settings,omitempty"`
 }
 
 // Position is presentation metadata and has no execution semantics.

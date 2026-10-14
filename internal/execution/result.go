@@ -13,6 +13,9 @@ type ExecutionState struct {
 	// Skipped holds the nodes that did not run because every input was
 	// inactive: a branch not taken (Phase E1).
 	Skipped map[string]bool
+	// Failed holds the nodes that failed with error handling set to
+	// continue (Phase E2); their (empty or error) output is in Results.
+	Failed map[string]bool
 }
 
 func newExecutionState(size int) *ExecutionState {
@@ -20,6 +23,7 @@ func newExecutionState(size int) *ExecutionState {
 		Results:   make(map[string]node.NodeOutput, size),
 		Completed: make([]string, 0, size),
 		Skipped:   map[string]bool{},
+		Failed:    map[string]bool{},
 	}
 }
 

@@ -72,6 +72,7 @@ export function fromCanvas(nodes: CanvasNode[], edges: CanvasEdge[], base: Pick<
         name: node.name,
         position: unmoved ? null : { x: cn.position.x, y: cn.position.y },
         config: structuredClone(node.config),
+        ...(node.settings ? { settings: structuredClone(node.settings) } : {}),
       };
     }),
     edges: edges.map(

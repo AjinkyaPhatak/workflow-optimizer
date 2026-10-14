@@ -9,6 +9,7 @@
 //   {{<node_id>.<port>}}         an output port of an UPSTREAM node (the
 //                                resolver rejects non-upstream nodes)
 
+import { nodeOutputs } from "./ports";
 import type { NodeDefinition, ValueType, WorkflowDefinition } from "@/types/api";
 
 export interface VariableOption {
@@ -89,7 +90,7 @@ export function availableVariables(definition: WorkflowDefinition, catalog: Map<
     const n = definition.nodes.find((x) => x.id === id);
     const def = n && catalog.get(n.type);
     if (!n || !def) continue;
-    for (const p of def.outputs) {
+    for (const p of nodeOutputs(def, n)) {
       nodes.options.push({ expression: `${n.id}.${p.name}`, label: `${n.name} › ${p.name}`, type: p.type, description: p.description || undefined });
     }
   }
