@@ -6,3 +6,4 @@ export { nodeApi } from "./nodes";
 export { projectApi } from "./projects";
 export { workflowApi } from "./workflows";
 export { connectedAccountApi } from "./connectedAccounts";
+export { fileApi } from "./files";

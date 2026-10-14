@@ -9,6 +9,11 @@ const config: NextConfig = {
   reactStrictMode: true,
   // Do not generate AGENTS.md / CLAUDE.md in the project on `next dev`.
   agentRules: false,
+  experimental: {
+    // Proxied request bodies are buffered up to this size (default 10 MB);
+    // file uploads go up to 20 MB (Phase D1).
+    proxyClientMaxBodySize: 25 * 1024 * 1024,
+  },
   async rewrites() {
     return [{ source: "/api/v1/:path*", destination: `${backend}/api/v1/:path*` }];
   },

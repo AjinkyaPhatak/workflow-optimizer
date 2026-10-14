@@ -227,6 +227,24 @@ func migrationsPath(t *testing.T) string {
 	return filepath.Join(filepath.Dir(file), "..", "..", "migrations")
 }
 
+// headVersion is the newest migration's version (NNNNNN_name.up.sql), so
+// tests do not change with every new migration.
+func headVersion(t *testing.T) uint {
+	t.Helper()
+	ups, err := filepath.Glob(filepath.Join(migrationsPath(t), "*.up.sql"))
+	if err != nil || len(ups) == 0 {
+		t.Fatalf("list migrations: %v", err)
+	}
+	var head uint
+	for _, u := range ups {
+		var v uint
+		if _, err := fmt.Sscanf(filepath.Base(u), "%d_", &v); err == nil && v > head {
+			head = v
+		}
+	}
+	return head
+}
+
 func newEnv(t *testing.T) *env {
 	t.Helper()
 	base, redisURL := os.Getenv("TEST_DATABASE_URL"), os.Getenv("TEST_REDIS_URL")

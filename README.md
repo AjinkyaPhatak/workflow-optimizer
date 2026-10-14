@@ -51,7 +51,7 @@ LLM node -> provider registry ("openai") -> OpenAI provider (Chat Completions)
 
 ## REST API (Phase 12)
 
-`go run ./cmd/api` serves `/api/v1` on `API_ADDR` (default `:8080`). It needs `DATABASE_URL`, `REDIS_URL`, `AUTH_TOKEN_SECRET` (at least 32 bytes) and, to store credentials, `CREDENTIAL_ENCRYPTION_KEY`; `AUTH_TOKEN_TTL` defaults to 24h. Apply the migrations first (`000005` adds workflow soft delete, `000007` connected accounts); the processes do not migrate.
+`go run ./cmd/api` serves `/api/v1` on `API_ADDR` (default `:8080`). It needs `DATABASE_URL`, `REDIS_URL`, `AUTH_TOKEN_SECRET` (at least 32 bytes) and, to store credentials, `CREDENTIAL_ENCRYPTION_KEY`; `AUTH_TOKEN_TTL` defaults to 24h. Apply the migrations first (`000005` adds workflow soft delete, `000007` connected accounts, `000008` files); the processes do not migrate.
 
 ```
 HTTP -> handler -> application service -> repositories / queue.Submitter -> PostgreSQL, Redis -> worker -> graph executor
@@ -405,3 +405,26 @@ the `{{variable}}` picker instead of JSON; a new row left empty is not stored
 like the C4–C7 nodes: text is used as the port describes, anything else
 leaves the settings in charge. Any node can therefore precede any
 integration node and feed its `{{variables}}`.
+
+## Files (Phase D1)
+
+Workspace files (migration `000008_files`): documents and images that
+workflows read by file ID. The bytes are stored in PostgreSQL (`bytea`)
+next to their metadata, at most 20 MB per file. `POST /files`
+(multipart/form-data: `workspace_id`, `file`), `GET /files?workspace_id=`,
+`GET /files/{id}`, `GET /files/{id}/content`, `DELETE /files/{id}`; members
+who may edit workflows upload and delete, any member lists and downloads.
+Downloads are always attachments with `nosniff` and a sandboxing CSP, and
+HTML/SVG/XML are served as `application/octet-stream`, so an uploaded page
+never runs on this site. Names are cleaned (no paths or control
+characters); the type comes from the extension, else the content. The
+frontend proxy accepts request bodies up to 25 MB
+(`experimental.proxyClientMaxBodySize`).
+
+The **Extract Text** node (`extract_text`, category knowledge base) reads a
+file's text: PDF (`github.com/ledongthuc/pdf`), Word `.docx`, HTML (visible
+text), plain text, Markdown, CSV, JSON and XML, up to 2 MB of text
+(`truncated` tells). The file is the connected file ID (text or
+`{file_id}`), else the File setting, a picker of the workspace's files. A
+file of another workspace is not found. The **Files** page (`/files`)
+uploads (drag and drop), lists, downloads and deletes files.

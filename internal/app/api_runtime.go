@@ -16,6 +16,7 @@ import (
 	"workflow-optimizer/internal/config"
 	"workflow-optimizer/internal/credential"
 	"workflow-optimizer/internal/execution"
+	"workflow-optimizer/internal/files"
 	"workflow-optimizer/internal/infrastructure/postgres"
 	redisinfra "workflow-optimizer/internal/infrastructure/redis"
 	"workflow-optimizer/internal/oauth"
@@ -100,7 +101,9 @@ func (rt *APIRuntime) build(enc credential.SecretEncryptor, tokens auth.TokenSer
 	credentialRepo, credentials := chain.repo, chain.service
 	// The same bootstrap as the worker: the API validates against exactly the
 	// node registry the workers execute with.
-	engine, err := BootstrapWith(rt.cfg, chain.dependencies(ext))
+	deps := chain.dependencies(ext)
+	deps.Files = postgres.NewFileRepository(rt.store)
+	engine, err := BootstrapWith(rt.cfg, deps)
 	if err != nil {
 		return err
 	}
@@ -153,6 +156,7 @@ func (rt *APIRuntime) build(enc credential.SecretEncryptor, tokens auth.TokenSer
 		ConnectedAccounts: connected,
 		Nodes:             engine.NodeRegistry,
 		NodeOptions:       application.NewNodeOptionsService(access, engine.NodeRegistry),
+		Files:             application.NewFileService(access, files.NewService(postgres.NewFileRepository(rt.store))),
 		Ready: []handlers.Check{
 			{Name: "postgres", Check: rt.store.Pool.Ping},
 			{Name: "redis", Check: rt.redis.Ping},

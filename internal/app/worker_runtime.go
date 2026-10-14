@@ -104,7 +104,9 @@ func NewWorkerWith(ctx context.Context, cfg config.Config, logger *slog.Logger, 
 		store.Close()
 		return nil, err
 	}
-	application, err := BootstrapWith(cfg, chain.dependencies(ext))
+	deps := chain.dependencies(ext)
+	deps.Files = postgres.NewFileRepository(store)
+	application, err := BootstrapWith(cfg, deps)
 	if err != nil {
 		store.Close()
 		return nil, err

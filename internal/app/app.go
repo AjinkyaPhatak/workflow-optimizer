@@ -8,6 +8,7 @@ import (
 
 	"workflow-optimizer/internal/config"
 	"workflow-optimizer/internal/credential"
+	"workflow-optimizer/internal/files"
 	"workflow-optimizer/internal/integration"
 	"workflow-optimizer/internal/integration/calendar"
 	"workflow-optimizer/internal/integration/discord"
@@ -16,6 +17,7 @@ import (
 	"workflow-optimizer/internal/integration/sheets"
 	"workflow-optimizer/internal/node"
 	"workflow-optimizer/internal/node/condition"
+	"workflow-optimizer/internal/node/extract"
 	nodehttp "workflow-optimizer/internal/node/http"
 	"workflow-optimizer/internal/node/input"
 	nodejson "workflow-optimizer/internal/node/json"
@@ -63,6 +65,9 @@ type Dependencies struct {
 	// HTTPTransport replaces the HTTP request node's transport (tests; nil:
 	// the private-network-blocking default).
 	HTTPTransport http.RoundTripper
+	// Files reads workspace files for the file nodes (Phase D1; nil: those
+	// nodes fail with a configuration error).
+	Files files.Reader
 	// Notion configures the Notion API client (Phase C5).
 	Notion notion.Options
 	// Discord configures the Discord API client (Phase C6). An empty bot
@@ -123,6 +128,9 @@ func BootstrapWith(cfg config.Config, deps Dependencies) (*Application, error) {
 		{node: prompt.New(), def: prompt.Definition()},
 		{node: llm.New(llmDeps), def: llm.DefinitionFor(providerllm.Describe(providerReg))},
 		{node: structured_output.New(nil), def: structured_output.Definition()},
+
+		// Knowledge category (Phase D)
+		{node: extract.New(deps.Files), def: extract.Definition()},
 
 		// Integration category
 		{node: nodehttp.NewWith(nodehttp.Options{Credentials: deps.Credentials, AllowPrivateNetworks: cfg.HTTPAllowPrivateNetworks, Transport: deps.HTTPTransport}), def: nodehttp.Definition()},

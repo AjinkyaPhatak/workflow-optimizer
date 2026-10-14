@@ -386,3 +386,15 @@ export interface Page<T> extends List<T> {
 }
 
 export const TERMINAL_STATUSES: ExecutionStatus[] = ["COMPLETED", "FAILED", "CANCELLED"];
+
+// --- files (Phase D1) ---------------------------------------------------------
+
+/** A workspace file's metadata (GET /files); the bytes are downloaded separately. */
+export interface WorkspaceFile {
+  id: UUID;
+  workspace_id: UUID;
+  name: string;
+  content_type: string;
+  size: number;
+  created_at: string;
+}

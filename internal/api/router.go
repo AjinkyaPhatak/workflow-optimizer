@@ -77,6 +77,11 @@ func NewRouter(h *handlers.Handlers, tokens auth.TokenService, logger *slog.Logg
 	private("POST "+Prefix+"/connected-accounts/{provider}/authorize", h.AuthorizeConnectedAccount)
 	public("GET "+Prefix+"/oauth/callback/{provider}", h.OAuthCallback)
 
+	private("POST "+Prefix+"/files", h.UploadFile)
+	private("GET "+Prefix+"/files", h.ListFiles)
+	private("GET "+Prefix+"/files/{fileID}", h.GetFile)
+	private("GET "+Prefix+"/files/{fileID}/content", h.DownloadFile)
+	private("DELETE "+Prefix+"/files/{fileID}", h.DeleteFile)
 	private("GET "+Prefix+"/nodes", h.ListNodes)
 	private("POST "+Prefix+"/nodes/{nodeType}/options", h.ListNodeOptions)
 	private("GET "+Prefix+"/templates", h.ListTemplates)

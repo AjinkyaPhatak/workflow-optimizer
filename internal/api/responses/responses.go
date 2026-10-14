@@ -13,6 +13,7 @@ import (
 	"workflow-optimizer/internal/connectedaccount"
 	"workflow-optimizer/internal/credential"
 	"workflow-optimizer/internal/execution"
+	"workflow-optimizer/internal/files"
 	"workflow-optimizer/internal/node"
 	"workflow-optimizer/internal/oauth"
 	"workflow-optimizer/internal/observability"
@@ -515,4 +516,21 @@ func NewConnectedAccount(a connectedaccount.Account, providerName string) Connec
 type AuthorizationStarted struct {
 	AuthorizationURL string    `json:"authorization_url"`
 	ExpiresAt        time.Time `json:"expires_at"`
+}
+
+// --- files (Phase D1) --------------------------------------------------------
+
+// File is a workspace file's metadata (never its bytes).
+type File struct {
+	ID          uuid.UUID `json:"id"`
+	WorkspaceID uuid.UUID `json:"workspace_id"`
+	Name        string    `json:"name"`
+	ContentType string    `json:"content_type"`
+	Size        int64     `json:"size"`
+	CreatedAt   time.Time `json:"created_at"`
+}
+
+// NewFile maps a file.
+func NewFile(f files.File) File {
+	return File{ID: f.ID, WorkspaceID: f.WorkspaceID, Name: f.Name, ContentType: f.ContentType, Size: f.Size, CreatedAt: f.CreatedAt}
 }

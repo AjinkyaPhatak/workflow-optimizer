@@ -99,3 +99,45 @@ export async function request<T>(method: string, path: string, opts: RequestOpti
   }
   return parsed as T;
 }
+
+async function failure(res: Response): Promise<ApiError> {
+  let body: Partial<ApiErrorBody> | null = null;
+  try {
+    body = (await res.json()) as Partial<ApiErrorBody>;
+  } catch {
+    body = null;
+  }
+  if (res.status === 401) onUnauthenticated();
+  return new ApiError(res.status, body?.error?.code ?? `HTTP_${res.status}`, body?.error?.message ?? res.statusText ?? "Request failed",
+    body?.error?.details ?? null);
+}
+
+function authHeaders(): Record<string, string> {
+  const token = tokenProvider();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+/** Posts multipart/form-data (file uploads, Phase D1); the browser sets the
+ * boundary. */
+export async function upload<T>(path: string, form: FormData, fetchImpl: typeof fetch = fetch): Promise<T> {
+  let res: Response;
+  try {
+    res = await fetchImpl(buildUrl(path), { method: "POST", headers: { Accept: "application/json", ...authHeaders() }, body: form, cache: "no-store" });
+  } catch {
+    throw new ApiError(0, "NETWORK_ERROR", "The server could not be reached", null);
+  }
+  if (!res.ok) throw await failure(res);
+  return (await res.json()) as T;
+}
+
+/** Fetches a binary resource (file downloads) with the session token. */
+export async function download(path: string, fetchImpl: typeof fetch = fetch): Promise<Blob> {
+  let res: Response;
+  try {
+    res = await fetchImpl(buildUrl(path), { headers: authHeaders(), cache: "no-store" });
+  } catch {
+    throw new ApiError(0, "NETWORK_ERROR", "The server could not be reached", null);
+  }
+  if (!res.ok) throw await failure(res);
+  return res.blob();
+}

@@ -41,6 +41,8 @@ type Handlers struct {
 	// Observability serves the execution debugger (Phase 14).
 	Observability *application.ObservabilityService
 	Nodes         NodeCatalog
+	// Files serves workspace files (Phase D1).
+	Files *application.FileService
 	// NodeOptions lists setting choices through connected accounts (C8).
 	NodeOptions *application.NodeOptionsService
 	Ready       []Check
