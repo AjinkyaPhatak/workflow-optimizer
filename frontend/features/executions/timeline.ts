@@ -24,6 +24,8 @@ export interface TimelineRow {
   reused: boolean;
   /** For PENDING rows of a finished execution: the node never ran. */
   notRun: boolean;
+  /** Skipped because its branch was not taken (Phase E1). */
+  branchSkipped: boolean;
 }
 
 const TERMINAL: ExecutionStatus[] = ["COMPLETED", "FAILED", "CANCELLED"];
@@ -59,9 +61,13 @@ export function buildTimeline(
   const retries = new Map<string, { delayMs: number | null; scope: "node" | "execution" }[]>();
   let lastFailedNode: string | null = null;
   const reused = new Set<string>();
+  const branchSkipped = new Set<string>();
   for (const e of events) {
     if (e.type === "NODE_FAILED" && e.node_id) lastFailedNode = e.node_id;
-    if (e.type === "NODE_SKIPPED" && e.node_id) reused.add(e.node_id);
+    if (e.type === "NODE_SKIPPED" && e.node_id) {
+      if (e.data?.reason === "branch_not_taken") branchSkipped.add(e.node_id);
+      else reused.add(e.node_id);
+    }
     if (e.type === "RETRY_SCHEDULED") {
       const node = e.node_id ?? lastFailedNode;
       if (!node) continue;
@@ -93,11 +99,12 @@ export function buildTimeline(
       nodeId,
       name: def?.name ?? nodeId,
       type: def?.type ?? last?.node_type ?? "",
-      status: last ? recordStatus(last.status) : "PENDING",
+      status: last ? recordStatus(last.status) : branchSkipped.has(nodeId) ? "SKIPPED" : "PENDING",
       durationMs: last?.duration_ms ?? null,
       attempts,
       reused: reused.has(nodeId),
-      notRun: !last && finished,
+      notRun: !last && finished && !branchSkipped.has(nodeId),
+      branchSkipped: branchSkipped.has(nodeId),
     };
   });
 }

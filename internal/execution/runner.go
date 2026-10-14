@@ -429,6 +429,13 @@ type runningNode struct {
 var (
 	_ NodeObserver         = (*nodeRecorder)(nil)
 	_ NodeProgressObserver = (*nodeRecorder)(nil)
+	_ NodeSkipObserver     = (*nodeRecorder)(nil)
+)
+
+// Skip reasons carried by NODE_SKIPPED events.
+const (
+	SkipReasonReused         = "completed_in_previous_attempt"
+	SkipReasonBranchNotTaken = "branch_not_taken"
 )
 
 func (n *nodeRecorder) begin(ctx context.Context, nodeID, nodeType string, input map[string]any) error {
@@ -471,7 +478,13 @@ func (n *nodeRecorder) NodeStarted(ctx context.Context, nodeID, nodeType string,
 
 // NodeReused implements NodeProgressObserver.
 func (n *nodeRecorder) NodeReused(ctx context.Context, nodeID, _ string) {
-	n.obs.NodeSkipped(ctx, n.executionID, nodeID, "completed_in_previous_attempt")
+	n.obs.NodeSkipped(ctx, n.executionID, nodeID, SkipReasonReused)
+}
+
+// NodeBranchSkipped implements NodeSkipObserver (Phase E1): a node on a
+// branch not taken is reported as skipped; it has no node execution record.
+func (n *nodeRecorder) NodeBranchSkipped(ctx context.Context, nodeID, _ string) {
+	n.obs.NodeSkipped(ctx, n.executionID, nodeID, SkipReasonBranchNotTaken)
 }
 
 // NodeRetryScheduled implements NodeProgressObserver.

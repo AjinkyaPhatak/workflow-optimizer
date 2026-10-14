@@ -53,6 +53,9 @@ func resolveInputs(
 		values := make([]node.Value, 0, len(idx))
 		for _, i := range idx {
 			e := edges[i]
+			if state.Skipped[e.Source] {
+				continue // a branch not taken (Phase E1): this edge is inactive
+			}
 			out, ok := state.Results[e.Source]
 			if !ok {
 				return nil, fmt.Errorf("%w: edge %q from node %q has not produced a result", ErrMissingUpstreamResult, e.ID, e.Source)

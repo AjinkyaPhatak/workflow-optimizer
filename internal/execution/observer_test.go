@@ -237,3 +237,26 @@ func TestObserverDoesNotChangeTheOutcome(t *testing.T) {
 		}
 	}
 }
+
+// Phase E1: a branch not taken is reported as skipped (and the execution
+// completes; skipped nodes have no node execution record).
+func TestEventsForBranchNotTaken(t *testing.T) {
+	def := graph(nodes(entry("in"), wfNode("cond", "condition", map[string]any{"value": "{{input.n}}", "operator": "greater_than", "compare": "10"}),
+		probe("Big"), probe("Small"), exit("oBig"), exit("oSmall")),
+		edge("in", "data", "cond", "value"), edge("cond", "true", "Big", "in"), edge("cond", "false", "Small", "in"),
+		edge("Big", "out", "oBig", "value"), edge("Small", "out", "oSmall", "value"))
+	r, log := observedRunner(t, def, nil)
+	id := r.create(t, map[string]any{"n": 3.0})
+	if _, err := r.runner.Run(context.Background(), id); err != nil {
+		t.Fatal(err)
+	}
+	got := log.String()
+	for _, want := range []string{"NODE_SKIPPED:Big", "NODE_SKIPPED:oBig", "NODE_COMPLETED:Small", "EXECUTION_COMPLETED"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("events %s: missing %s", got, want)
+		}
+	}
+	if strings.Contains(got, "NODE_STARTED:Big") {
+		t.Fatalf("a skipped node started: %s", got)
+	}
+}

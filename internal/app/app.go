@@ -28,6 +28,7 @@ import (
 	"workflow-optimizer/internal/node/output"
 	"workflow-optimizer/internal/node/prompt"
 	"workflow-optimizer/internal/node/structured_output"
+	"workflow-optimizer/internal/node/switchnode"
 	"workflow-optimizer/internal/node/text"
 	"workflow-optimizer/internal/node/transform"
 	providerllm "workflow-optimizer/internal/provider/llm"
@@ -135,6 +136,7 @@ func BootstrapWith(cfg config.Config, deps Dependencies) (*Application, error) {
 		{node: transform.New(), def: transform.Definition()},
 		{node: condition.New(), def: condition.Definition()},
 		{node: merge.New(), def: merge.Definition()},
+		{node: switchnode.New(), def: switchnode.Definition()},
 
 		// AI category
 		{node: prompt.New(), def: prompt.Definition()},

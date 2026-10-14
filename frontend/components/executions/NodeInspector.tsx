@@ -38,7 +38,10 @@ export function NodeInspector({ row }: { row: TimelineRow | null }) {
         </div>
       )}
       {!r ? (
-        <p className="muted">{row.notRun ? "This node did not run." : "This node has not run yet."}</p>
+        <p className="muted">
+          {row.branchSkipped ? "Skipped: the branch leading to this node was not taken (a Condition or Switch went another way)."
+            : row.notRun ? "This node did not run." : "This node has not run yet."}
+        </p>
       ) : (
         <>
           <dl className="inspector-fields">

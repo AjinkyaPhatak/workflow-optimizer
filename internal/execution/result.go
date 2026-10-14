@@ -10,12 +10,16 @@ type ExecutionState struct {
 	Results map[string]node.NodeOutput
 	// Completed lists node IDs in the order they finished successfully.
 	Completed []string
+	// Skipped holds the nodes that did not run because every input was
+	// inactive: a branch not taken (Phase E1).
+	Skipped map[string]bool
 }
 
 func newExecutionState(size int) *ExecutionState {
 	return &ExecutionState{
 		Results:   make(map[string]node.NodeOutput, size),
 		Completed: make([]string, 0, size),
+		Skipped:   map[string]bool{},
 	}
 }
 

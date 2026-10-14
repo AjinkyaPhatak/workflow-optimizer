@@ -54,6 +54,13 @@ type NodeProgressObserver interface {
 	NodeRetryScheduled(ctx context.Context, nodeID string, failures int, delay time.Duration, failure error)
 }
 
+// NodeSkipObserver may additionally be implemented by a NodeObserver (Phase
+// E1) to learn that a node did not run because the branch leading to it was
+// not taken.
+type NodeSkipObserver interface {
+	NodeBranchSkipped(ctx context.Context, nodeID, nodeType string)
+}
+
 // GraphExecutor is the Phase 7 sequential DAG executor. It assumes the
 // definition has passed Phase 6 executable validation; it only guards against
 // impossible states instead of re-validating the graph.
@@ -183,6 +190,15 @@ func (e *GraphExecutor) ExecuteWithOptions(ctx context.Context, definition workf
 			return ExecutionResult{State: *state}, fmt.Errorf("execution cancelled before node %q: %w", id, err)
 		}
 		b := bound[id]
+		if inactive(id, &plan, state, bound) {
+			// A branch not taken (Phase E1): the node, and everything only
+			// it feeds, does not run.
+			state.Skipped[id] = true
+			if so, ok := observer.(NodeSkipObserver); ok {
+				so.NodeBranchSkipped(ctx, id, b.spec.Type)
+			}
+			continue
+		}
 		fail := func(stage Stage, cause error) (ExecutionResult, error) {
 			return ExecutionResult{State: *state}, &NodeExecutionError{NodeID: id, NodeType: b.spec.Type, Stage: stage, Err: cause, SideEffects: b.def.SideEffects}
 		}
@@ -195,7 +211,7 @@ func (e *GraphExecutor) ExecuteWithOptions(ctx context.Context, definition workf
 			return fail(stage, cause)
 		}
 
-		cfg, err := resolveConfig(b.spec.Config, variableScope{nodeID: id, plan: &plan, results: state.Results, input: input})
+		cfg, err := resolveConfig(b.spec.Config, variableScope{nodeID: id, plan: &plan, results: state.Results, skipped: state.Skipped, input: input})
 		if err != nil {
 			return failBeforeExecute(StageResolveConfig, err)
 		}
@@ -344,11 +360,43 @@ func buildResult(plan *Plan, bound map[string]boundNode, state *ExecutionState) 
 	outputs := make(map[string]node.NodeOutput)
 	ids := make([]string, 0)
 	for _, id := range plan.Order {
-		if bound[id].def.Role == node.SemanticRoleExit {
+		if bound[id].def.Role == node.SemanticRoleExit && !state.Skipped[id] {
 			outputs[id] = state.Results[id]
 			ids = append(ids, id)
 		}
 	}
 	sort.Strings(ids)
 	return ExecutionResult{Outputs: outputs, OutputNodeIDs: ids, State: *state}
+}
+
+// inactive reports whether a node with incoming edges has none that is
+// active (Phase E1). An edge is active when its source ran and emitted the
+// edge's source port; it is inactive when the source was skipped or did not
+// emit an optional port (e.g. the untaken output of a Condition). A node with at
+// least one active edge runs (inputs of inactive edges are left unset), so a
+// Merge continues with whichever branch ran. Nodes without incoming edges
+// (entries) always run.
+func inactive(id string, plan *Plan, state *ExecutionState, bound map[string]boundNode) bool {
+	edges := plan.Incoming(id)
+	if len(edges) == 0 {
+		return false
+	}
+	for _, e := range edges {
+		if state.Skipped[e.Source] {
+			continue
+		}
+		out, ran := state.Results[e.Source]
+		if !ran {
+			continue
+		}
+		if _, emitted := out.GetPort(e.SourcePort); emitted {
+			return false
+		}
+		// A required output that was not emitted is a broken node, not a
+		// branch: the node runs and input resolution reports it.
+		if p, declared := bound[e.Source].def.GetOutputPort(e.SourcePort); !declared || p.Required {
+			return false
+		}
+	}
+	return true
 }

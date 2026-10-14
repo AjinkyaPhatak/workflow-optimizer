@@ -1,9 +1,11 @@
 package execution_test
 
 import (
+	"context"
 	"reflect"
 	"testing"
 
+	"workflow-optimizer/internal/execution"
 	"workflow-optimizer/internal/node"
 )
 
@@ -238,23 +240,85 @@ func TestNilWorkflowInputLeavesEntryNodeToItsOwnContract(t *testing.T) {
 	}
 }
 
-func TestOptionalOutputNotEmittedLeavesTargetPortUnset(t *testing.T) {
+// Phase E1: the untaken output of a Condition makes everything it alone
+// feeds skip; a Merge continues with the branch that ran.
+func TestUntakenBranchIsSkipped(t *testing.T) {
 	e := newEnv(t)
-	// The real condition node emits only one of its optional "true"/"false" ports.
-	def := graph(nodes(entry("in"), wfNode("cond", "condition", nil), probe("T"), probe("F"),
-		wfNode("merge_1", "merge", nil), exit("out")),
+	def := graph(nodes(entry("in"), wfNode("cond", "condition", nil), probe("T"), probe("F"), probe("F2"),
+		wfNode("merge_1", "merge", nil), probeWith("after", map[string]any{"message": "T={{T.text}} F={{F.text}}"}), exit("out")),
 		edge("in", "data", "cond", "value"),
-		edge("cond", "true", "T", "in"), edge("cond", "false", "F", "in"),
-		edge("T", "out", "merge_1", "left"), edge("F", "out", "merge_1", "right"),
-		edge("merge_1", "merged", "out", "value"))
-	if _, err := e.run(t, def, map[string]any{"flag": true}); err != nil {
+		edge("cond", "true", "T", "in"), edge("cond", "false", "F", "in"), edge("F", "out", "F2", "in"),
+		edge("T", "out", "merge_1", "left"), edge("F2", "out", "merge_1", "right"),
+		edge("merge_1", "value", "after", "in"), edge("after", "out", "out", "value"))
+	def.Nodes[2].Config["message"] = "yes"
+	res, err := e.run(t, def, map[string]any{"flag": true})
+	if err != nil {
 		t.Fatalf("execute: %v", err)
 	}
-	if _, ok := e.rec.call(t, "T").Input.GetPort("in"); !ok {
-		t.Fatal("T should receive the emitted branch value")
+	if got := e.rec.labels(); !equalStrings(got, []string{"T", "after"}) {
+		t.Fatalf("executed %v, want only the taken branch and what follows the merge", got)
 	}
-	if _, ok := e.rec.call(t, "F").Input.GetPort("in"); ok {
-		t.Fatal("F must not receive a value from the port the condition did not emit")
+	if !res.State.Skipped["F"] || !res.State.Skipped["F2"] || res.State.Skipped["merge_1"] {
+		t.Fatalf("skipped: %v", res.State.Skipped)
+	}
+	// A reference to a skipped node resolves to nothing instead of failing.
+	if msg := e.rec.call(t, "after").Input.Config["message"]; msg != "T=yes F=" {
+		t.Fatalf("message = %q", msg)
+	}
+	if _, ok := res.Outputs["out"]; !ok {
+		t.Fatal("the exit after the merge ran")
+	}
+}
+
+// A skipped exit node produces no workflow output, and skips are observed.
+func TestSkippedExitAndObserver(t *testing.T) {
+	e := newEnv(t)
+	def := graph(nodes(entry("in"), wfNode("cond", "condition", map[string]any{"value": "{{input.n}}", "operator": "greater_than", "compare": "10"}),
+		wfNode("big", "output", nil), wfNode("small", "output", nil)),
+		edge("in", "data", "cond", "value"), edge("cond", "true", "big", "value"), edge("cond", "false", "small", "value"))
+	e.mustValid(t, def)
+	obs := &skipRecorder{}
+	res, err := e.exec.ExecuteWithObserver(context.Background(), def, map[string]any{"n": 3.0}, obs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := res.Outputs["big"]; ok || len(res.OutputNodeIDs) != 1 || res.OutputNodeIDs[0] != "small" {
+		t.Fatalf("outputs: %v", res.OutputNodeIDs)
+	}
+	if !equalStrings(obs.skipped, []string{"big"}) {
+		t.Fatalf("observed skips: %v", obs.skipped)
+	}
+}
+
+type skipRecorder struct{ skipped []string }
+
+func (r *skipRecorder) NodeStarted(context.Context, string, string, node.NodeInput) error { return nil }
+func (r *skipRecorder) NodeFinished(context.Context, string, node.NodeOutput, error) error {
+	return nil
+}
+func (r *skipRecorder) NodeFailedBeforeExecute(context.Context, string, string, execution.Stage, error) error {
+	return nil
+}
+func (r *skipRecorder) NodeBranchSkipped(_ context.Context, id, _ string) {
+	r.skipped = append(r.skipped, id)
+}
+
+// Switch takes exactly one route.
+func TestSwitchRoutes(t *testing.T) {
+	e := newEnv(t)
+	def := graph(nodes(entry("in"), wfNode("sw", "switch", map[string]any{"value": "{{input.priority}}", "case_1": "high", "case_2": "low"}),
+		probe("H"), probe("L"), probe("O"), exit("oH"), exit("oL"), exit("oO")),
+		edge("in", "data", "sw", "value"), edge("sw", "case_1", "H", "in"), edge("sw", "case_2", "L", "in"), edge("sw", "otherwise", "O", "in"),
+		edge("H", "out", "oH", "value"), edge("L", "out", "oL", "value"), edge("O", "out", "oO", "value"))
+	for priority, want := range map[string]string{"High": "H", "low": "L", "urgent": "O"} {
+		e.rec.calls = nil
+		res, err := e.run(t, def, map[string]any{"priority": priority})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := e.rec.labels(); !equalStrings(got, []string{want}) || len(res.OutputNodeIDs) != 1 || res.OutputNodeIDs[0] != "o"+want {
+			t.Fatalf("%s: executed %v, outputs %v", priority, got, res.OutputNodeIDs)
+		}
 	}
 }
 

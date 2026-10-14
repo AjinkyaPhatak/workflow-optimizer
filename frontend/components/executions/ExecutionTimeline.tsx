@@ -29,7 +29,7 @@ export function ExecutionTimeline({
                 <span className="timeline-name">{r.name}</span>
                 <span className="muted small"> {r.type}</span>
                 <span className="timeline-meta small">
-                  {r.notRun ? "not run" : formatDuration(r.durationMs)}
+                  {r.branchSkipped ? "skipped: branch not taken" : r.notRun ? "not run" : formatDuration(r.durationMs)}
                   {r.attempts.length > 1 && ` · ${r.attempts.length} attempts`}
                   {r.reused && " · reused from an earlier attempt"}
                 </span>

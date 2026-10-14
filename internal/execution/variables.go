@@ -33,6 +33,9 @@ type variableScope struct {
 	nodeID  string
 	plan    *Plan
 	results map[string]node.NodeOutput
+	// skipped nodes (a branch not taken, Phase E1) resolve to nothing: an
+	// empty string inside text, null as a whole value.
+	skipped map[string]bool
 	input   map[string]any
 }
 
@@ -142,6 +145,9 @@ func (s variableScope) lookup(expr string) (any, error) {
 		if !s.plan.IsUpstream(ref, s.nodeID) {
 			return nil, fmt.Errorf("%w: {{%s}} references node %q, which is not upstream of node %q", ErrUnresolvedReference, expr, ref, s.nodeID)
 		}
+		if s.skipped[ref] {
+			return nil, nil
+		}
 		out, ok := s.results[ref]
 		if !ok {
 			return nil, fmt.Errorf("%w: {{%s}}: node %q has no result", ErrUnresolvedReference, expr, ref)
@@ -189,6 +195,9 @@ func walkPath(cur any, segs []string, expr string) (any, error) {
 func stringify(v any) (string, error) {
 	if s, ok := v.(string); ok {
 		return s, nil
+	}
+	if v == nil {
+		return "", nil
 	}
 	b, err := json.Marshal(v)
 	if err != nil {
