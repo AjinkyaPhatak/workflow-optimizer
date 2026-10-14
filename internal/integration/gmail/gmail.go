@@ -39,8 +39,11 @@ const Provider = "google"
 // MaxSearchResults bounds gmail.search's max_results.
 const MaxSearchResults = 50
 
+// str is an input port that accepts any upstream data (Phase C8): text is
+// used as described; anything else leaves the setting in charge, so any
+// node can precede a Gmail node and feed its {{variables}}.
 func str(name, desc string) node.PortDefinition {
-	return node.NewPortDefinition(name, node.ValueTypeString, false, desc)
+	return node.NewPortDefinition(name, node.ValueTypeJSON, false, "Any upstream data. Text: "+desc)
 }
 
 func field(name, label, desc string, required bool) node.ConfigField {

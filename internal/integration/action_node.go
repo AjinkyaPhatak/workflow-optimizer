@@ -63,6 +63,7 @@ type ActionNode[C any] struct {
 	creds       credential.Resolver
 	connector   Connector[C]
 	handler     Handler[C]
+	options     map[string]OptionsHandler[C]
 }
 
 // NewActionNode builds the node of action actionID of in. creds may be nil

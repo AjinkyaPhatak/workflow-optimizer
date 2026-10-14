@@ -1,7 +1,9 @@
 package discord_test
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -10,8 +12,11 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/google/uuid"
+
 	"workflow-optimizer/internal/app"
 	"workflow-optimizer/internal/credential"
+	"workflow-optimizer/internal/integration"
 	"workflow-optimizer/internal/integration/discord"
 	"workflow-optimizer/internal/integration/googleapi/apitest"
 	"workflow-optimizer/internal/node"
@@ -302,5 +307,27 @@ func TestErrors(t *testing.T) {
 		if f := apitest.Failure(t, err); f.Retryable || len(m.sent) != before {
 			t.Fatalf("%v: %+v", bad["embed_color"], f)
 		}
+	}
+}
+
+// Phase C8: the channel picker lists the connected server's text channels.
+func TestChannelOptions(t *testing.T) {
+	m := newMock(t)
+	h := harness(t, m, botToken)
+	n, _ := h.App.NodeRegistry.Resolve("discord.read_messages")
+	p := n.(integration.OptionsProvider)
+	opts, err := p.Options(context.Background(), node.Scope{WorkspaceID: h.Creds.Workspace}, "channels", map[string]any{"credential_id": h.CredID.String()})
+	if err != nil || mustJSON(opts) != `[{"value":"`+general+`","label":"#general"},{"value":"`+news+`","label":"#News"}]` {
+		t.Fatalf("channels: %s %v", mustJSON(opts), err)
+	}
+	if _, err := p.Options(context.Background(), node.Scope{WorkspaceID: uuid.New()}, "channels", map[string]any{"credential_id": h.CredID.String()}); err == nil {
+		t.Fatal("another workspace's account must not resolve")
+	}
+	if _, err := p.Options(context.Background(), node.Scope{WorkspaceID: h.Creds.Workspace}, "nope", map[string]any{}); !errors.Is(err, integration.ErrUnknownOptionsSource) {
+		t.Fatalf("unknown source: %v", err)
+	}
+	d, _ := h.App.NodeRegistry.GetDefinition("discord.send_message")
+	if f, _ := d.GetConfigField("channel"); f.OptionsSource != "channels" {
+		t.Fatalf("channel field: %+v", f)
 	}
 }

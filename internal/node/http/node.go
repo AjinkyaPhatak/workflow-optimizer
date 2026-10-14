@@ -73,8 +73,8 @@ func Definition() node.NodeDefinition {
 				node.Option("GET", "GET"), node.Option("POST", "POST"), node.Option("PUT", "PUT"),
 				node.Option("PATCH", "PATCH"), node.Option("DELETE", "DELETE"), node.Option("HEAD", "HEAD")),
 			node.NewConfigField("url", node.ValueTypeString, false, "", "https://api.example.com/v1/items. {{variables}} are filled in.").WithLabel("URL"),
-			node.NewConfigField("query", node.ValueTypeObject, false, nil, `Query parameters, e.g. {"q": "{{input.term}}", "limit": 10}. {{variables}} are filled in.`).WithLabel("Query parameters"),
-			node.NewConfigField("headers", node.ValueTypeObject, false, nil, `Headers, e.g. {"Accept": "application/json"}. Put secrets in a credential, not here.`).WithLabel("Headers"),
+			node.NewConfigField("query", node.ValueTypeObject, false, nil, "Query parameters: one row per name, e.g. q → {{input.term}}. {{variables}} are filled in.").WithLabel("Query parameters").WithKeyValue(),
+			node.NewConfigField("headers", node.ValueTypeObject, false, nil, "Headers: one row per name, e.g. Accept → application/json. Put secrets in a credential, not here.").WithLabel("Headers").WithKeyValue(),
 			node.NewConfigField("body_type", node.ValueTypeString, false, "json", "How the body is sent.").WithLabel("Body type").WithOptions(
 				node.Option("json", "JSON"), node.Option("form", "Form (URL-encoded)"), node.Option("text", "Text"), node.Option("none", "No body")),
 			node.NewConfigField("body", node.ValueTypeJSON, false, nil, "JSON value, an object for a form, or text. {{variables}} are filled in.").WithLabel("Body"),

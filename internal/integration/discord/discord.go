@@ -44,7 +44,7 @@ func str(name, label, desc string, required bool) node.ConfigField {
 }
 
 func channelField() node.ConfigField {
-	return str("channel", "Channel", "The channel's name (e.g. general), its link (right-click the channel, Copy Link) or its ID. It must be in the connected server.", true)
+	return str("channel", "Channel", "Pick a channel of the connected server, or type its name (e.g. general), link or ID.", true).WithOptionsSource("channels")
 }
 
 // Integration is Discord's metadata.
@@ -372,7 +372,23 @@ func Module(creds credential.Resolver, o Options) (integration.Module, error) {
 		if err != nil {
 			return integration.Module{}, err
 		}
-		nodes[id] = n
+		nodes[id] = n.WithOptions(map[string]integration.OptionsHandler[*Client]{"channels": channelOptions})
 	}
 	return integration.Module{Integration: in, Nodes: nodes}, nil
+}
+
+// channelOptions lists the connected server's text and announcement
+// channels (by ID, labelled #name).
+func channelOptions(ctx context.Context, c *Client, _ node.NodeInput) ([]node.ConfigOption, error) {
+	all, err := c.Channels(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var out []node.ConfigOption
+	for _, ch := range all {
+		if ch.Type == 0 || ch.Type == 5 {
+			out = append(out, node.ConfigOption{Value: ch.ID, Label: "#" + ch.Name})
+		}
+	}
+	return out, nil
 }

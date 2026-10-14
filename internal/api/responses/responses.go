@@ -289,6 +289,11 @@ type ConfigField struct {
 	Max         *float64       `json:"max,omitempty"`
 	Step        *float64       `json:"step,omitempty"`
 	Multiline   bool           `json:"multiline,omitempty"`
+	// Editor hints (Phase C8).
+	KeyValue      bool     `json:"key_value,omitempty"`
+	OptionsSource string   `json:"options_source,omitempty"`
+	KeysSource    string   `json:"keys_source,omitempty"`
+	DependsOn     []string `json:"depends_on,omitempty"`
 }
 
 // ConfigOption is one accepted value of a configuration field; When limits
@@ -353,7 +358,8 @@ func NewNodeType(d node.NodeDefinition) NodeType {
 			opts = append(opts, ConfigOption{Value: o.Value, Label: label, When: o.When})
 		}
 		cfg = append(cfg, ConfigField{Name: f.Name, Type: string(f.Type), Required: f.Required, Default: f.Default, Description: f.Description,
-			Label: f.Label, Options: opts, AllowCustom: f.AllowCustom, Min: f.Min, Max: f.Max, Step: f.Step, Multiline: f.Multiline})
+			Label: f.Label, Options: opts, AllowCustom: f.AllowCustom, Min: f.Min, Max: f.Max, Step: f.Step, Multiline: f.Multiline,
+			KeyValue: f.KeyValue, OptionsSource: f.OptionsSource, KeysSource: f.KeysSource, DependsOn: f.DependsOn})
 	}
 	side := string(d.SideEffects)
 	if side == "" {

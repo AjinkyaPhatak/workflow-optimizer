@@ -41,7 +41,7 @@ func str(name, label, desc string, required bool) node.ConfigField {
 func tableFields() []node.ConfigField {
 	return []node.ConfigField{
 		str("spreadsheet", "Spreadsheet", "The spreadsheet's link (copy it from the browser) or its ID.", true),
-		str("sheet", "Sheet", "The tab's name, e.g. Sheet1. Empty: the first tab.", false),
+		str("sheet", "Sheet", "The tab's name, e.g. Sheet1. Empty: the first tab.", false).WithOptionsSource("sheets", "spreadsheet"),
 	}
 }
 
@@ -54,8 +54,8 @@ func upstream(name, desc string) []node.PortDefinition {
 
 func valuesField(desc string) node.ConfigField {
 	return node.NewConfigField("values", node.ValueTypeObject, false, nil,
-		desc+` Keys are column names from row 1, e.g. {"Name": "{{input.name}}", "Email": "{{input.email}}"}. {{variables}} are filled in.`).
-		WithLabel("Values")
+		desc+" One row per column (the names in row 1), e.g. Name → {{input.name}}. {{variables}} are filled in.").
+		WithLabel("Values").WithKeysSource("columns", "spreadsheet", "sheet")
 }
 
 func inputModeField() node.ConfigField {
@@ -115,7 +115,8 @@ func Integration() integration.Integration {
 					node.NewPortDefinition("row", node.ValueTypeObject, true, "The row after the update"),
 				},
 				Config: append(tableFields(),
-					str("match_column", "Find row by column", "The column to search, e.g. Email. Used when Row number is empty.", false),
+					str("match_column", "Find row by column", "The column to search, e.g. Email. Used when Row number is empty.", false).
+						WithOptionsSource("columns", "spreadsheet", "sheet"),
 					str("match_value", "Find row with value", "The first row whose cell in that column equals this text is updated. {{variables}} are filled in.", false),
 					node.NewConfigField("row_number", node.ValueTypeNumber, false, nil, "A specific row (2 or more; row 1 holds the column names), e.g. from Read Rows.").
 						WithLabel("Row number").WithRange(node.Float(2), nil, node.Float(1)),
@@ -466,7 +467,7 @@ func Module(creds credential.Resolver, o Options) (integration.Module, error) {
 		if err != nil {
 			return integration.Module{}, err
 		}
-		nodes[id] = n
+		nodes[id] = n.WithOptions(map[string]integration.OptionsHandler[*Client]{"sheets": sheetOptions, "columns": columnOptions})
 	}
 	return integration.Module{Integration: in, Nodes: nodes}, nil
 }

@@ -4,11 +4,14 @@ package app_test
 import (
 	"errors"
 	"os/exec"
+	"slices"
 	"strings"
 	"testing"
 
 	"workflow-optimizer/internal/app"
 	"workflow-optimizer/internal/config"
+	"workflow-optimizer/internal/integration"
+	"workflow-optimizer/internal/node"
 	providerllm "workflow-optimizer/internal/provider/llm"
 	"workflow-optimizer/internal/workflow"
 )
@@ -146,5 +149,41 @@ func TestCanonicalLLMWorkflowIsExecutable(t *testing.T) {
 	}
 	if res := workflow.NewValidator(a.NodeRegistry).Validate(def); !res.Valid {
 		t.Fatalf("canonical workflow invalid: %+v", res.Errors)
+	}
+}
+
+// Phase C8: every choice list a setting declares is served by its node, and
+// its dependencies are settings of that node.
+func TestOptionSourcesAreServed(t *testing.T) {
+	a, err := app.Bootstrap(testConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := 0
+	for _, d := range a.NodeRegistry.Definitions() {
+		n, _ := a.NodeRegistry.Resolve(d.Type)
+		p, _ := n.(integration.OptionsProvider)
+		for _, f := range d.Config {
+			for _, src := range []string{f.OptionsSource, f.KeysSource} {
+				if src == "" {
+					continue
+				}
+				found++
+				if p == nil || !slices.Contains(p.OptionSources(), src) {
+					t.Errorf("%s.%s: no %q options", d.Type, f.Name, src)
+				}
+			}
+			if f.KeysSource != "" && (!f.KeyValue || f.Type != node.ValueTypeObject) {
+				t.Errorf("%s.%s: keys need a key/value object field", d.Type, f.Name)
+			}
+			for _, dep := range f.DependsOn {
+				if _, ok := d.GetConfigField(dep); !ok {
+					t.Errorf("%s.%s depends on unknown %q", d.Type, f.Name, dep)
+				}
+			}
+		}
+	}
+	if found < 12 {
+		t.Fatalf("only %d option sources declared", found)
 	}
 }

@@ -8,8 +8,8 @@ import (
 	"strings"
 
 	"workflow-optimizer/internal/credential"
-	"workflow-optimizer/internal/integration/googleapi"
 	"workflow-optimizer/internal/integration"
+	"workflow-optimizer/internal/integration/googleapi"
 )
 
 // DefaultBaseURL is the Gmail REST API root.

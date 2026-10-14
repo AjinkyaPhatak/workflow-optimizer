@@ -1,5 +1,7 @@
 "use client";
 
+import { DynamicSelect, KeyValueField } from "@/components/panels/SettingFields";
+import { useFieldOptions } from "@/features/nodes/useFieldOptions";
 import Link from "next/link";
 import { useMemo, useState, type KeyboardEvent } from "react";
 import { useEditorContext } from "@/features/workflows/EditorContext";
@@ -223,7 +225,7 @@ function BooleanField({ id, value, def, onCommit, disabled }: { id: string; valu
 }
 
 function FieldEditor({ node, field, issues }: { node: WorkflowNode; field: ConfigField; issues: Issue[] }) {
-  const { credentials, connectedAccounts, catalog } = useEditorContext();
+  const { credentials, connectedAccounts, catalog, workspaceId } = useEditorContext();
   const definition = useEditorStore((s) => s.definition);
   const readonly = useEditorStore((s) => s.mode === "readonly");
   const setConfig = useEditorStore((s) => s.setConfigValue);
@@ -239,6 +241,8 @@ function FieldEditor({ node, field, issues }: { node: WorkflowNode; field: Confi
   const invalid = issues.length > 0;
   const describedBy = [field.description || control === "credential" ? helpId : "", invalid ? errorId : ""].filter(Boolean).join(" ") || undefined;
   const groups = useMemo(() => availableVariables(definition, catalog, node.id), [definition, catalog, node.id]);
+  // Phase C8: choices (or key names) listed through the node's account.
+  const choices = useFieldOptions(node.type, def, field.options_source ?? field.keys_source, field.depends_on ?? [], node.config, workspaceId);
 
   let input;
   if (control === "credential") {
@@ -251,6 +255,16 @@ function FieldEditor({ node, field, issues }: { node: WorkflowNode; field: Confi
     ) : (
       <CredentialSelect id={id} value={typeof value === "string" ? value : ""} provider={provider} credentials={credentials}
         onCommit={commit} disabled={readonly} invalid={invalid} describedBy={describedBy} />
+    );
+  } else if (control === "dynamic") {
+    input = (
+      <DynamicSelect key={id} id={id} value={value} choices={choices} onCommit={commit} disabled={readonly} invalid={invalid}
+        describedBy={describedBy} placeholder={placeholder} />
+    );
+  } else if (control === "key_value") {
+    input = (
+      <KeyValueField id={id} value={value} onCommit={commit} groups={groups} disabled={readonly} describedBy={describedBy}
+        suggestions={field.keys_source ? choices : null} />
     );
   } else if (control === "select") {
     input = (

@@ -21,6 +21,8 @@ export interface EditorSession {
   loading: boolean;
   loadError: unknown;
   workflow: Workflow | null;
+  /** The workflow's workspace (for account-backed setting choices). */
+  workspaceId?: string | null;
   version: VersionSummary | null;
   catalogList: NodeDefinition[];
   catalog: Map<string, NodeDefinition>;
@@ -52,6 +54,7 @@ export function useEditorSession(workflowId: string): EditorSession {
   const [credentials, setCredentials] = useState<Credential[]>([]);
   const [connectedAccounts, setConnectedAccounts] = useState<ConnectedAccount[]>([]);
   const [role, setRole] = useState<Role | null>(null);
+  const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [busy, setBusy] = useState<BusyAction>(null);
   const [notice, setNotice] = useState<EditorSession["notice"]>(null);
   const [versions, setVersions] = useState<VersionSummary[] | null>(null);
@@ -81,6 +84,7 @@ export function useEditorSession(workflowId: string): EditorSession {
         if (cancelled) return;
         setWorkflow(wf);
         setRole(myRole);
+        setWorkspaceId(project.workspace_id);
         setCatalogList(nodes.items);
         setCredentials(creds.items);
         setConnectedAccounts(accounts.items);
@@ -212,6 +216,7 @@ export function useEditorSession(workflowId: string): EditorSession {
   );
 
   return {
+    workspaceId,
     loading, loadError, workflow, version, catalogList, catalog, credentials, connectedAccounts, role, busy, notice,
     save, validate, publish,
     canPublish: role === "owner" || role === "admin",

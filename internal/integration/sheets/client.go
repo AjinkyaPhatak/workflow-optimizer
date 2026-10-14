@@ -89,6 +89,15 @@ func valuesPath(id, rng string) string {
 
 // FirstSheet is the title of the spreadsheet's first tab.
 func (c *Client) FirstSheet(ctx context.Context, id string) (string, error) {
+	titles, err := c.Sheets(ctx, id)
+	if err != nil {
+		return "", err
+	}
+	return titles[0], nil
+}
+
+// Sheets lists the spreadsheet's tab titles, in order.
+func (c *Client) Sheets(ctx context.Context, id string) ([]string, error) {
 	var meta struct {
 		Sheets []struct {
 			Properties struct {
@@ -97,12 +106,18 @@ func (c *Client) FirstSheet(ctx context.Context, id string) (string, error) {
 		} `json:"sheets"`
 	}
 	if err := c.api.Do(ctx, http.MethodGet, spreadsheetPath(id), url.Values{"fields": {"sheets.properties.title"}}, nil, &meta, "open spreadsheet"); err != nil {
-		return "", err
+		return nil, err
 	}
-	if len(meta.Sheets) == 0 || meta.Sheets[0].Properties.Title == "" {
-		return "", integration.NewError(integration.KindMalformedResponse, "open spreadsheet: Google Sheets returned no sheets")
+	var titles []string
+	for _, s := range meta.Sheets {
+		if s.Properties.Title != "" {
+			titles = append(titles, s.Properties.Title)
+		}
 	}
-	return meta.Sheets[0].Properties.Title, nil
+	if len(titles) == 0 {
+		return nil, integration.NewError(integration.KindMalformedResponse, "open spreadsheet: Google Sheets returned no sheets")
+	}
+	return titles, nil
 }
 
 // ValueRange is a block of cells as Sheets returns it (formatted text).

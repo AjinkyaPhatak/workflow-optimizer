@@ -152,6 +152,7 @@ func (rt *APIRuntime) build(enc credential.SecretEncryptor, tokens auth.TokenSer
 		Credentials:       application.NewCredentialService(access, credentials, credentialRepo, engine.ProviderRegistry, enc != nil),
 		ConnectedAccounts: connected,
 		Nodes:             engine.NodeRegistry,
+		NodeOptions:       application.NewNodeOptionsService(access, engine.NodeRegistry),
 		Ready: []handlers.Check{
 			{Name: "postgres", Check: rt.store.Pool.Ping},
 			{Name: "redis", Check: rt.redis.Ping},

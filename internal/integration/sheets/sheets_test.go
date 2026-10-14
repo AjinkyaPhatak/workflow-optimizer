@@ -1,6 +1,7 @@
 package sheets_test
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -13,6 +14,7 @@ import (
 	"testing"
 
 	"workflow-optimizer/internal/app"
+	"workflow-optimizer/internal/integration"
 	"workflow-optimizer/internal/integration/googleapi/apitest"
 	"workflow-optimizer/internal/integration/sheets"
 	"workflow-optimizer/internal/node"
@@ -362,5 +364,35 @@ func TestChainsFromOtherNodesValidate(t *testing.T) {
 		}}
 	if res := workflow.NewValidator(h.App.NodeRegistry).Validate(def); !res.Valid {
 		t.Fatalf("chain rejected: %+v", res.Errors)
+	}
+}
+
+// Phase C8: tab and column pickers through the connected account.
+func TestOptions(t *testing.T) {
+	m := newMock(t)
+	h := apitest.New(t, m.options())
+	opts := func(typ, source string, cfg map[string]any) string {
+		t.Helper()
+		n, _ := h.App.NodeRegistry.Resolve(typ)
+		cfg["credential_id"] = h.CredID.String()
+		out, err := n.(integration.OptionsProvider).Options(context.Background(), node.Scope{WorkspaceID: h.Creds.Workspace}, source, cfg)
+		if err != nil {
+			t.Fatalf("%s %s: %v", typ, source, err)
+		}
+		return mustJSON(out)
+	}
+	if got := opts("google_sheets.read_rows", "sheets", map[string]any{"spreadsheet": sheetID}); got != `[{"value":"Leads","label":"Leads"},{"value":"Other","label":"Other"}]` {
+		t.Fatalf("sheets: %s", got)
+	}
+	cols := `[{"value":"Name","label":"Name"},{"value":"Email","label":"Email"},{"value":"Status","label":"Status"}]`
+	if got := opts("google_sheets.append_row", "columns", map[string]any{"spreadsheet": sheetID}); got != cols { // first tab
+		t.Fatalf("columns: %s", got)
+	}
+	if got := opts("google_sheets.update_row", "columns", map[string]any{"spreadsheet": sheetID, "sheet": "Other"}); got != `null` {
+		t.Fatalf("empty sheet columns: %s", got)
+	}
+	d, _ := h.App.NodeRegistry.GetDefinition("google_sheets.append_row")
+	if f, _ := d.GetConfigField("values"); !f.KeyValue || f.KeysSource != "columns" || mustJSON(f.DependsOn) != `["spreadsheet","sheet"]` {
+		t.Fatalf("values field: %+v", f)
 	}
 }

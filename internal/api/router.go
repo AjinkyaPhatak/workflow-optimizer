@@ -78,6 +78,7 @@ func NewRouter(h *handlers.Handlers, tokens auth.TokenService, logger *slog.Logg
 	public("GET "+Prefix+"/oauth/callback/{provider}", h.OAuthCallback)
 
 	private("GET "+Prefix+"/nodes", h.ListNodes)
+	private("POST "+Prefix+"/nodes/{nodeType}/options", h.ListNodeOptions)
 	private("GET "+Prefix+"/templates", h.ListTemplates)
 
 	mux.Handle("/", unmatched(mux, logger))

@@ -160,6 +160,15 @@ export interface ConfigField {
   max?: number;
   step?: number;
   multiline?: boolean;
+  /** Phase C8: an object edited as name -> value rows. */
+  key_value?: boolean;
+  /** Phase C8: choices for the value, loaded through the node's account
+   * (POST /nodes/{type}/options); keys_source does the same for a key/value
+   * field's names. depends_on: settings sent along (required ones must be
+   * set first). */
+  options_source?: string;
+  keys_source?: string;
+  depends_on?: string[];
 }
 
 export interface NodeDefinition {

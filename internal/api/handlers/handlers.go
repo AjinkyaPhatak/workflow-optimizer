@@ -41,8 +41,10 @@ type Handlers struct {
 	// Observability serves the execution debugger (Phase 14).
 	Observability *application.ObservabilityService
 	Nodes         NodeCatalog
-	Ready         []Check
-	Logger        *slog.Logger
+	// NodeOptions lists setting choices through connected accounts (C8).
+	NodeOptions *application.NodeOptionsService
+	Ready       []Check
+	Logger      *slog.Logger
 }
 
 func (h *Handlers) fail(w http.ResponseWriter, r *http.Request, err error) {

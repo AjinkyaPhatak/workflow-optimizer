@@ -42,13 +42,14 @@ func port(name, desc string) []node.PortDefinition {
 }
 
 func databaseField() node.ConfigField {
-	return str("database", "Database", "The database's link (copy it from the browser: ••• menu, Copy link) or its ID, e.g. from Search. It must be shared with the integration.", true)
+	return str("database", "Database", "Pick a database shared with the integration, or paste its link (••• menu, Copy link) or ID.", true).
+		WithOptionsSource("databases")
 }
 
-func propertiesField(desc string) node.ConfigField {
+func propertiesField(desc, source, dependsOn string) node.ConfigField {
 	return node.NewConfigField("properties", node.ValueTypeObject, false, nil,
-		desc+` Keys are property (column) names, e.g. {"Name": "{{read.subject}}", "Status": "To do", "Tags": "a, b", "Due": "2026-10-20", "Done": false}. {{variables}} are filled in.`).
-		WithLabel("Properties")
+		desc+" One row per property (column): e.g. Name → {{read.subject}}, Status → To do, Tags → a, b, Due → 2026-10-20, Done → false. {{variables}} are filled in.").
+		WithLabel("Properties").WithKeysSource(source, dependsOn)
 }
 
 func maxField(def float64) node.ConfigField {
@@ -102,11 +103,13 @@ func Integration() integration.Integration {
 				},
 				Config: []node.ConfigField{
 					databaseField(),
-					str("filter_property", "Filter by property", "Only rows whose property matches, e.g. Status. Empty: all rows.", false),
+					str("filter_property", "Filter by property", "Only rows whose property matches, e.g. Status. Empty: all rows.", false).
+						WithOptionsSource("properties", "database"),
 					node.NewConfigField("filter_condition", node.ValueTypeString, false, "equals", "How the value is compared (contains: text properties).").
 						WithLabel("Condition").WithOptions(node.ConfigOption{Value: "equals", Label: "Equals"}, node.ConfigOption{Value: "contains", Label: "Contains"}),
 					str("filter_value", "Filter value", "e.g. Done, or {{read.sender}}. {{variables}} are filled in.", false),
-					str("sort_property", "Sort by", "A property name, or created_time / last_edited_time. Empty: Notion's order.", false),
+					str("sort_property", "Sort by", "A property name, or created_time / last_edited_time. Empty: Notion's order.", false).
+						WithOptionsSource("properties", "database"),
 					node.NewConfigField("sort_direction", node.ValueTypeString, false, "descending", "").
 						WithLabel("Sort direction").WithOptions(node.ConfigOption{Value: "ascending", Label: "Ascending"}, node.ConfigOption{Value: "descending", Label: "Descending"}),
 					maxField(25),
@@ -123,7 +126,7 @@ func Integration() integration.Integration {
 				Outputs:     rowOutputs("new"),
 				Config: []node.ConfigField{
 					databaseField(),
-					propertiesField("The new row."),
+					propertiesField("The new row.", "writable_properties", "database"),
 					str("content", "Page content", "Text written inside the new page (paragraphs split on blank lines). {{variables}} are filled in.", false).WithMultiline(),
 				},
 			},
@@ -135,7 +138,7 @@ func Integration() integration.Integration {
 					node.NewPortDefinition("row", node.ValueTypeObject, true, "The row after the update")),
 				Config: []node.ConfigField{
 					str("page", "Row", "The row's link or page ID, e.g. page_id from Find Database Rows. {{variables}} are filled in.", false),
-					propertiesField("The properties to change."),
+					propertiesField("The properties to change.", "page_properties", "page"),
 				},
 			},
 		},
@@ -403,13 +406,18 @@ func Module(creds credential.Resolver, o Options) (integration.Module, error) {
 	handlers := map[string]integration.Handler[*Client]{
 		"search": search, "query_database": queryDatabase, "create_page": createPage, "update_page": updatePage,
 	}
+	options := map[string]map[string]integration.OptionsHandler[*Client]{
+		"query_database": {"databases": databaseOptions, "properties": propertyOptions(filterable)},
+		"create_page":    {"databases": databaseOptions, "writable_properties": propertyOptions(writable)},
+		"update_page":    {"page_properties": pagePropertyOptions},
+	}
 	nodes := map[string]node.Node{}
 	for id, h := range handlers {
 		n, err := integration.NewActionNode(in, id, creds, Connector(o), h)
 		if err != nil {
 			return integration.Module{}, err
 		}
-		nodes[id] = n
+		nodes[id] = n.WithOptions(options[id])
 	}
 	return integration.Module{Integration: in, Nodes: nodes}, nil
 }

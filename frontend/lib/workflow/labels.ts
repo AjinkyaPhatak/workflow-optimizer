@@ -68,13 +68,15 @@ export function usesCredential(def: Pick<NodeDefinition, "config">): ConfigField
   return def.config.find((f) => f.name === CREDENTIAL_FIELD);
 }
 
-export type FieldControl = "credential" | "select" | "boolean" | "number" | "text" | "multiline" | "json";
+export type FieldControl = "credential" | "select" | "dynamic" | "key_value" | "boolean" | "number" | "text" | "multiline" | "json";
 
 const MULTILINE = /(template|text|prompt|body|content|expression|message|system|instructions)/;
 
 /** Which control renders a config field, from its declared type and name. */
-export function fieldControl(field: Pick<ConfigField, "name" | "type" | "options" | "multiline">): FieldControl {
+export function fieldControl(field: Pick<ConfigField, "name" | "type" | "options" | "multiline" | "key_value" | "options_source">): FieldControl {
   if (field.name === CREDENTIAL_FIELD) return "credential";
+  if (field.key_value && field.type === "object") return "key_value";
+  if (field.options_source && field.type === "string") return "dynamic";
   if (field.options && field.options.length > 0) return "select";
   if (field.type === "boolean") return "boolean";
   if (field.type === "number") return "number";

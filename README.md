@@ -369,3 +369,39 @@ unspecified and multicast addresses after DNS resolution, and ignores proxy
 settings, so workflows cannot reach this server's database, Redis or
 internal services. `HTTP_ALLOW_PRIVATE_NETWORKS=true` lifts this (e.g. to
 call an API on localhost during development).
+
+## Integration UX (Phase C8)
+
+**Choices from the connected account.** A setting can declare
+`options_source` (choices for its value) or, on a key/value setting,
+`keys_source` (suggested names), with `depends_on` naming the settings that
+are sent along (required ones must be set first). The editor loads them with
+`POST /api/v1/nodes/{type}/options` `{workspace_id, source, config}` →
+`{items: [{value, label}]}`. Anyone who may edit workflows in the workspace
+may call it; the account is resolved in that workspace exactly as for a run,
+nothing is executed or changed, `{{variable}}` settings are not sent, and
+errors carry only the platform's own messages. Integrations register
+handlers with `ActionNode.WithOptions` (`integration.OptionsProvider`):
+
+| Node(s) | Setting | Source |
+|---|---|---|
+| Notion Find / Add Database Row | Database | databases shared with the integration |
+| Notion Find Database Rows | Filter by / Sort by | the database's filterable properties |
+| Notion Add / Update Database Row | Properties (names) | the database's (or row's) writable properties |
+| Discord Send / Read Messages | Channel | the connected server's text channels |
+| Google Sheets (all) | Sheet | the spreadsheet's tabs |
+| Google Sheets Append / Update Row | Values (names), Find row by column | the sheet's column names |
+
+Choice lists keep typing as a fallback (links, IDs, names the list does not
+show). Google Calendar and Gmail have no pickers (listing calendars would need
+a broader scope).
+
+**Name → value rows.** Object settings marked `key_value` (Sheets Values,
+Notion Properties, HTTP Query parameters and Headers) are edited as rows with
+the `{{variable}}` picker instead of JSON; a new row left empty is not stored
+(an empty value clears a cell).
+
+**Connect anything.** Gmail's inputs now accept any upstream data (`json`),
+like the C4–C7 nodes: text is used as the port describes, anything else
+leaves the settings in charge. Any node can therefore precede any
+integration node and feed its `{{variables}}`.

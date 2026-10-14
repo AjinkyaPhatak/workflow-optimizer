@@ -436,3 +436,14 @@ pre.json { background: var(--subtle); border: 1px solid var(--border); border-ra
 
 /* --- Gmail / integration groups in the palette (Phase C3) --- */
 .palette h4.palette-sub { margin: 6px 0 2px 4px; font-size: 11px; font-weight: 600; color: var(--muted); text-transform: none; }
+
+/* --- Account-backed pickers and name/value rows (Phase C8) --- */
+.dynamic-field .row { gap: 6px; align-items: center; }
+.dynamic-field select { flex: 1; min-width: 0; }
+.dynamic-field .field-actions, .kv-field .field-actions { justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.icon-button { min-width: 30px; padding: 0 8px; }
+.kv-field { display: flex; flex-direction: column; gap: 6px; }
+.kv-row { display: grid; grid-template-columns: minmax(0, 2fr) auto minmax(0, 3fr) auto; gap: 6px; align-items: start; }
+.kv-row > input { min-width: 0; }
+.kv-arrow { color: var(--muted); padding-top: 7px; }
+.kv-value { min-width: 0; }

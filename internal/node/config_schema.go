@@ -23,6 +23,18 @@ type ConfigField struct {
 	Step *float64 `json:"step,omitempty"`
 	// Multiline marks long free text (prompts, templates).
 	Multiline bool `json:"multiline,omitempty"`
+
+	// Phase C8 (editor hints; execution never reads them):
+	// KeyValue marks an object field edited as name -> value rows.
+	KeyValue bool `json:"key_value,omitempty"`
+	// OptionsSource names a list of choices for the field's value that the
+	// node loads through its connected account (POST
+	// /nodes/{type}/options); KeysSource does the same for a key/value
+	// field's names. DependsOn are the settings that must be set first and
+	// are sent along.
+	OptionsSource string   `json:"options_source,omitempty"`
+	KeysSource    string   `json:"keys_source,omitempty"`
+	DependsOn     []string `json:"depends_on,omitempty"`
 }
 
 // ConfigOption is one accepted value of a ConfigField.
@@ -111,4 +123,24 @@ func (o ConfigOption) applies(cfg map[string]any) bool {
 // InRange reports whether a number is within the field's bounds.
 func (f ConfigField) InRange(v float64) bool {
 	return (f.Min == nil || v >= *f.Min) && (f.Max == nil || v <= *f.Max)
+}
+
+// WithKeyValue returns the object field edited as name -> value rows.
+func (f ConfigField) WithKeyValue() ConfigField {
+	f.KeyValue = true
+	return f
+}
+
+// WithOptionsSource returns the field with choices loaded from source once
+// the dependsOn settings are set.
+func (f ConfigField) WithOptionsSource(source string, dependsOn ...string) ConfigField {
+	f.OptionsSource, f.DependsOn = source, dependsOn
+	return f
+}
+
+// WithKeysSource returns the key/value field with its names suggested from
+// source once the dependsOn settings are set.
+func (f ConfigField) WithKeysSource(source string, dependsOn ...string) ConfigField {
+	f.KeyValue, f.KeysSource, f.DependsOn = true, source, dependsOn
+	return f
 }
