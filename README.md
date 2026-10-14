@@ -33,7 +33,7 @@ PostgreSQL stays the source of truth; Redis still carries only execution IDs.
 
 Configuration (defaults): `DEFAULT_MAX_ATTEMPTS` (3, includes the first attempt), `DEFAULT_INITIAL_RETRY_DELAY` (1s), `DEFAULT_MAX_RETRY_DELAY` (5m), `DEFAULT_BACKOFF_MULTIPLIER` (2), `DEFAULT_EXECUTION_TIMEOUT` (1h), `DEFAULT_NODE_TIMEOUT` (5m), `DEFAULT_NODE_MAX_ATTEMPTS` (2), `REAPER_INTERVAL` (15s), `WORKER_LEASE_DURATION` (30s, at least twice the heartbeat), `WORKER_HEARTBEAT_INTERVAL` (10s), `SCHEDULER_INTERVAL` (1s), `REDIS_DEAD_LETTER_QUEUE` (`workflow:dead-letter`).
 
-Limits: worker shutdown still cancels in-flight executions (Phase 9 behaviour). A node that ignores cancellation keeps its worker busy until it returns, but its execution is still failed at the deadline by the reaper and its late writes are rejected. The HTTP node's transport is still a stub.
+Limits: worker shutdown still cancels in-flight executions (Phase 9 behaviour). A node that ignores cancellation keeps its worker busy until it returns, but its execution is still failed at the deadline by the reaper and its late writes are rejected. (The HTTP node became a real transport in Phase C7.)
 
 ## Credentials and providers (Phase 11)
 
@@ -330,3 +330,42 @@ empty for most messages.
 **Configuration**: `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`,
 `DISCORD_OAUTH_REDIRECT_URI` (ends with `/api/v1/oauth/callback/discord`) and
 `DISCORD_BOT_TOKEN`, all four or none, read by both the API and the worker.
+
+## HTTP Request node and credentials (Phase C7)
+
+The `http` node (named **HTTP Request**; it was a stub before C7) calls any
+HTTP API: method (GET, POST, PUT, PATCH, DELETE, HEAD), URL (or text on the
+`url` input), query parameters and headers as objects, and a body sent as
+JSON, a form, text or nothing (the Body setting, else the `body` input). Its
+outputs are `response` (parsed JSON when the server sends JSON, else text;
+non-UTF-8 bytes as `{base64, content_type, size}`), `status_code`, `headers`
+(lowercase names, without `Set-Cookie`) and `ok`. Limits: 10 MB responses,
+5 MB request bodies, timeout 1–120 s (default 30 s), 5 redirects.
+
+**Errors and retries**: with **Fail on error status** (default on) a 4xx/5xx
+fails the node with the platform's HTTP classification (429/408/5xx
+retryable, 401/403 `INVALID_CREDENTIALS`, other 4xx `INVALID_INPUT`); the
+response body is not copied into the error (turn the option off to inspect
+it). The node is `unsafe`, but failures of GET, HEAD, PUT and DELETE and
+429 refusals are marked not-applied, so the engine still retries those;
+writes (POST, PATCH) carry an `Idempotency-Key` header derived from the
+node's idempotency key.
+
+**Credentials**: an HTTP credential (provider `http`) is a bearer token, an
+API key (sent in a header or query parameter named in the node, default
+`X-API-Key`) or basic auth (`username:password`), and is **bound to allowed
+hosts** (`api.example.com` or `*.example.com`), sealed with the secret. The
+node refuses any other host (`CREDENTIAL_HOST_NOT_ALLOWED`) and never follows
+a redirect to another host while a credential is attached. Credentials of
+other providers (e.g. an OpenAI key) cannot be used by the HTTP node.
+`POST /credentials` takes `allowed_hosts` for provider `http`. The
+**Credentials** settings page (`/settings/credentials`) lists, adds and
+deletes credentials (owners and admins); a secret is sent once and can never
+be read back.
+
+**Private networks are blocked**: the node's dialer refuses loopback,
+private, link-local (including cloud metadata `169.254.169.254`), CGNAT,
+unspecified and multicast addresses after DNS resolution, and ignores proxy
+settings, so workflows cannot reach this server's database, Redis or
+internal services. `HTTP_ALLOW_PRIVATE_NETWORKS=true` lifts this (e.g. to
+call an API on localhost during development).

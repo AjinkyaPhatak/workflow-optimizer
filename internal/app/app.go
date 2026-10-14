@@ -60,6 +60,9 @@ type Dependencies struct {
 	Gmail    gmail.Options
 	Sheets   sheets.Options
 	Calendar calendar.Options
+	// HTTPTransport replaces the HTTP request node's transport (tests; nil:
+	// the private-network-blocking default).
+	HTTPTransport http.RoundTripper
 	// Notion configures the Notion API client (Phase C5).
 	Notion notion.Options
 	// Discord configures the Discord API client (Phase C6). An empty bot
@@ -122,7 +125,7 @@ func BootstrapWith(cfg config.Config, deps Dependencies) (*Application, error) {
 		{node: structured_output.New(nil), def: structured_output.Definition()},
 
 		// Integration category
-		{node: nodehttp.New(), def: nodehttp.Definition()},
+		{node: nodehttp.NewWith(nodehttp.Options{Credentials: deps.Credentials, AllowPrivateNetworks: cfg.HTTPAllowPrivateNetworks, Transport: deps.HTTPTransport}), def: nodehttp.Definition()},
 	}
 
 	// 4. Register nodes and definitions

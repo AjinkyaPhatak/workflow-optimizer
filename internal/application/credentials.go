@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -48,6 +49,9 @@ type CreateCredential struct {
 	Provider    string
 	Type        credential.Type
 	Secret      credential.Secret
+	// AllowedHosts bind an HTTP credential to hosts (required for provider
+	// http, Phase C7).
+	AllowedHosts []string
 }
 
 // Create encrypts and stores a credential. Owners and admins only.
@@ -55,7 +59,7 @@ func (s *CredentialService) Create(ctx context.Context, user uuid.UUID, in Creat
 	if _, err := s.access.Require(ctx, user, in.WorkspaceID, workspace.ActionManageCredentials, "workspace"); err != nil {
 		return credential.Credential{}, err
 	}
-	if !slices.Contains(s.providers.List(), in.Provider) {
+	if in.Provider != credential.ProviderHTTP && !slices.Contains(s.providers.List(), in.Provider) {
 		return credential.Credential{}, &InvalidError{Message: "unknown provider"}
 	}
 	if in.Type == credential.TypeOAuth2 {
@@ -65,9 +69,14 @@ func (s *CredentialService) Create(ctx context.Context, user uuid.UUID, in Creat
 		return credential.Credential{}, ErrUnavailable
 	}
 	c, err := s.service.Create(ctx, credential.CreateInput{WorkspaceID: in.WorkspaceID, Name: in.Name,
-		Provider: in.Provider, Type: in.Type, Secret: in.Secret})
+		Provider: in.Provider, Type: in.Type, Secret: in.Secret, AllowedHosts: in.AllowedHosts})
 	if errors.Is(err, credential.ErrInvalid) {
-		return credential.Credential{}, &InvalidError{Message: "invalid credential"}
+		msg := "invalid credential"
+		if in.Provider == credential.ProviderHTTP {
+			// The reason names only hosts and types, never the secret.
+			msg = strings.TrimPrefix(err.Error(), credential.ErrInvalid.Error()+": ")
+		}
+		return credential.Credential{}, &InvalidError{Message: msg}
 	}
 	return c, err
 }

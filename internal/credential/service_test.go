@@ -207,3 +207,50 @@ func TestServiceCreateValidation(t *testing.T) {
 		}
 	}
 }
+
+// Phase C7: HTTP credentials are bound to the hosts they may be sent to.
+func TestHTTPCredentialHosts(t *testing.T) {
+	svc, err := credential.NewService(newMemRepo(), newEncryptor(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, ws := context.Background(), uuid.New()
+	c, err := svc.Create(ctx, credential.CreateInput{WorkspaceID: ws, Name: "Stripe", Provider: credential.ProviderHTTP, Type: credential.TypeBearerToken,
+		Secret: credential.NewSecret("sk_test_1"), AllowedHosts: []string{"https://API.stripe.com/v1/", "*.example.com", "api.stripe.com", "localhost:8080"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err := svc.Resolve(ctx, ws, c.ID, credential.ProviderHTTP)
+	if err != nil || strings.Join(r.AllowedHosts, ",") != "api.stripe.com,*.example.com,localhost" || r.Secret.Reveal() != "sk_test_1" {
+		t.Fatalf("resolved: %+v %v", r, err)
+	}
+	if strings.Contains(string(c.EncryptedData), "stripe") {
+		t.Fatal("the hosts are sealed with the secret")
+	}
+	// An HTTP credential is never resolved for another provider, nor the
+	// other way round.
+	if _, err := svc.Resolve(ctx, ws, c.ID, "openai"); !errors.Is(err, credential.ErrProviderMismatch) {
+		t.Fatalf("provider: %v", err)
+	}
+	for name, in := range map[string]credential.CreateInput{
+		"no hosts":      {Type: credential.TypeAPIKey},
+		"bad host":      {Type: credential.TypeAPIKey, AllowedHosts: []string{"not a host"}},
+		"bare word":     {Type: credential.TypeAPIKey, AllowedHosts: []string{"intranet"}},
+		"wildcard tld":  {Type: credential.TypeAPIKey, AllowedHosts: []string{"*.com"}},
+		"basic no user": {Type: credential.TypeBasicAuth, AllowedHosts: []string{"api.example.com"}},
+		"custom type":   {Type: credential.TypeCustom, AllowedHosts: []string{"api.example.com"}},
+	} {
+		in.WorkspaceID, in.Name, in.Provider, in.Secret = ws, "x", credential.ProviderHTTP, credential.NewSecret("secret")
+		if _, err := svc.Create(ctx, in); !errors.Is(err, credential.ErrInvalid) || strings.Contains(err.Error(), "secret") && name != "basic no user" {
+			t.Fatalf("%s: %v", name, err)
+		}
+	}
+	for host, want := range map[string]bool{
+		"api.stripe.com": true, "API.Stripe.com.": true, "evil-api.stripe.com": false, "stripe.com": false,
+		"a.example.com": true, "a.b.example.com": true, "example.com": false, "example.com.evil.test": false,
+	} {
+		if credential.HostAllowed(r.AllowedHosts, host) != want {
+			t.Errorf("%s allowed = %v", host, !want)
+		}
+	}
+}

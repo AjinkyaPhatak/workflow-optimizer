@@ -320,6 +320,18 @@ export interface Credential {
   updated_at: string;
 }
 
+/** POST /credentials. The secret travels only in this request. */
+export interface CreateCredentialBody {
+  workspace_id: UUID;
+  name: string;
+  /** "http" (HTTP Request nodes, Phase C7) or an LLM provider such as "openai". */
+  provider: string;
+  credential_type: "api_key" | "bearer_token" | "basic_auth";
+  secret: string;
+  /** Hosts an http credential may be sent to (required for "http"). */
+  allowed_hosts?: string[];
+}
+
 // --- connected accounts (Phase C2) ------------------------------------------------
 
 /** A configured OAuth provider (public metadata only). */

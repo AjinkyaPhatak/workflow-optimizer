@@ -124,6 +124,11 @@ type Config struct {
 	// and outputs (OBSERVABILITY_EXPOSE_NODE_DATA, default true; "false"
 	// hides them).
 	ExposeNodeData bool
+
+	// HTTPAllowPrivateNetworks lets the HTTP request node (Phase C7) reach
+	// loopback, private and link-local addresses (HTTP_ALLOW_PRIVATE_NETWORKS,
+	// default false: workflows cannot reach this server's own network).
+	HTTPAllowPrivateNetworks bool
 }
 
 // Reliability is the Phase 10 retry, timeout and recovery configuration.
@@ -258,6 +263,14 @@ func LoadFrom(getenv func(string) string) (Config, error) {
 			problems = append(problems, fmt.Sprintf("OBSERVABILITY_EXPOSE_NODE_DATA %q is not a boolean", v))
 		} else {
 			cfg.ExposeNodeData = b
+		}
+	}
+	if v, ok := lookup(getenv, "HTTP_ALLOW_PRIVATE_NETWORKS"); ok {
+		b, err := strconv.ParseBool(v)
+		if err != nil {
+			problems = append(problems, fmt.Sprintf("HTTP_ALLOW_PRIVATE_NETWORKS %q is not a boolean", v))
+		} else {
+			cfg.HTTPAllowPrivateNetworks = b
 		}
 	}
 	if len(problems) > 0 {

@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	nethttp "net/http"
+	"net/http/httptest"
 	"sync"
 	"testing"
 	"time"
@@ -665,9 +667,15 @@ func TestAllInitialV1NodeContracts(t *testing.T) {
 		if err := def.Validate(); err != nil {
 			t.Fatalf("invalid http def: %v", err)
 		}
-		n := http.New()
+		// Phase C7: a real request (to a local test server).
+		srv := httptest.NewServer(nethttp.HandlerFunc(func(w nethttp.ResponseWriter, _ *nethttp.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"status":"ok"}`))
+		}))
+		defer srv.Close()
+		n := http.NewWith(http.Options{Transport: srv.Client().Transport})
 		out, err := n.Execute(ctx, node.NodeInput{
-			Config: map[string]any{"url": "https://api.example.com", "method": "GET"},
+			Config: map[string]any{"url": srv.URL, "method": "GET"},
 		})
 		if err != nil {
 			t.Fatalf("execute failed: %v", err)

@@ -241,6 +241,8 @@ type CreateCredential struct {
 	Provider       string `json:"provider"`
 	CredentialType string `json:"credential_type"`
 	Secret         string `json:"secret"`
+	// AllowedHosts bind an http credential to hosts (Phase C7).
+	AllowedHosts []string `json:"allowed_hosts,omitempty"`
 }
 
 // Validate returns the application input.
@@ -267,14 +269,17 @@ func (r CreateCredential) Validate() (application.CreateCredential, error) {
 	if len(r.Secret) > MaxSecretBytes {
 		return application.CreateCredential{}, httpx.BadRequest("secret is too long")
 	}
+	if len(r.AllowedHosts) > credential.MaxAllowedHosts {
+		return application.CreateCredential{}, httpx.BadRequest(fmt.Sprintf("at most %d allowed_hosts", credential.MaxAllowedHosts))
+	}
 	return application.CreateCredential{WorkspaceID: ws, Name: n, Provider: provider, Type: typ,
-		Secret: credential.NewSecret(r.Secret)}, nil
+		Secret: credential.NewSecret(r.Secret), AllowedHosts: r.AllowedHosts}, nil
 }
 
 // String redacts the secret if the request is ever formatted.
 func (r CreateCredential) String() string {
-	return fmt.Sprintf("CreateCredential{workspace_id:%s name:%q provider:%q type:%q secret:[REDACTED]}",
-		r.WorkspaceID, r.Name, r.Provider, r.CredentialType)
+	return fmt.Sprintf("CreateCredential{workspace_id:%s name:%q provider:%q type:%q allowed_hosts:%q secret:[REDACTED]}",
+		r.WorkspaceID, r.Name, r.Provider, r.CredentialType, r.AllowedHosts)
 }
 
 // GoString redacts the secret under %#v.

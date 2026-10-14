@@ -51,6 +51,9 @@ type CreateInput struct {
 	Provider    string
 	Type        Type
 	Secret      Secret
+	// AllowedHosts bind an HTTP credential (ProviderHTTP, required there) to
+	// the hosts it may be sent to; see NormalizeHost.
+	AllowedHosts []string
 }
 
 // envelope is the at-rest JSON stored in credentials.encrypted_data. The
@@ -66,6 +69,9 @@ type envelope struct {
 type payload struct {
 	Secret string        `json:"secret,omitempty"`
 	OAuth  *oauthPayload `json:"oauth,omitempty"`
+	// Hosts are an HTTP credential's allowed hosts (Phase C7), sealed with
+	// the secret so they cannot be changed without re-entering it.
+	Hosts []string `json:"hosts,omitempty"`
 }
 
 // oauthPayload is OAuthToken in plain form. It exists only inside seal/open.
@@ -143,7 +149,14 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (Credential, error
 	case s.enc == nil:
 		return Credential{}, fmt.Errorf("%w: no credential encryption key is configured", ErrInvalid)
 	}
-	data, err := s.seal(ctx, payload{Secret: in.Secret.Reveal()})
+	var hosts []string
+	if strings.TrimSpace(in.Provider) == ProviderHTTP {
+		var err error
+		if hosts, err = httpCredentialHosts(in); err != nil {
+			return Credential{}, err
+		}
+	}
+	data, err := s.seal(ctx, payload{Secret: in.Secret.Reveal(), Hosts: hosts})
 	if err != nil {
 		return Credential{}, err
 	}
@@ -314,7 +327,7 @@ func (s *Service) Resolve(ctx context.Context, workspaceID, id uuid.UUID, provid
 	if p.Secret == "" {
 		return ResolvedCredential{}, fmt.Errorf("%w: credential %s holds no usable secret", ErrInvalid, id)
 	}
-	return ResolvedCredential{ID: c.ID, Provider: c.Provider, Type: c.CredentialType, Secret: NewSecret(p.Secret)}, nil
+	return ResolvedCredential{ID: c.ID, Provider: c.Provider, Type: c.CredentialType, Secret: NewSecret(p.Secret), AllowedHosts: p.Hosts}, nil
 }
 
 // IsCredentialError reports whether err is one of the credential errors.

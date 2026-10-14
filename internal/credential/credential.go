@@ -122,6 +122,9 @@ type ResolvedCredential struct {
 	// AccountID is an OAuth credential's provider account ID (e.g. the
 	// Discord server the account was connected to); empty otherwise.
 	AccountID string
+	// AllowedHosts are the hosts an HTTP credential (ProviderHTTP) may be
+	// sent to (Phase C7); empty for other providers.
+	AllowedHosts []string
 }
 
 // Resolver resolves a credential for use by one execution. workspaceID is

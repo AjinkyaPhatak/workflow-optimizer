@@ -126,9 +126,10 @@ function CredentialSelect({ id, value, provider, credentials, onCommit, disabled
         ))}
         {value && !known && <option value={value}>Unknown credential ({value.slice(0, 8)}…)</option>}
       </select>
-      {options.length === 0 && (
-        <div className="hint">No {provider ? `${provider} ` : ""}credentials in this workspace yet.</div>
-      )}
+      <div className="hint">
+        {options.length === 0 ? `No ${provider ? `${provider} ` : ""}credentials in this workspace yet. ` : ""}
+        <Link href="/settings/credentials">Manage credentials</Link>
+      </div>
     </>
   );
 }
