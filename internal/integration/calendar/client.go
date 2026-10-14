@@ -49,9 +49,30 @@ type Event struct {
 	Start       EventTime  `json:"start"`
 	End         EventTime  `json:"end"`
 	Attendees   []Attendee `json:"attendees,omitempty"`
-	Organizer   *struct {
+	// HangoutLink is the event's Google Meet link (set by Google).
+	HangoutLink string `json:"hangoutLink,omitempty"`
+	// ConferenceData asks Google to add a Meet link when the event is
+	// created (sent with conferenceDataVersion=1).
+	ConferenceData *ConferenceData `json:"conferenceData,omitempty"`
+	Organizer      *struct {
 		Email string `json:"email"`
 	} `json:"organizer,omitempty"`
+}
+
+// ConferenceData requests a conference for a new event.
+type ConferenceData struct {
+	CreateRequest *CreateConferenceRequest `json:"createRequest,omitempty"`
+}
+
+// CreateConferenceRequest asks for a conference of one solution type.
+type CreateConferenceRequest struct {
+	RequestID             string                `json:"requestId"`
+	ConferenceSolutionKey ConferenceSolutionKey `json:"conferenceSolutionKey"`
+}
+
+// ConferenceSolutionKey names the conference type ("hangoutsMeet": Google Meet).
+type ConferenceSolutionKey struct {
+	Type string `json:"type"`
 }
 
 func eventsPath(calendarID string) string {
@@ -80,7 +101,11 @@ func (c *Client) List(ctx context.Context, calendarID, timeMin, timeMax, query s
 // Insert creates an event. sendUpdates is "all" or "none".
 func (c *Client) Insert(ctx context.Context, calendarID string, e Event, sendUpdates string) (Event, error) {
 	var out Event
-	err := c.api.Do(ctx, http.MethodPost, eventsPath(calendarID), url.Values{"sendUpdates": {sendUpdates}}, e, &out, "create event")
+	q := url.Values{"sendUpdates": {sendUpdates}}
+	if e.ConferenceData != nil {
+		q.Set("conferenceDataVersion", "1")
+	}
+	err := c.api.Do(ctx, http.MethodPost, eventsPath(calendarID), q, e, &out, "create event")
 	return out, err
 }
 

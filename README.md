@@ -216,8 +216,8 @@ covers Gmail, Sheets and Calendar). They share the Google REST plumbing in
 | `google_sheets.read_rows` | none | `rows` [{`<column>`: text, ..., `row_number`}], `count`, `headers` [], `first_row` {} |
 | `google_sheets.append_row` | unsafe | `row_number`, `updated_range` |
 | `google_sheets.update_row` | idempotent | `row_number`, `updated_range`, `row` {} (the row after the update) |
-| `google_calendar.list_events` | none | `events` [{`event_id`, `summary`, `description`, `location`, `start`, `end`, `all_day`, `attendees` [], `organizer`, `html_link`, `status`}], `count`, `event_id` (earliest) |
-| `google_calendar.create_event` | idempotent | `event_id`, `html_link`, `start`, `end`, `status` |
+| `google_calendar.list_events` | none | `events` [{`event_id`, `summary`, `description`, `location`, `start`, `end`, `all_day`, `attendees` [], `organizer`, `html_link`, `meet_link`, `status`}], `count`, `event_id` (earliest) |
+| `google_calendar.create_event` | idempotent | `event_id`, `html_link`, `meet_link`, `start`, `end`, `status` |
 
 **Sheets are tables**: row 1 holds the column names and rows are objects keyed
 by them; Values are an object of column names (`{"Email": "{{read.sender}}"}`,
@@ -251,6 +251,29 @@ Not requested: `drive` or `calendar`. An account connected before C4 lacks
 them: its Sheets and Calendar calls fail with `PERMISSION_DENIED` asking to
 reconnect the account. In Google Cloud, the Sheets API and the Calendar API
 must be enabled and both scopes added to the consent screen's Data Access.
+
+## Google Meet
+
+Meet links come two ways, both on the same Google connected account:
+
+- **Calendar Create Event → Add Google Meet link** puts a Meet call on a
+  scheduled event (`meet_link` output; List Events also returns each event's
+  `meet_link`). It needs no scope beyond `calendar.events`. The conference
+  request ID is the event ID, so a retry asks for the same call.
+- **`google_meet.create_meeting`** (unsafe) creates an instant meeting space
+  through the Meet REST API: outputs `meeting_link`, `meeting_code` and
+  `space`. **Who can join** sets the space's access type (`OPEN`: anyone with
+  the link; `TRUSTED`: the organization and invitees; `RESTRICTED`: invitees
+  only; empty: the account's default). It cannot deduplicate, so a failure
+  that may have applied is not retried automatically.
+
+**Scope** added: `meetings.space.created` (create spaces and manage only the
+spaces this app created; no access to other meetings, recordings or
+transcripts). Transcripts and recordings are not offered: they need
+`meetings.space.readonly` and a paid Google Workspace plan. In Google Cloud,
+enable the **Google Meet REST API**, add the scope to Data Access, and
+reconnect the Google account; an account connected earlier fails Create
+Meeting with `PERMISSION_DENIED` asking to reconnect.
 
 ## Notion (Phase C5)
 

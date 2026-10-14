@@ -28,14 +28,14 @@ func TestBootstrapRegistersAllV1Nodes(t *testing.T) {
 	// Expect the 11 V1 nodes plus 5 Gmail actions (Phase C3), 3 Google
 	// Sheets and 2 Google Calendar actions (C4), 4 Notion actions (C5) and
 	// 2 Discord actions (C6), Extract Text (D1), the 2 knowledge nodes (D2)
-	// and Switch (E1)
+	// and Switch (E1), and Google Meet's Create Meeting
 	got := len(a.NodeRegistry.List())
-	if got != 31 {
-		t.Fatalf("expected 31 nodes (11 V1 + 5 Gmail + 3 Sheets + 2 Calendar + 4 Notion + 2 Discord + 3 knowledge + Switch), got %d", got)
+	if got != 32 {
+		t.Fatalf("expected 32 nodes (11 V1 + 5 Gmail + 3 Sheets + 2 Calendar + 1 Meet + 4 Notion + 2 Discord + 3 knowledge + Switch), got %d", got)
 	}
 	for _, typ := range []string{"gmail.search", "gmail.read", "gmail.create_draft", "gmail.send", "gmail.reply",
 		"google_sheets.read_rows", "google_sheets.append_row", "google_sheets.update_row",
-		"google_calendar.list_events", "google_calendar.create_event",
+		"google_calendar.list_events", "google_calendar.create_event", "google_meet.create_meeting",
 		"notion.search", "notion.query_database", "notion.create_page", "notion.update_page",
 		"discord.send_message", "discord.read_messages"} {
 		if !a.NodeRegistry.HasNodeType(typ) {

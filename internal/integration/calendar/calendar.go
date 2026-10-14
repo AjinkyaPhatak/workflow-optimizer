@@ -3,8 +3,11 @@
 // connected accounts (C2, scope calendar.events).
 //
 //	list_events:  events [{event_id, summary, description, location, start, end, all_day,
-//	              attendees [], organizer, html_link, status}], count, event_id (first)
-//	create_event: event_id, html_link, start, end, status
+//	              attendees [], organizer, html_link, meet_link, status}], count, event_id (first)
+//	create_event: event_id, html_link, meet_link, start, end, status
+//
+// create_event can add a Google Meet link (Add Google Meet link); that needs
+// no scope beyond calendar.events.
 //
 // create_event is idempotent: the event ID is derived from the node's
 // idempotency key, so a retried attempt finds the event the first attempt
@@ -13,8 +16,10 @@ package calendar
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base32"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"net/http"
@@ -65,7 +70,7 @@ func Integration() integration.Integration {
 				Description: "Lists upcoming events from now on, earliest first (repeating events are listed once per occurrence).",
 				Inputs:      []node.PortDefinition{node.NewPortDefinition("query", node.ValueTypeJSON, false, "Any upstream data; text is used as the search (overriding the Search setting)")},
 				Outputs: []node.PortDefinition{
-					node.NewPortDefinition("events", node.ValueTypeArray, true, "Events: event_id, summary, description, location, start, end, all_day, attendees, organizer, html_link, status"),
+					node.NewPortDefinition("events", node.ValueTypeArray, true, "Events: event_id, summary, description, location, start, end, all_day, attendees, organizer, html_link, meet_link, status"),
 					node.NewPortDefinition("count", node.ValueTypeNumber, true, "Number of events returned"),
 					node.NewPortDefinition("event_id", node.ValueTypeString, true, "ID of the earliest event (empty when there is none)"),
 				},
@@ -85,6 +90,7 @@ func Integration() integration.Integration {
 				Outputs: []node.PortDefinition{
 					node.NewPortDefinition("event_id", node.ValueTypeString, true, "Event ID"),
 					node.NewPortDefinition("html_link", node.ValueTypeString, true, "Link to the event in Google Calendar"),
+					node.NewPortDefinition("meet_link", node.ValueTypeString, true, "Google Meet link (empty unless Add Google Meet link is on)"),
 					node.NewPortDefinition("start", node.ValueTypeString, true, "Start (RFC 3339, or a date for all-day events)"),
 					node.NewPortDefinition("end", node.ValueTypeString, true, "End (RFC 3339, or the day after an all-day event)"),
 					node.NewPortDefinition("status", node.ValueTypeString, true, `Event status, normally "confirmed"`),
@@ -101,6 +107,7 @@ func Integration() integration.Integration {
 					str("description", "Description", "Used when the description input is not connected; {{variables}} are filled in.", false).WithMultiline(),
 					str("attendees", "Attendees", "Comma-separated email addresses to invite.", false),
 					node.NewConfigField("notify_attendees", node.ValueTypeBoolean, false, false, "Email the invitation to the attendees.").WithLabel("Notify attendees"),
+					node.NewConfigField("add_meet_link", node.ValueTypeBoolean, false, false, "Add a Google Meet video call to the event.").WithLabel("Add Google Meet link"),
 				},
 			},
 		},
@@ -153,7 +160,7 @@ func summary(e Event) map[string]any {
 	return map[string]any{
 		"event_id": e.ID, "summary": e.Summary, "description": e.Description, "location": e.Location,
 		"start": boundary(e.Start), "end": boundary(e.End), "all_day": e.Start.Date != "",
-		"attendees": attendees, "organizer": organizer, "html_link": e.HTMLLink, "status": e.Status,
+		"attendees": attendees, "organizer": organizer, "html_link": e.HTMLLink, "meet_link": e.HangoutLink, "status": e.Status,
 	}
 }
 
@@ -242,6 +249,17 @@ func eventID(key string) string {
 	return strings.ToLower(base32.HexEncoding.WithPadding(base32.NoPadding).EncodeToString(sum[:]))
 }
 
+// meetRequestID identifies a Meet link request: the event ID (so a retry
+// asks for the same conference), else a random one.
+func meetRequestID(eventID string) string {
+	if eventID != "" {
+		return eventID
+	}
+	b := make([]byte, 16)
+	_, _ = rand.Read(b)
+	return hex.EncodeToString(b)
+}
+
 func eventSpec(in node.NodeInput) (Event, string, error) {
 	title := text(in, "summary")
 	if title == "" {
@@ -310,6 +328,10 @@ func createEvent(ctx context.Context, c *Client, in node.NodeInput) (node.NodeOu
 	}
 	cal := calendarID(in)
 	e.ID = eventID(in.IdempotencyKey)
+	if b, _ := in.GetBooleanConfig("add_meet_link"); b {
+		e.ConferenceData = &ConferenceData{CreateRequest: &CreateConferenceRequest{
+			RequestID: meetRequestID(e.ID), ConferenceSolutionKey: ConferenceSolutionKey{Type: "hangoutsMeet"}}}
+	}
 	created, err := c.Insert(ctx, cal, e, send)
 	var ie *integration.Error
 	if err != nil && e.ID != "" && errors.As(err, &ie) && ie.StatusCode == http.StatusConflict {
@@ -322,6 +344,7 @@ func createEvent(ctx context.Context, c *Client, in node.NodeInput) (node.NodeOu
 	out := node.NewNodeOutput(nil)
 	out.SetPort("event_id", node.NewStringValue(created.ID))
 	out.SetPort("html_link", node.NewStringValue(created.HTMLLink))
+	out.SetPort("meet_link", node.NewStringValue(created.HangoutLink))
 	out.SetPort("start", node.NewStringValue(boundary(created.Start)))
 	out.SetPort("end", node.NewStringValue(boundary(created.End)))
 	out.SetPort("status", node.NewStringValue(created.Status))

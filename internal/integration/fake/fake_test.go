@@ -225,7 +225,7 @@ func TestFakeIntegrationIsDiscoverableAsOrdinaryNodes(t *testing.T) {
 		}
 		noSecret(t, "node definition", mustJSON(t, def))
 	}
-	if l := f.app.IntegrationRegistry.List(); len(l) != 6 || l[0].ID != "discord" || l[5].ID != fake.ID {
+	if l := f.app.IntegrationRegistry.List(); len(l) != 7 || l[0].ID != "discord" || l[6].ID != fake.ID {
 		t.Fatalf("integration registry: %+v", l)
 	}
 	// Production composition installs Google (C3, C4), Notion (C5) and Discord (C6), never the fake.
@@ -233,7 +233,7 @@ func TestFakeIntegrationIsDiscoverableAsOrdinaryNodes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if l := prod.IntegrationRegistry.List(); len(l) != 5 || l[0].ID != "discord" || l[1].ID != "gmail" || l[2].ID != "google_calendar" || l[3].ID != "google_sheets" || l[4].ID != "notion" || prod.NodeRegistry.HasNodeType(fake.ReadType) {
+	if l := prod.IntegrationRegistry.List(); len(l) != 6 || l[0].ID != "discord" || l[1].ID != "gmail" || l[2].ID != "google_calendar" || l[3].ID != "google_meet" || l[4].ID != "google_sheets" || l[5].ID != "notion" || prod.NodeRegistry.HasNodeType(fake.ReadType) {
 		t.Fatal("the fake integration must not be part of the production composition")
 	}
 }

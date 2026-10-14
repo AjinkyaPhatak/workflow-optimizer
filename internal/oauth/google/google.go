@@ -37,7 +37,8 @@ const (
 )
 
 // Scopes requested when connecting a Google account. They are the minimum
-// for the Gmail (C3), Google Sheets and Google Calendar (C4) actions:
+// for the Gmail (C3), Google Sheets and Google Calendar (C4) and Google Meet
+// actions:
 //
 //   - openid, email: the account's stable ID (sub) and its address, shown as
 //     the account label. No profile, contacts or other Google data.
@@ -48,7 +49,11 @@ const (
 //   - spreadsheets: google_sheets.* (read and edit spreadsheets the account
 //     can open; no other Drive files).
 //   - calendar.events: google_calendar.* (read and create events; it cannot
-//     create, share or delete calendars).
+//     create, share or delete calendars). Calendar events with a Meet link
+//     need nothing more.
+//   - meetings.space.created: google_meet.create_meeting (create meeting
+//     spaces and manage only the spaces this app created; no access to the
+//     account's other meetings, recordings or transcripts).
 //
 // Not requested: https://mail.google.com/ (full mailbox control),
 // gmail.modify (label changes, trash), drive (all Drive files) and calendar
@@ -60,6 +65,7 @@ var Scopes = []string{
 	"https://www.googleapis.com/auth/gmail.compose",
 	"https://www.googleapis.com/auth/spreadsheets",
 	"https://www.googleapis.com/auth/calendar.events",
+	"https://www.googleapis.com/auth/meetings.space.created",
 }
 
 // Options configure the provider. ClientID, ClientSecret and RedirectURL
@@ -102,7 +108,7 @@ func New(o Options) (*Provider, error) {
 		return nil, oauth.NewError(oauth.KindInvalidConfiguration, "google: a client ID and a client secret are required")
 	}
 	cfg := oauth.ProviderConfig{
-		ID: ID, Name: "Google", Description: "Gmail, Google Sheets and Google Calendar: email, spreadsheet rows and calendar events.",
+		ID: ID, Name: "Google", Description: "Gmail, Google Sheets, Google Calendar and Google Meet: email, spreadsheet rows, calendar events and meeting links.",
 		ClientID: strings.TrimSpace(o.ClientID), ClientSecret: o.ClientSecret,
 		AuthURL: or(o.AuthURL, DefaultAuthURL), TokenURL: or(o.TokenURL, DefaultTokenURL), RevokeURL: or(o.RevokeURL, DefaultRevokeURL),
 		RedirectURL: strings.TrimSpace(o.RedirectURL), Scopes: append([]string(nil), Scopes...),

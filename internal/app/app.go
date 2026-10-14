@@ -13,6 +13,7 @@ import (
 	"workflow-optimizer/internal/integration/calendar"
 	"workflow-optimizer/internal/integration/discord"
 	"workflow-optimizer/internal/integration/gmail"
+	"workflow-optimizer/internal/integration/meet"
 	"workflow-optimizer/internal/integration/notion"
 	"workflow-optimizer/internal/integration/sheets"
 	"workflow-optimizer/internal/knowledge"
@@ -68,6 +69,7 @@ type Dependencies struct {
 	Gmail    gmail.Options
 	Sheets   sheets.Options
 	Calendar calendar.Options
+	Meet     meet.Options
 	// HTTPTransport replaces the HTTP request node's transport (tests; nil:
 	// the private-network-blocking default).
 	HTTPTransport http.RoundTripper
@@ -160,7 +162,7 @@ func BootstrapWith(cfg config.Config, deps Dependencies) (*Application, error) {
 	}
 
 	// 5. Install integrations: their actions are ordinary nodes. Gmail
-	// (Phase C3), Google Sheets and Google Calendar (C4) are part of the
+	// (Phase C3), Google Sheets and Google Calendar (C4) and Google Meet are part of the
 	// production catalog; they use Google connected accounts, offered only
 	// when Google OAuth is configured. Notion (C5) and Discord (C6) likewise
 	// use their connected accounts.
@@ -177,6 +179,10 @@ func BootstrapWith(cfg config.Config, deps Dependencies) (*Application, error) {
 	if err != nil {
 		return nil, fmt.Errorf("bootstrap google calendar: %w", err)
 	}
+	meetModule, err := meet.Module(deps.Credentials, deps.Meet)
+	if err != nil {
+		return nil, fmt.Errorf("bootstrap google meet: %w", err)
+	}
 	notionModule, err := notion.Module(deps.Credentials, deps.Notion)
 	if err != nil {
 		return nil, fmt.Errorf("bootstrap notion: %w", err)
@@ -188,7 +194,7 @@ func BootstrapWith(cfg config.Config, deps Dependencies) (*Application, error) {
 	if err != nil {
 		return nil, fmt.Errorf("bootstrap discord: %w", err)
 	}
-	for _, m := range append([]integration.Module{gmailModule, sheetsModule, calendarModule, notionModule, discordModule}, deps.Integrations...) {
+	for _, m := range append([]integration.Module{gmailModule, sheetsModule, calendarModule, meetModule, notionModule, discordModule}, deps.Integrations...) {
 		if err := integration.Install(integrationReg, nodeReg, m); err != nil {
 			return nil, fmt.Errorf("bootstrap install integration %q: %w", m.Integration.ID, err)
 		}

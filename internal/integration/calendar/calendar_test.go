@@ -92,6 +92,9 @@ func (m *mockCalendar) serve(w http.ResponseWriter, r *http.Request) {
 			id = "generated1"
 		}
 		e["id"], e["status"], e["htmlLink"] = id, "confirmed", "https://calendar.google.com/event?eid="+id
+		if e["conferenceData"] != nil && r.URL.Query().Get("conferenceDataVersion") == "1" {
+			e["hangoutLink"] = "https://meet.google.com/abc-defg-hij"
+		}
 		m.events = append(m.events, e)
 		if m.failNext != 0 {
 			writeJSON(w, m.failNext, map[string]any{"error": map[string]any{"code": m.failNext}})
@@ -148,7 +151,7 @@ func TestListEvents(t *testing.T) {
 	}
 	events := out["events"].([]any)
 	want := `{"all_day":false,"attendees":["ada@example.test"],"description":"","end":"2026-10-15T09:15:00+05:30","event_id":"ev1",` +
-		`"html_link":"https://calendar.google.com/event?eid=ev1","location":"","organizer":"me@example.test","start":"2026-10-15T09:00:00+05:30","status":"confirmed","summary":"Standup"}`
+		`"html_link":"https://calendar.google.com/event?eid=ev1","location":"","meet_link":"","organizer":"me@example.test","start":"2026-10-15T09:00:00+05:30","status":"confirmed","summary":"Standup"}`
 	if out["count"] != 2.0 || out["event_id"] != "ev1" || mustJSON(events[0]) != want ||
 		events[1].(map[string]any)["all_day"] != true || events[1].(map[string]any)["start"] != "2026-10-16" {
 		t.Fatalf("list: %v", out)
@@ -221,6 +224,26 @@ func TestCreateEvent(t *testing.T) {
 	}
 	if len(m.requests) != before {
 		t.Fatal("invalid settings must not reach Google Calendar")
+	}
+}
+
+func TestCreateEventWithMeetLink(t *testing.T) {
+	m := newMock(t)
+	h := apitest.New(t, m.options())
+	out, err := h.Result("google_calendar.create_event", map[string]any{"summary": "Sync", "start": "2026-10-20T10:00:00Z", "add_meet_link": true}, map[string]any{})
+	if err != nil || out["meet_link"] != "https://meet.google.com/abc-defg-hij" {
+		t.Fatalf("create: %v %v", out, err)
+	}
+	req := m.last()
+	create := req.Body["conferenceData"].(map[string]any)["createRequest"].(map[string]any)
+	if req.Query["conferenceDataVersion"][0] != "1" || mustJSON(create["conferenceSolutionKey"]) != `{"type":"hangoutsMeet"}` ||
+		create["requestId"] != req.Body["id"] {
+		t.Fatalf("insert request: %+v", req)
+	}
+	// Off (the default): no conference is requested.
+	out, err = h.Result("google_calendar.create_event", map[string]any{"summary": "Solo", "start": "2026-10-21T10:00:00Z"}, map[string]any{})
+	if err != nil || out["meet_link"] != "" || m.last().Body["conferenceData"] != nil || m.last().Query["conferenceDataVersion"] != nil {
+		t.Fatalf("no meet: %v %v %+v", out, err, m.last())
 	}
 }
 

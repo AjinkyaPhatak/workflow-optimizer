@@ -11,6 +11,7 @@ import (
 	"workflow-optimizer/internal/integration/calendar"
 	"workflow-optimizer/internal/integration/discord"
 	"workflow-optimizer/internal/integration/gmail"
+	"workflow-optimizer/internal/integration/meet"
 	"workflow-optimizer/internal/integration/notion"
 	"workflow-optimizer/internal/integration/sheets"
 	"workflow-optimizer/internal/oauth"
@@ -33,6 +34,7 @@ type Extensions struct {
 	Gmail    gmail.Options
 	Sheets   sheets.Options
 	Calendar calendar.Options
+	Meet     meet.Options
 	Notion   notion.Options
 	Discord  discord.Options
 }
@@ -101,7 +103,7 @@ func newCredentialChain(cfg config.Config, store *postgres.Store, enc credential
 }
 
 func (c *credentialChain) dependencies(ext Extensions) Dependencies {
-	deps := Dependencies{Credentials: c.resolver, Gmail: ext.Gmail, Sheets: ext.Sheets, Calendar: ext.Calendar, Notion: ext.Notion, Discord: ext.Discord}
+	deps := Dependencies{Credentials: c.resolver, Gmail: ext.Gmail, Sheets: ext.Sheets, Calendar: ext.Calendar, Meet: ext.Meet, Notion: ext.Notion, Discord: ext.Discord}
 	if ext.Integrations != nil {
 		deps.Integrations = ext.Integrations(c.resolver)
 	}
