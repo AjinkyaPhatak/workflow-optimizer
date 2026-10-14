@@ -106,9 +106,12 @@ func (s *CredentialService) Delete(ctx context.Context, user, id uuid.UUID) erro
 		// Its tokens are managed with the connected account (Phase C2).
 		return &ConflictError{Code: "CREDENTIAL_IN_USE", Message: "this credential belongs to a connected account; disconnect the account instead"}
 	}
-	if err := s.service.Delete(ctx, c.WorkspaceID, id); errors.Is(err, credential.ErrNotFound) {
+	err = s.service.Delete(ctx, c.WorkspaceID, id)
+	switch {
+	case errors.Is(err, credential.ErrNotFound):
 		return notFound("credential")
-	} else {
-		return err
+	case errors.Is(err, credential.ErrInUse):
+		return &ConflictError{Code: "CREDENTIAL_IN_USE", Message: "this credential is used by a knowledge base; delete the knowledge base first"}
 	}
+	return err
 }

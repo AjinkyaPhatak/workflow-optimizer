@@ -106,6 +106,7 @@ func NewWorkerWith(ctx context.Context, cfg config.Config, logger *slog.Logger, 
 	}
 	deps := chain.dependencies(ext)
 	deps.Files = postgres.NewFileRepository(store)
+	deps.KnowledgeRepository = postgres.NewKnowledgeRepository(store)
 	application, err := BootstrapWith(cfg, deps)
 	if err != nil {
 		store.Close()

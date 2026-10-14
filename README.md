@@ -51,7 +51,7 @@ LLM node -> provider registry ("openai") -> OpenAI provider (Chat Completions)
 
 ## REST API (Phase 12)
 
-`go run ./cmd/api` serves `/api/v1` on `API_ADDR` (default `:8080`). It needs `DATABASE_URL`, `REDIS_URL`, `AUTH_TOKEN_SECRET` (at least 32 bytes) and, to store credentials, `CREDENTIAL_ENCRYPTION_KEY`; `AUTH_TOKEN_TTL` defaults to 24h. Apply the migrations first (`000005` adds workflow soft delete, `000007` connected accounts, `000008` files); the processes do not migrate.
+`go run ./cmd/api` serves `/api/v1` on `API_ADDR` (default `:8080`). It needs `DATABASE_URL`, `REDIS_URL`, `AUTH_TOKEN_SECRET` (at least 32 bytes) and, to store credentials, `CREDENTIAL_ENCRYPTION_KEY`; `AUTH_TOKEN_TTL` defaults to 24h. Apply the migrations first (`000005` adds workflow soft delete, `000007` connected accounts, `000008` files, `000009` knowledge bases); the processes do not migrate.
 
 ```
 HTTP -> handler -> application service -> repositories / queue.Submitter -> PostgreSQL, Redis -> worker -> graph executor
@@ -428,3 +428,37 @@ text), plain text, Markdown, CSV, JSON and XML, up to 2 MB of text
 `{file_id}`), else the File setting, a picker of the workspace's files. A
 file of another workspace is not found. The **Files** page (`/files`)
 uploads (drag and drop), lists, downloads and deletes files.
+
+## Knowledge bases (Phase D2)
+
+Retrieval for workflows (migration `000009_knowledge`). A knowledge base
+belongs to a workspace and embeds with one of its **OpenAI API key
+credentials** (`text-embedding-3-small`, 512 dimensions); that credential
+cannot be deleted while a base uses it (409 `CREDENTIAL_IN_USE`). Documents
+come from pasted text, workspace files (their extracted text) or the **Add
+to Knowledge Base** node; each is split into overlapping passages of about
+1,200 characters, embedded in batches, and stored with unit vectors as
+float32 bytes. **Search** embeds the question and ranks the base's
+passages by cosine similarity in Go, so PostgreSQL needs no vector
+extension (a base of tens of thousands of passages is searched in memory;
+a pgvector store can replace this behind `knowledge.Repository`).
+
+API: `POST|GET /knowledge-bases` (`?workspace_id=`), `GET|DELETE
+/knowledge-bases/{id}` (GET includes the documents),
+`POST /knowledge-bases/{id}/documents` (`{file_id}` or `{title, text}`;
+202, indexed in the background: `INDEXING` → `READY` or `FAILED` with a
+short reason such as "OpenAI rejected the API key"),
+`DELETE .../documents/{doc}`, `POST .../documents/{doc}/reindex`,
+`POST /knowledge-bases/{id}/search` (`{query, top_k}`). Members who edit
+workflows manage bases; any member searches. A document left `INDEXING`
+for 30 minutes (its process stopped) is reported `FAILED`; shutting the API
+down stops background indexing cleanly.
+
+Nodes (category knowledge base): **Knowledge Search** (`knowledge_search`)
+returns `context` (numbered passages ready for an LLM prompt), `results`
+(text, score, document_title, document_id) and `count`, with Passages
+(top_k, 1–20) and Minimum similarity; **Add to Knowledge Base**
+(`knowledge_add`) indexes text from the workflow and is idempotent (the
+document ID derives from the node's idempotency key, so a retried run finds
+the first document). The **Knowledge** page (`/knowledge`) creates bases,
+adds files or text, shows indexing status with Retry, and has a test search.

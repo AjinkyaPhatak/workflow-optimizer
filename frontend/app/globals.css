@@ -451,3 +451,12 @@ pre.json { background: var(--subtle); border: 1px solid var(--border); border-ra
 /* --- Files (Phase D1) --- */
 .dropzone { display: flex; flex-direction: column; align-items: center; gap: 8px; border: 2px dashed var(--border); text-align: center; }
 .dropzone.dragging { border-color: var(--accent); background: var(--accent-soft, rgba(37, 99, 235, 0.06)); }
+
+/* --- Knowledge (Phase D2) --- */
+.kb-layout { display: grid; grid-template-columns: minmax(220px, 300px) minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 800px) { .kb-layout { grid-template-columns: 1fr; } }
+.kb-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.kb-item { width: 100%; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; border: 1px solid transparent; background: none; padding: 8px 10px; min-height: 0; }
+.kb-item.active { border-color: var(--accent); }
+.kb-results { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 10px; }
+.kb-passage { white-space: pre-wrap; font-size: 13px; }

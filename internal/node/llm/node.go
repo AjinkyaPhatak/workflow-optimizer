@@ -291,3 +291,7 @@ func textOf(v node.Value) string {
 	}
 	return string(b)
 }
+
+// ClassifyProviderError is classifyProviderError for other nodes that call
+// providers (Phase D2: knowledge base embeddings).
+func ClassifyProviderError(err error) error { return classifyProviderError(err) }

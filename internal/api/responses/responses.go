@@ -14,6 +14,7 @@ import (
 	"workflow-optimizer/internal/credential"
 	"workflow-optimizer/internal/execution"
 	"workflow-optimizer/internal/files"
+	"workflow-optimizer/internal/knowledge"
 	"workflow-optimizer/internal/node"
 	"workflow-optimizer/internal/oauth"
 	"workflow-optimizer/internal/observability"
@@ -533,4 +534,69 @@ type File struct {
 // NewFile maps a file.
 func NewFile(f files.File) File {
 	return File{ID: f.ID, WorkspaceID: f.WorkspaceID, Name: f.Name, ContentType: f.ContentType, Size: f.Size, CreatedAt: f.CreatedAt}
+}
+
+// --- knowledge bases (Phase D2) ---------------------------------------------
+
+// KnowledgeBase is a knowledge base's metadata.
+type KnowledgeBase struct {
+	ID           uuid.UUID `json:"id"`
+	WorkspaceID  uuid.UUID `json:"workspace_id"`
+	Name         string    `json:"name"`
+	Description  string    `json:"description"`
+	CredentialID uuid.UUID `json:"credential_id"`
+	Model        string    `json:"embedding_model"`
+	Documents    int       `json:"documents"`
+	Chunks       int       `json:"chunks"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
+}
+
+// NewKnowledgeBase maps a base.
+func NewKnowledgeBase(b knowledge.Base) KnowledgeBase {
+	return KnowledgeBase{ID: b.ID, WorkspaceID: b.WorkspaceID, Name: b.Name, Description: b.Description, CredentialID: b.CredentialID,
+		Model: b.Model, Documents: b.Documents, Chunks: b.Chunks, CreatedAt: b.CreatedAt, UpdatedAt: b.UpdatedAt}
+}
+
+// KnowledgeDocument is a document's metadata (never its text).
+type KnowledgeDocument struct {
+	ID        uuid.UUID  `json:"id"`
+	Title     string     `json:"title"`
+	Source    string     `json:"source"`
+	FileID    *uuid.UUID `json:"file_id"`
+	Status    string     `json:"status"`
+	Error     string     `json:"error,omitempty"`
+	Chunks    int        `json:"chunks"`
+	Chars     int        `json:"chars"`
+	CreatedAt time.Time  `json:"created_at"`
+	UpdatedAt time.Time  `json:"updated_at"`
+}
+
+// NewKnowledgeDocument maps a document.
+func NewKnowledgeDocument(d knowledge.Document) KnowledgeDocument {
+	return KnowledgeDocument{ID: d.ID, Title: d.Title, Source: d.Source, FileID: d.FileID, Status: string(d.Status), Error: d.Error,
+		Chunks: d.Chunks, Chars: d.Chars, CreatedAt: d.CreatedAt, UpdatedAt: d.UpdatedAt}
+}
+
+// KnowledgeBaseDetail is a base with its documents.
+type KnowledgeBaseDetail struct {
+	KnowledgeBase
+	Items []KnowledgeDocument `json:"items"`
+}
+
+// NewKnowledgeBaseDetail maps a base and its documents.
+func NewKnowledgeBaseDetail(b knowledge.Base, docs []knowledge.Document) KnowledgeBaseDetail {
+	out := KnowledgeBaseDetail{KnowledgeBase: NewKnowledgeBase(b), Items: make([]KnowledgeDocument, 0, len(docs))}
+	for _, d := range docs {
+		out.Items = append(out.Items, NewKnowledgeDocument(d))
+	}
+	return out
+}
+
+// KnowledgeResult is one search hit.
+type KnowledgeResult struct {
+	DocumentID    uuid.UUID `json:"document_id"`
+	DocumentTitle string    `json:"document_title"`
+	Text          string    `json:"text"`
+	Score         float64   `json:"score"`
 }

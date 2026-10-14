@@ -38,6 +38,8 @@ type APIRuntime struct {
 	redis   *redisinfra.Client
 	handler http.Handler
 	logger  *slog.Logger
+	// knowledge indexes documents in the background (Phase D2).
+	knowledge *application.KnowledgeService
 }
 
 // NewAPI validates cfg, connects to PostgreSQL and Redis, and wires:
@@ -103,6 +105,7 @@ func (rt *APIRuntime) build(enc credential.SecretEncryptor, tokens auth.TokenSer
 	// node registry the workers execute with.
 	deps := chain.dependencies(ext)
 	deps.Files = postgres.NewFileRepository(rt.store)
+	deps.KnowledgeRepository = postgres.NewKnowledgeRepository(rt.store)
 	engine, err := BootstrapWith(rt.cfg, deps)
 	if err != nil {
 		return err
@@ -146,6 +149,7 @@ func (rt *APIRuntime) build(enc credential.SecretEncryptor, tokens auth.TokenSer
 		Logger:     rt.logger,
 	})
 	policy := application.ObservabilityPolicy{ExposeNodeInputs: rt.cfg.ExposeNodeData, ExposeNodeOutputs: rt.cfg.ExposeNodeData}
+	rt.knowledge = application.NewKnowledgeService(access, engine.Knowledge, rt.logger)
 	h := &handlers.Handlers{
 		Auth:       application.NewAuthService(identities, tokens),
 		Workflows:  workflows,
@@ -157,6 +161,7 @@ func (rt *APIRuntime) build(enc credential.SecretEncryptor, tokens auth.TokenSer
 		Nodes:             engine.NodeRegistry,
 		NodeOptions:       application.NewNodeOptionsService(access, engine.NodeRegistry),
 		Files:             application.NewFileService(access, files.NewService(postgres.NewFileRepository(rt.store))),
+		Knowledge:         rt.knowledge,
 		Ready: []handlers.Check{
 			{Name: "postgres", Check: rt.store.Pool.Ping},
 			{Name: "redis", Check: rt.redis.Ping},
@@ -212,6 +217,11 @@ func (rt *APIRuntime) Serve(ctx context.Context, ln net.Listener) error {
 
 // Close releases Redis and PostgreSQL. It is safe to call more than once.
 func (rt *APIRuntime) Close() {
+	if rt.knowledge != nil {
+		// Background indexing stops (its documents are marked FAILED,
+		// to retry) before the database closes.
+		rt.knowledge.Close()
+	}
 	if rt.redis != nil {
 		if err := rt.redis.Close(); err != nil {
 			rt.logger.Error("closing Redis", "error", err)

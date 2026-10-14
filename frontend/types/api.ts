@@ -398,3 +398,45 @@ export interface WorkspaceFile {
   size: number;
   created_at: string;
 }
+
+// --- knowledge bases (Phase D2) -------------------------------------------------
+
+export interface KnowledgeBase {
+  id: UUID;
+  workspace_id: UUID;
+  name: string;
+  description: string;
+  credential_id: UUID;
+  embedding_model: string;
+  documents: number;
+  chunks: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export type KnowledgeDocumentStatus = "INDEXING" | "READY" | "FAILED";
+
+export interface KnowledgeDocument {
+  id: UUID;
+  title: string;
+  source: "file" | "text";
+  file_id: UUID | null;
+  status: KnowledgeDocumentStatus;
+  error?: string;
+  chunks: number;
+  chars: number;
+  created_at: string;
+  updated_at: string;
+}
+
+/** GET /knowledge-bases/{id}: the base with its documents (newest first). */
+export interface KnowledgeBaseDetail extends KnowledgeBase {
+  items: KnowledgeDocument[];
+}
+
+export interface KnowledgeResult {
+  document_id: UUID;
+  document_title: string;
+  text: string;
+  score: number;
+}

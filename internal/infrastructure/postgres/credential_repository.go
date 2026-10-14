@@ -82,6 +82,9 @@ func (r *CredentialRepository) Delete(ctx context.Context, workspaceID, id uuid.
 	var pgErr *pgconn.PgError
 	// 23001 restrict_violation (ON DELETE RESTRICT) or 23503.
 	if errors.As(err, &pgErr) && (pgErr.Code == "23001" || pgErr.Code == pgForeignKeyViolation) {
+		if pgErr.ConstraintName == "knowledge_bases_credential_fkey" {
+			return fmt.Errorf("%w: credential %s is used by a knowledge base", credential.ErrInUse, id)
+		}
 		return fmt.Errorf("%w: credential %s backs a connected account; disconnect it instead", credential.ErrInvalid, id)
 	}
 	if err != nil {

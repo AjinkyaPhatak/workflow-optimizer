@@ -231,3 +231,25 @@ func Describe(reg Registry) []Info {
 	}
 	return out
 }
+
+// EmbedRequest asks for one vector per input text (Phase D2).
+type EmbedRequest struct {
+	Model string
+	// Dimensions shortens the vectors when the model supports it (0: the
+	// model's default).
+	Dimensions int
+	Inputs     []string
+	// Credential is the resolved credential (runtime only).
+	Credential credential.ResolvedCredential
+}
+
+// EmbedResponse holds one vector per input, in input order.
+type EmbedResponse struct {
+	Vectors [][]float32
+	Tokens  int
+}
+
+// Embedder is implemented by providers that turn text into vectors.
+type Embedder interface {
+	Embed(ctx context.Context, req EmbedRequest) (EmbedResponse, error)
+}

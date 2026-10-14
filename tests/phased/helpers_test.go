@@ -30,10 +30,15 @@ import (
 type env struct {
 	t   *testing.T
 	srv *httptest.Server
+	cfg config.Config
+	rt  *app.APIRuntime
 }
 
 // newEnv starts the production API composition on a fresh schema.
-func newEnv(t *testing.T) *env {
+func newEnv(t *testing.T) *env { return newEnvWith(t, nil) }
+
+// newEnvWith lets a test adjust the configuration first.
+func newEnvWith(t *testing.T, adjust func(*config.Config)) *env {
 	t.Helper()
 	base, redisURL := os.Getenv("TEST_DATABASE_URL"), os.Getenv("TEST_REDIS_URL")
 	if base == "" || redisURL == "" {
@@ -68,11 +73,14 @@ func newEnv(t *testing.T) *env {
 		CredentialEncryptionKey: base64.StdEncoding.EncodeToString(key), APIAddr: "127.0.0.1:0",
 		AuthTokenSecret: base64.StdEncoding.EncodeToString(secret), AuthTokenTTL: time.Hour,
 	}
+	if adjust != nil {
+		adjust(&cfg)
+	}
 	rt, err := app.NewAPIWith(ctx, cfg, slog.New(slog.NewTextHandler(io.Discard, nil)), app.Extensions{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	e := &env{t: t, srv: httptest.NewServer(rt.Handler())}
+	e := &env{t: t, srv: httptest.NewServer(rt.Handler()), cfg: cfg, rt: rt}
 	t.Cleanup(func() { e.srv.Close(); rt.Close() })
 	return e
 }

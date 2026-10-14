@@ -63,6 +63,9 @@ var (
 	// (disconnected, revoked or refused by the provider). Only connecting the
 	// account again fixes it.
 	ErrRevoked = errors.New("credential: authorization revoked")
+	// ErrInUse: the credential cannot be deleted while something uses it
+	// (a knowledge base, Phase D2).
+	ErrInUse = errors.New("credential: in use")
 )
 
 // Repository is the persistence boundary for credentials. It stores and

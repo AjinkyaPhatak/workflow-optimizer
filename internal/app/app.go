@@ -15,12 +15,14 @@ import (
 	"workflow-optimizer/internal/integration/gmail"
 	"workflow-optimizer/internal/integration/notion"
 	"workflow-optimizer/internal/integration/sheets"
+	"workflow-optimizer/internal/knowledge"
 	"workflow-optimizer/internal/node"
 	"workflow-optimizer/internal/node/condition"
 	"workflow-optimizer/internal/node/extract"
 	nodehttp "workflow-optimizer/internal/node/http"
 	"workflow-optimizer/internal/node/input"
 	nodejson "workflow-optimizer/internal/node/json"
+	"workflow-optimizer/internal/node/kb"
 	"workflow-optimizer/internal/node/llm"
 	"workflow-optimizer/internal/node/merge"
 	"workflow-optimizer/internal/node/output"
@@ -41,6 +43,9 @@ type Application struct {
 	// integrations (Phase C1); their actions are nodes in NodeRegistry.
 	// Production installs none yet.
 	IntegrationRegistry integration.Registry
+	// Knowledge indexes and searches knowledge bases (Phase D2); nil
+	// without a knowledge repository.
+	Knowledge *knowledge.Service
 }
 
 // Dependencies are the runtime collaborators Bootstrap cannot create without
@@ -68,6 +73,9 @@ type Dependencies struct {
 	// Files reads workspace files for the file nodes (Phase D1; nil: those
 	// nodes fail with a configuration error).
 	Files files.Reader
+	// KnowledgeRepository stores knowledge bases (Phase D2; nil: the
+	// knowledge nodes fail with a configuration error).
+	KnowledgeRepository knowledge.Repository
 	// Notion configures the Notion API client (Phase C5).
 	Notion notion.Options
 	// Discord configures the Discord API client (Phase C6). An empty bot
@@ -100,6 +108,10 @@ func BootstrapWith(cfg config.Config, deps Dependencies) (*Application, error) {
 		return nil, fmt.Errorf("bootstrap register provider %q: %w", openai.Name, err)
 	}
 	providerReg.Freeze()
+	var knowledgeSvc *knowledge.Service
+	if deps.KnowledgeRepository != nil {
+		knowledgeSvc = knowledge.NewService(deps.KnowledgeRepository, deps.Files, deps.Credentials, openAI)
+	}
 	llmDeps := llm.Dependencies{}
 	if deps.Credentials != nil {
 		llmDeps = llm.Dependencies{Providers: providerReg, Credentials: deps.Credentials}
@@ -131,6 +143,8 @@ func BootstrapWith(cfg config.Config, deps Dependencies) (*Application, error) {
 
 		// Knowledge category (Phase D)
 		{node: extract.New(deps.Files), def: extract.Definition()},
+		{node: kb.NewSearch(knowledgeSvc), def: kb.SearchDefinition()},
+		{node: kb.NewAdd(knowledgeSvc), def: kb.AddDefinition()},
 
 		// Integration category
 		{node: nodehttp.NewWith(nodehttp.Options{Credentials: deps.Credentials, AllowPrivateNetworks: cfg.HTTPAllowPrivateNetworks, Transport: deps.HTTPTransport}), def: nodehttp.Definition()},
@@ -189,5 +203,6 @@ func BootstrapWith(cfg config.Config, deps Dependencies) (*Application, error) {
 		NodeRegistry:        nodeReg,
 		ProviderRegistry:    providerReg,
 		IntegrationRegistry: integrationReg,
+		Knowledge:           knowledgeSvc,
 	}, nil
 }
