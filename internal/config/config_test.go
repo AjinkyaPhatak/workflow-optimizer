@@ -254,3 +254,48 @@ func TestNotionOAuthConfig(t *testing.T) {
 		}
 	}
 }
+
+func TestDiscordConfig(t *testing.T) {
+	base := map[string]string{"DATABASE_URL": "postgres://x", "REDIS_URL": "redis://x", "AUTH_TOKEN_SECRET": strings.Repeat("s", 32)}
+	with := func(extra map[string]string) config.Config {
+		m := map[string]string{}
+		for k, v := range base {
+			m[k] = v
+		}
+		for k, v := range extra {
+			m[k] = v
+		}
+		cfg, err := config.LoadFrom(env(m))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return cfg
+	}
+	if cfg := with(nil); cfg.DiscordConfigured() || cfg.ValidateAPI() != nil {
+		t.Fatal("Discord is optional")
+	}
+	full := map[string]string{"DISCORD_CLIENT_ID": "123", "DISCORD_CLIENT_SECRET": "s", "DISCORD_BOT_TOKEN": "bot",
+		"DISCORD_OAUTH_REDIRECT_URI": "http://localhost:3000/api/v1/oauth/callback/discord"}
+	if cfg := with(full); !cfg.DiscordConfigured() || cfg.ValidateAPI() != nil || cfg.ValidateWorker() != nil {
+		t.Fatalf("configured: %+v", cfg)
+	}
+	noBot := map[string]string{}
+	for k, v := range full {
+		noBot[k] = v
+	}
+	delete(noBot, "DISCORD_BOT_TOKEN")
+	for name, m := range map[string]map[string]string{
+		"no bot token":   noBot,
+		"only bot":       {"DISCORD_BOT_TOKEN": "bot"},
+		"partial":        {"DISCORD_CLIENT_ID": "123"},
+		"wrong callback": {"DISCORD_CLIENT_ID": "1", "DISCORD_CLIENT_SECRET": "s", "DISCORD_BOT_TOKEN": "b", "DISCORD_OAUTH_REDIRECT_URI": "http://localhost:3000/api/v1/oauth/callback/notion"},
+	} {
+		cfg := with(m)
+		if cfg.DiscordConfigured() && name != "wrong callback" {
+			t.Errorf("%s counts as configured", name)
+		}
+		if err := cfg.ValidateAPI(); err == nil || !strings.Contains(err.Error(), "DISCORD_") {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+}

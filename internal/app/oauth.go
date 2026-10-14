@@ -9,10 +9,12 @@ import (
 	"workflow-optimizer/internal/infrastructure/postgres"
 	"workflow-optimizer/internal/integration"
 	"workflow-optimizer/internal/integration/calendar"
+	"workflow-optimizer/internal/integration/discord"
 	"workflow-optimizer/internal/integration/gmail"
 	"workflow-optimizer/internal/integration/notion"
 	"workflow-optimizer/internal/integration/sheets"
 	"workflow-optimizer/internal/oauth"
+	oauthdiscord "workflow-optimizer/internal/oauth/discord"
 	"workflow-optimizer/internal/oauth/google"
 	oauthnotion "workflow-optimizer/internal/oauth/notion"
 )
@@ -32,11 +34,11 @@ type Extensions struct {
 	Sheets   sheets.Options
 	Calendar calendar.Options
 	Notion   notion.Options
+	Discord  discord.Options
 }
 
-// oauthProviders are the providers of a runtime: Google (Phase C3) and
-// Notion (C5) when their OAuth clients are configured, plus any extension
-// providers.
+// oauthProviders are the providers of a runtime: Google (Phase C3), Notion
+// (C5) and Discord (C6) when configured, plus any extension providers.
 func oauthProviders(cfg config.Config, ext Extensions) ([]oauth.Provider, error) {
 	providers := append([]oauth.Provider{}, ext.OAuthProviders...)
 	if cfg.GoogleOAuthConfigured() {
@@ -54,6 +56,14 @@ func oauthProviders(cfg config.Config, ext Extensions) ([]oauth.Provider, error)
 			return nil, err
 		}
 		providers = append(providers, n)
+	}
+	if cfg.DiscordConfigured() {
+		d, err := oauthdiscord.New(oauthdiscord.Options{ClientID: cfg.DiscordClientID, ClientSecret: credential.NewSecret(cfg.DiscordClientSecret),
+			RedirectURL: cfg.DiscordOAuthRedirectURI})
+		if err != nil {
+			return nil, err
+		}
+		providers = append(providers, d)
 	}
 	return providers, nil
 }
@@ -91,7 +101,7 @@ func newCredentialChain(cfg config.Config, store *postgres.Store, enc credential
 }
 
 func (c *credentialChain) dependencies(ext Extensions) Dependencies {
-	deps := Dependencies{Credentials: c.resolver, Gmail: ext.Gmail, Sheets: ext.Sheets, Calendar: ext.Calendar, Notion: ext.Notion}
+	deps := Dependencies{Credentials: c.resolver, Gmail: ext.Gmail, Sheets: ext.Sheets, Calendar: ext.Calendar, Notion: ext.Notion, Discord: ext.Discord}
 	if ext.Integrations != nil {
 		deps.Integrations = ext.Integrations(c.resolver)
 	}

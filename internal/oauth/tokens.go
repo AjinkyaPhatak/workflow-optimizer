@@ -143,7 +143,7 @@ func (m *TokenManager) use(ctx context.Context, c credential.Credential, tok cre
 	if m.status != nil {
 		m.status.CredentialUsed(ctx, c.ID)
 	}
-	return credential.ResolvedCredential{ID: c.ID, Provider: c.Provider, Type: c.CredentialType, Secret: tok.AccessToken}
+	return credential.ResolvedCredential{ID: c.ID, Provider: c.Provider, Type: c.CredentialType, Secret: tok.AccessToken, AccountID: tok.ProviderAccountID}
 }
 
 func (m *TokenManager) lost(ctx context.Context, c credential.Credential, kind Kind, reason string) {

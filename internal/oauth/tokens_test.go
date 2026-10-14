@@ -112,7 +112,8 @@ func TestValidTokenIsUsedWithoutRefresh(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if r.Secret.Reveal() != e.initial.AccessToken.Reveal() || r.Type != credential.TypeOAuth2 || r.Provider != fake.ID {
+	// AccountID carries the provider account (C6: the Discord server).
+	if r.Secret.Reveal() != e.initial.AccessToken.Reveal() || r.Type != credential.TypeOAuth2 || r.Provider != fake.ID || r.AccountID != "acct-1001" {
 		t.Fatalf("resolved: %+v", r)
 	}
 	if _, refreshes, _ := e.provider.Counts(); refreshes != 0 {
@@ -130,8 +131,8 @@ func TestExpiringTokenIsRefreshedAndStored(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if r.Secret.Reveal() == e.initial.AccessToken.Reveal() || !e.provider.ValidAccessToken(r.Secret.Reveal()) {
-		t.Fatal("a new, valid access token is returned")
+	if r.Secret.Reveal() == e.initial.AccessToken.Reveal() || !e.provider.ValidAccessToken(r.Secret.Reveal()) || r.AccountID != "acct-1001" {
+		t.Fatal("a new, valid access token is returned, for the same account")
 	}
 	st := e.stored(t)
 	if st.AccessToken.Reveal() != r.Secret.Reveal() || !st.Expiry.Equal(e.clock.Now().Add(time.Hour)) {

@@ -27,6 +27,9 @@ const Token = "ya29.test-access-token"
 // provider asks), and nothing else.
 type Resolver struct {
 	Workspace uuid.UUID
+	// AccountID is the provider account the credential names (e.g. a
+	// Discord server ID).
+	AccountID string
 	Calls     int
 }
 
@@ -36,7 +39,7 @@ func (r *Resolver) Resolve(_ context.Context, ws, id uuid.UUID, provider string)
 	if ws != r.Workspace {
 		return credential.ResolvedCredential{}, credential.ErrNotFound
 	}
-	return credential.ResolvedCredential{ID: id, Provider: provider, Type: credential.TypeOAuth2, Secret: credential.NewSecret(Token)}, nil
+	return credential.ResolvedCredential{ID: id, Provider: provider, Type: credential.TypeOAuth2, Secret: credential.NewSecret(Token), AccountID: r.AccountID}, nil
 }
 
 // Authorized reports whether a request carries exactly the test token.

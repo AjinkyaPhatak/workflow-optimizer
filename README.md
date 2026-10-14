@@ -294,3 +294,39 @@ never copied into errors.
 **Configuration**: `NOTION_CLIENT_ID`, `NOTION_CLIENT_SECRET`,
 `NOTION_OAUTH_REDIRECT_URI` (all or none; the redirect URI ends with
 `/api/v1/oauth/callback/notion`), read by both the API and the worker.
+
+## Discord (Phase C6)
+
+Discord works through **one bot** (the Discord application configured on this
+server). Connecting Discord adds that bot to a server the user picks
+(Discord's bot authorization with scopes `identify bot`, provider `discord`);
+the connected account **is that server** (its ID is the provider account ID).
+The bot asks only for View Channels, Send Messages, Embed Links and Read
+Message History. Disconnecting revokes the user's authorization; the bot
+stays in the server until someone removes it there.
+
+Actions call Discord with the **bot token** (`DISCORD_BOT_TOKEN`), never the
+user's token. Because every workspace shares the bot, each action first checks
+that the channel belongs to the connected server (resolved credentials carry
+the account ID, `credential.ResolvedCredential.AccountID`) and refuses any
+other with `PERMISSION_DENIED`.
+
+| Node | Side effects | Output |
+|---|---|---|
+| `discord.send_message` | unsafe | `message_id`, `message_ids` [], `channel_id`, `url` |
+| `discord.read_messages` | none | `messages` [{`message_id`, `author`, `author_id`, `is_bot`, `content`, `timestamp`, `url`, `attachments` []}] (oldest first), `count`, `text` (transcript), `message_id` (latest) |
+
+The Channel setting takes a channel name (`general`), a channel link or an
+ID. Send Message splits text over 2000 characters into up to 10 messages,
+can add an embed (title, text, link, hex color), and by default lets mentions
+render without notifying anyone (`allowed_mentions` empty; turn on Allow
+mentions to ping). Each message carries a nonce derived from the idempotency
+key with `enforce_nonce`, so Discord drops a duplicate sent within a few
+minutes; the action is still `unsafe` (not retried after a failure that may
+have applied). Reading message text needs the bot's **Message Content
+Intent** enabled in the Discord developer portal; without it, `content` is
+empty for most messages.
+
+**Configuration**: `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`,
+`DISCORD_OAUTH_REDIRECT_URI` (ends with `/api/v1/oauth/callback/discord`) and
+`DISCORD_BOT_TOKEN`, all four or none, read by both the API and the worker.

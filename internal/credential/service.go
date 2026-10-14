@@ -309,7 +309,7 @@ func (s *Service) Resolve(ctx context.Context, workspaceID, id uuid.UUID, provid
 		if t.Expired(s.now()) {
 			return ResolvedCredential{}, fmt.Errorf("%w: the access token of credential %s has expired and cannot be refreshed here", ErrInvalid, id)
 		}
-		return ResolvedCredential{ID: c.ID, Provider: c.Provider, Type: c.CredentialType, Secret: t.AccessToken}, nil
+		return ResolvedCredential{ID: c.ID, Provider: c.Provider, Type: c.CredentialType, Secret: t.AccessToken, AccountID: t.ProviderAccountID}, nil
 	}
 	if p.Secret == "" {
 		return ResolvedCredential{}, fmt.Errorf("%w: credential %s holds no usable secret", ErrInvalid, id)

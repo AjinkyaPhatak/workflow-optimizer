@@ -81,6 +81,16 @@ type Config struct {
 	// and registered exactly so in the Notion integration (NOTION_OAUTH_REDIRECT_URI).
 	NotionOAuthRedirectURI string
 
+	// Discord (Phase C6): the application whose bot users add to their
+	// servers. All four set, or none (Discord is then not offered). The bot
+	// token authenticates every Discord call; it is never sent to clients.
+	DiscordClientID     string // DISCORD_CLIENT_ID
+	DiscordClientSecret string // DISCORD_CLIENT_SECRET
+	// DiscordOAuthRedirectURI must be <frontend origin>/api/v1/oauth/callback/discord
+	// (DISCORD_OAUTH_REDIRECT_URI).
+	DiscordOAuthRedirectURI string
+	DiscordBotToken         string // DISCORD_BOT_TOKEN
+
 	// RedisQueueName is the Redis list that carries execution jobs
 	// (REDIS_QUEUE_NAME, default DefaultRedisQueueName).
 	RedisQueueName string
@@ -162,6 +172,10 @@ func LoadFrom(getenv func(string) string) (Config, error) {
 		NotionClientID:          strings.TrimSpace(getenv("NOTION_CLIENT_ID")),
 		NotionClientSecret:      strings.TrimSpace(getenv("NOTION_CLIENT_SECRET")),
 		NotionOAuthRedirectURI:  strings.TrimSpace(getenv("NOTION_OAUTH_REDIRECT_URI")),
+		DiscordClientID:         strings.TrimSpace(getenv("DISCORD_CLIENT_ID")),
+		DiscordClientSecret:     strings.TrimSpace(getenv("DISCORD_CLIENT_SECRET")),
+		DiscordOAuthRedirectURI: strings.TrimSpace(getenv("DISCORD_OAUTH_REDIRECT_URI")),
+		DiscordBotToken:         strings.TrimSpace(getenv("DISCORD_BOT_TOKEN")),
 		RedisQueueName:          DefaultRedisQueueName,
 		WorkerCount:             DefaultWorkerCount,
 		WorkerShutdownTimeout:   DefaultWorkerShutdownTimeout,
@@ -266,6 +280,22 @@ func (c Config) NotionOAuthConfigured() bool {
 	return c.NotionClientID != "" && c.NotionClientSecret != "" && c.NotionOAuthRedirectURI != ""
 }
 
+// DiscordConfigured reports whether Discord is configured (all of
+// DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET, DISCORD_OAUTH_REDIRECT_URI and
+// DISCORD_BOT_TOKEN).
+func (c Config) DiscordConfigured() bool {
+	return c.DiscordClientID != "" && c.DiscordClientSecret != "" && c.DiscordOAuthRedirectURI != "" && c.DiscordBotToken != ""
+}
+
+func (c Config) discordProblems() []string {
+	p := oauthClientProblems("DISCORD", "discord", c.DiscordClientID, c.DiscordClientSecret, c.DiscordOAuthRedirectURI)
+	clientSet := c.DiscordClientID != "" || c.DiscordClientSecret != "" || c.DiscordOAuthRedirectURI != ""
+	if len(p) == 0 && clientSet != (c.DiscordBotToken != "") {
+		p = append(p, "DISCORD_BOT_TOKEN must be set together with DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET and DISCORD_OAUTH_REDIRECT_URI")
+	}
+	return p
+}
+
 // oauthClientProblems reports a partial or malformed OAuth client
 // configuration: prefix is the variables' prefix ("GOOGLE"), provider the
 // callback path segment ("google").
@@ -290,8 +320,9 @@ func oauthClientProblems(prefix, provider, id, secret, redirect string) []string
 
 // oauthProblems reports partial or malformed OAuth client configurations.
 func (c Config) oauthProblems() []string {
-	return append(oauthClientProblems("GOOGLE", "google", c.GoogleClientID, c.GoogleClientSecret, c.GoogleOAuthRedirectURI),
+	p := append(oauthClientProblems("GOOGLE", "google", c.GoogleClientID, c.GoogleClientSecret, c.GoogleOAuthRedirectURI),
 		oauthClientProblems("NOTION", "notion", c.NotionClientID, c.NotionClientSecret, c.NotionOAuthRedirectURI)...)
+	return append(p, c.discordProblems()...)
 }
 
 // ValidateAPI checks everything an API process needs.

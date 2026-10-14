@@ -119,6 +119,9 @@ type ResolvedCredential struct {
 	Provider string
 	Type     Type
 	Secret   Secret
+	// AccountID is an OAuth credential's provider account ID (e.g. the
+	// Discord server the account was connected to); empty otherwise.
+	AccountID string
 }
 
 // Resolver resolves a credential for use by one execution. workspaceID is
