@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"net/http"
 
 	"workflow-optimizer/internal/api/httpx"
@@ -169,4 +170,35 @@ func (h *Handlers) DeleteWorkflow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.NoContent(w)
+}
+
+// testRunRequest is the body of POST /workflows/{id}/test.
+type testRunRequest struct {
+	Definition  json.RawMessage `json:"definition"`
+	Input       map[string]any  `json:"input"`
+	UntilNodeID string          `json:"until_node_id"`
+}
+
+// TestWorkflow handles POST /api/v1/workflows/{workflowID}/test (Phase E3):
+// runs the given draft definition (or the part a node depends on) now and
+// returns each node's outcome. Nothing is saved or published.
+func (h *Handlers) TestWorkflow(w http.ResponseWriter, r *http.Request) {
+	id, ok := h.pathID(w, r, "workflowID")
+	if !ok {
+		return
+	}
+	var req testRunRequest
+	if !h.decode(w, r, &req) {
+		return
+	}
+	if len(req.Definition) == 0 {
+		h.fail(w, r, httpx.BadRequest("definition is required"))
+		return
+	}
+	res, err := h.TestRuns.Run(r.Context(), user(r), id, req.Definition, req.Input, req.UntilNodeID)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, res)
 }

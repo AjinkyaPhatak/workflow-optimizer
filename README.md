@@ -521,3 +521,24 @@ its connections. Retry settings override the server default for that node
 (fixed pause, or the server's longer Retry-After) but never change *which*
 failures are retried: only temporary ones, and never a write that may have
 applied. The editor's **When this node fails** section edits them.
+
+## Test runs from the editor (Phase E3)
+
+`POST /api/v1/workflows/{id}/test` `{definition, input, until_node_id?}`
+runs the editor's **draft** now: nothing is saved, published or queued. With
+`until_node_id` only that node and every node it depends on run. The API
+checks access (execute), validates the draft (draft mode), checks credential
+references, applies workflow variables, and runs the real engine in the API
+process with the workspace scope, a fresh idempotency key per test, a
+1-minute node timeout and a 2-minute limit. It answers 200 with `status`
+(COMPLETED or FAILED), `error`, `nodes` in run order (`status` COMPLETED,
+FAILED or SKIPPED, redacted `output`, `error`, `duration_ms`) and the exit
+nodes' `output`; outputs are left out when `OBSERVABILITY_EXPOSE_NODE_DATA`
+is false. Nodes really run, so the editor asks before a test that includes
+nodes which change external systems (side effects unsafe or idempotent).
+
+In the editor: **Test draft** (Run tab) and **Test up to this node** (node
+panel) share the Run tab input; each tested node shows ✓ / ✕ / — on the
+canvas, the panel shows its output or error, and the `{{variable}}` picker
+shows example values from the last test (e.g. `{{read.subject}} = Invoice
+October`). Test results are cleared when another workflow opens.

@@ -1,6 +1,7 @@
 "use client";
 
 import { nodeOutputs } from "@/lib/workflow/ports";
+import { useNodeTestResult } from "@/stores/test-run/store";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import { memo } from "react";
 import { useCanvasState } from "@/components/canvas/CanvasContext";
@@ -19,6 +20,7 @@ function WorkflowNodeView({ id, data, selected, dragging }: NodeProps<CanvasNode
   const def = catalog.get(data.node.type);
   const edges = useEditorStore((s) => s.definition.edges);
   // Most specific first: a named port or field says exactly what to fix.
+  const tested = useNodeTestResult(id);
   const nodeIssues = issues
     .filter((i) => i.nodeId === id && i.edgeId === undefined)
     .sort((a, b) => Number(!(a.port || a.field)) - Number(!(b.port || b.field)));
@@ -69,6 +71,12 @@ function WorkflowNodeView({ id, data, selected, dragging }: NodeProps<CanvasNode
           <div className="wf-node-title">{data.node.name}</div>
           <div className="wf-node-type">{def ? def.name : `${data.node.type} (unknown type)`}</div>
         </div>
+        {tested && (
+          <span className={`wf-node-test ${tested.status.toLowerCase()}`} data-testid={`node-test-${id}`}
+            title={`Last test: ${tested.status.toLowerCase()}${tested.error ? ` (${tested.error.message})` : ""}`}>
+            {tested.status === "COMPLETED" ? "✓" : tested.status === "FAILED" ? "✕" : "—"}
+          </span>
+        )}
         {nodeIssues.length > 0 && (
           <span
             className={`wf-node-badge ${hasError ? "error" : "warning"}`}

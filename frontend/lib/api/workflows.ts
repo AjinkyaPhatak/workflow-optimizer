@@ -1,4 +1,4 @@
-import type { List, Page, ValidationResult, Version, VersionSummary, Workflow, WorkflowDefinition, WorkflowFromTemplate, WorkflowTemplate } from "@/types/api";
+import type { List, Page, TestRunResult, ValidationResult, Version, VersionSummary, Workflow, WorkflowDefinition, WorkflowFromTemplate, WorkflowTemplate } from "@/types/api";
 import { request } from "./client";
 
 export const workflowApi = {
@@ -28,4 +28,8 @@ export const workflowApi = {
     request<ValidationResult>("POST", `/workflows/${id}/versions/${versionId}/validate`),
   publish: (id: string, versionId: string) =>
     request<VersionSummary>("POST", `/workflows/${id}/versions/${versionId}/publish`),
+  /** Phase E3: runs the editor's draft now (nothing is saved), optionally
+   * only up to one node. */
+  test: (id: string, body: { definition: WorkflowDefinition; input: Record<string, unknown>; until_node_id?: string }) =>
+    request<TestRunResult>("POST", `/workflows/${id}/test`, { body }),
 };

@@ -453,3 +453,22 @@ export interface KnowledgeResult {
   text: string;
   score: number;
 }
+
+// --- test runs (Phase E3) ---------------------------------------------------------
+
+export interface TestNodeResult {
+  node_id: string;
+  node_type: string;
+  status: "COMPLETED" | "FAILED" | "SKIPPED";
+  /** Output ports (redacted); absent when node data is hidden. */
+  output?: Record<string, unknown>;
+  error?: { code: string; message: string };
+  duration_ms?: number;
+}
+
+export interface TestRunResult {
+  status: "COMPLETED" | "FAILED";
+  error?: { code: string; message: string };
+  nodes: TestNodeResult[];
+  output?: Record<string, unknown>;
+}

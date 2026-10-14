@@ -460,3 +460,15 @@ pre.json { background: var(--subtle); border: 1px solid var(--border); border-ra
 .kb-item.active { border-color: var(--accent); }
 .kb-results { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 10px; }
 .kb-passage { white-space: pre-wrap; font-size: 13px; }
+
+/* --- Test runs (Phase E3) --- */
+.wf-node-test { font-size: 11px; font-weight: 700; border-radius: 999px; min-width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; margin-left: 4px; }
+.wf-node-test.completed { background: var(--ok-soft, #dcfce7); color: var(--ok, #15803d); }
+.wf-node-test.failed { background: var(--danger-soft, #fee2e2); color: var(--danger, #b91c1c); }
+.wf-node-test.skipped { background: var(--muted-soft, #f1f5f9); color: var(--muted, #64748b); }
+.node-test-result { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+.node-test-result pre { max-height: 240px; overflow: auto; margin: 0; }
+.node-test-status.completed { color: var(--ok, #15803d); }
+.node-test-status.failed { color: var(--danger, #b91c1c); }
+.picker-example { color: var(--muted); font-size: 11px; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.test-summary { margin-bottom: 10px; }

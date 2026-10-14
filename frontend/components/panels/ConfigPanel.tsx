@@ -1,6 +1,8 @@
 "use client";
 
 import { FailureSettings } from "@/components/panels/FailureSettings";
+import { NodeTest } from "@/components/panels/NodeTest";
+import { useTestRunStore } from "@/stores/test-run/store";
 import { DynamicSelect, KeyValueField } from "@/components/panels/SettingFields";
 import { useFieldOptions } from "@/features/nodes/useFieldOptions";
 import Link from "next/link";
@@ -241,7 +243,9 @@ function FieldEditor({ node, field, issues }: { node: WorkflowNode; field: Confi
   const commit = (v: unknown) => setConfig(node.id, field.name, v);
   const invalid = issues.length > 0;
   const describedBy = [field.description || control === "credential" ? helpId : "", invalid ? errorId : ""].filter(Boolean).join(" ") || undefined;
-  const groups = useMemo(() => availableVariables(definition, catalog, node.id), [definition, catalog, node.id]);
+  const testNodes = useTestRunStore((s) => s.result?.nodes);
+  const groups = useMemo(() => availableVariables(definition, catalog, node.id,
+    new Map((testNodes ?? []).map((n) => [n.node_id, n.output]))), [definition, catalog, node.id, testNodes]);
   // Phase C8: choices (or key names) listed through the node's account.
   const choices = useFieldOptions(node.type, def, field.options_source ?? field.keys_source, field.depends_on ?? [], node.config, workspaceId);
 
@@ -423,6 +427,7 @@ export function ConfigPanel() {
             </div>
           </div>
         )}
+        {def && <NodeTest nodeId={node.id} />}
         {def && def.role !== "entry" && def.role !== "exit" && <FailureSettings node={node} def={def} readonly={readonly} />}
         {!readonly && (
           <div className="section">

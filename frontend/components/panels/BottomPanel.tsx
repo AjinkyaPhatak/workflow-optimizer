@@ -1,14 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
 import { ErrorBanner } from "@/components/ui/ErrorBanner";
 import { useExecution } from "@/features/executions/useExecution";
 import { useEditorContext } from "@/features/workflows/EditorContext";
 import { useFocusIssue, useIssues } from "@/features/workflows/useIssues";
 import type { Issue } from "@/lib/workflow/issues";
 import { useEditorStore, useIsDirty } from "@/stores/workflow-editor/store";
-import type { WorkflowVariable } from "@/types/api";
+import { useTestRun } from "@/features/workflows/useTestRun";
+import { initialRows, inputOf } from "@/lib/workflow/runInput";
+import { useTestRunStore } from "@/stores/test-run/store";
+import type { TestRunResult } from "@/types/api";
 
 export type BottomTab = "validation" | "run";
 
@@ -84,44 +86,36 @@ function ValidationTab() {
   );
 }
 
-type RunRow = { key: string; value: string; variable?: WorkflowVariable };
-
-/** A run-input row's value: declared variables are converted to their type
- * (the backend checks it); an empty variable row is left out so its default
- * applies. Other rows are text. */
-function rowValue(r: RunRow): { set: boolean; value?: unknown } {
-  const v = r.variable;
-  if (!v) return { set: true, value: r.value };
-  if (r.value === "") return { set: false };
-  switch (v.type) {
-    case "string": return { set: true, value: r.value };
-    case "number": return { set: true, value: Number.isNaN(Number(r.value)) ? r.value : Number(r.value) };
-    case "boolean": return { set: true, value: r.value === "true" ? true : r.value === "false" ? false : r.value };
-    default:
-      try {
-        return { set: true, value: JSON.parse(r.value) };
-      } catch {
-        return { set: true, value: r.value };
-      }
-  }
-}
-
-function initialRows(variables: WorkflowVariable[]): RunRow[] {
-  return [
-    { key: "query", value: "" },
-    ...variables.filter((v) => v.name !== "query").map((v) => ({ key: v.name, value: "", variable: v })),
-  ];
+/** The last test run, in one line per node (Phase E3). */
+function TestSummary({ result, until }: { result: TestRunResult; until: string | null }) {
+  const name = (id: string) => useEditorStore.getState().definition.nodes.find((n) => n.id === id)?.name ?? id;
+  return (
+    <div className="test-summary" data-testid="test-summary">
+      <div className="row">
+        <b>Test {until ? `up to ${name(until)}` : "of the draft"}</b>
+        <span className={`badge ${result.status === "COMPLETED" ? "published" : "failed"}`}>{result.status}</span>
+        <span className="muted small">Select a node to see its output.</span>
+      </div>
+      {result.error && <div className="error-banner" style={{ marginTop: 6 }}>{result.error.code}: {result.error.message}</div>}
+      <div className="small muted" style={{ marginTop: 6 }}>
+        {result.nodes.map((n) => `${name(n.node_id)}: ${n.status.toLowerCase()}${n.duration_ms != null ? ` (${n.duration_ms} ms)` : ""}`).join(" · ")}
+      </div>
+    </div>
+  );
 }
 
 function RunTab({ workflowId }: { workflowId: string }) {
   const { workflow, version } = useEditorContext();
   const { execution, nodes, running, error, run } = useExecution(workflowId);
-  const [rows, setRows] = useState<RunRow[]>(() => initialRows(useEditorStore.getState().definition.variables ?? []));
+  const stored = useTestRunStore((s) => s.rows);
+  const setRows = useTestRunStore((s) => s.setRows);
+  const rows = stored ?? initialRows(useEditorStore.getState().definition.variables ?? []);
   const activeVersion = workflow?.active_version_id ?? null;
-
-  const input = Object.fromEntries(
-    rows.filter((r) => r.key.trim() && rowValue(r).set).map((r) => [r.key.trim(), rowValue(r).value]),
-  );
+  const input = inputOf(rows);
+  const test = useTestRun();
+  const testResult = useTestRunStore((s) => s.result);
+  const testError = useTestRunStore((s) => s.error);
+  const testUntil = useTestRunStore((s) => s.until);
 
   return (
     <div className="run-grid">
@@ -142,6 +136,9 @@ function RunTab({ workflowId }: { workflowId: string }) {
             Reset fields
           </button>
           <span className="spacer" />
+          <button disabled={test.running} onClick={() => void test.run(null)} title="Runs the current draft now, without saving or publishing" data-testid="test-draft">
+            {test.running && testUntil === null ? "Testing…" : "Test draft"}
+          </button>
           <button className="primary" disabled={!activeVersion || running} onClick={() => activeVersion && run(input, activeVersion)}>
             {running ? "Running…" : "Execute"}
           </button>
@@ -154,6 +151,8 @@ function RunTab({ workflowId }: { workflowId: string }) {
       </div>
       <div data-testid="execution-result">
         <ErrorBanner error={error} />
+        <ErrorBanner error={testError} />
+        {testResult && <TestSummary result={testResult} until={testUntil} />}
         {execution ? (
           <>
             <div className="row">

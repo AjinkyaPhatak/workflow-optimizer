@@ -169,6 +169,7 @@ function VariableFieldDraft({ id, value, onCommit, groups, multiline, placeholde
                   >
                     <code>{`{{${o.expression}}}`}</code>
                     <span className="picker-label">{o.label}</span>
+                    {o.example !== undefined && <span className="picker-example" title={o.example}>= {o.example}</span>}
                     {o.type && <span className="picker-type">{o.type}</span>}
                   </div>
                 );

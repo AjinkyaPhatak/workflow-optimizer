@@ -82,6 +82,7 @@ func NewRouter(h *handlers.Handlers, tokens auth.TokenService, logger *slog.Logg
 	private("GET "+Prefix+"/files/{fileID}", h.GetFile)
 	private("GET "+Prefix+"/files/{fileID}/content", h.DownloadFile)
 	private("DELETE "+Prefix+"/files/{fileID}", h.DeleteFile)
+	private("POST "+Prefix+"/workflows/{workflowID}/test", h.TestWorkflow)
 	private("POST "+Prefix+"/knowledge-bases", h.CreateKnowledgeBase)
 	private("GET "+Prefix+"/knowledge-bases", h.ListKnowledgeBases)
 	private("GET "+Prefix+"/knowledge-bases/{baseID}", h.GetKnowledgeBase)

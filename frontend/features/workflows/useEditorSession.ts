@@ -10,6 +10,7 @@
 // publishing marks a version PUBLISHED and makes it the active version.
 // Published versions are never modified.
 
+import { useTestRunStore } from "@/stores/test-run/store";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, authApi, connectedAccountApi, credentialApi, nodeApi, projectApi, workflowApi } from "@/lib/api";
 import { isDirty, useEditorStore } from "@/stores/workflow-editor/store";
@@ -66,6 +67,8 @@ export function useEditorSession(workflowId: string): EditorSession {
     let cancelled = false;
     (async () => {
       setLoading(true);
+      // Test results and input belong to one workflow (Phase E3).
+      useTestRunStore.getState().reset();
       try {
         const wf = await workflowApi.get(workflowId);
         const [project, me, versions, nodes] = await Promise.all([

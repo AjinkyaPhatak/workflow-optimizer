@@ -41,6 +41,8 @@ type Handlers struct {
 	// Observability serves the execution debugger (Phase 14).
 	Observability *application.ObservabilityService
 	Nodes         NodeCatalog
+	// TestRuns runs editor drafts (Phase E3).
+	TestRuns *application.TestRunService
 	// Knowledge serves knowledge bases (Phase D2).
 	Knowledge *application.KnowledgeService
 	// Files serves workspace files (Phase D1).

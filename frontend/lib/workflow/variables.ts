@@ -18,6 +18,15 @@ export interface VariableOption {
   label: string;
   type?: ValueType;
   description?: string;
+  /** A value from the last test run (Phase E3), shortened for display. */
+  example?: string;
+}
+
+/** A short preview of a value for the picker. */
+export function previewValue(v: unknown): string {
+  const s = typeof v === "string" ? v : JSON.stringify(v);
+  if (s === undefined) return "";
+  return s.length > 60 ? `${s.slice(0, 57)}…` : s;
 }
 
 export interface VariableGroup {
@@ -70,7 +79,8 @@ function referencedInputKeys(definition: WorkflowDefinition): string[] {
 }
 
 /** The references a field of nodeId can use, grouped for the picker. */
-export function availableVariables(definition: WorkflowDefinition, catalog: Map<string, NodeDefinition>, nodeId: string): VariableGroup[] {
+export function availableVariables(definition: WorkflowDefinition, catalog: Map<string, NodeDefinition>, nodeId: string,
+  examples?: Map<string, Record<string, unknown> | undefined>): VariableGroup[] {
   const inputKeys = [DEFAULT_INPUT_KEY, ...referencedInputKeys(definition).filter((k) => k !== DEFAULT_INPUT_KEY)];
   const input: VariableGroup = {
     id: "input",
@@ -91,7 +101,9 @@ export function availableVariables(definition: WorkflowDefinition, catalog: Map<
     const def = n && catalog.get(n.type);
     if (!n || !def) continue;
     for (const p of nodeOutputs(def, n)) {
-      nodes.options.push({ expression: `${n.id}.${p.name}`, label: `${n.name} › ${p.name}`, type: p.type, description: p.description || undefined });
+      const out = examples?.get(n.id);
+      const example = out && p.name in out ? previewValue(out[p.name]) : undefined;
+      nodes.options.push({ expression: `${n.id}.${p.name}`, label: `${n.name} › ${p.name}`, type: p.type, description: p.description || undefined, ...(example !== undefined ? { example } : {}) });
     }
   }
   return [input, variables, nodes];
