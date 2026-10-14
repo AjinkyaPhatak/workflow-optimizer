@@ -73,6 +73,14 @@ type Config struct {
 	// (GOOGLE_OAUTH_REDIRECT_URI).
 	GoogleOAuthRedirectURI string
 
+	// Notion OAuth (Phase C5): the public integration used to connect
+	// Notion workspaces. All three set, or none (Notion is then not offered).
+	NotionClientID     string // NOTION_CLIENT_ID
+	NotionClientSecret string // NOTION_CLIENT_SECRET
+	// NotionOAuthRedirectURI must be <frontend origin>/api/v1/oauth/callback/notion
+	// and registered exactly so in the Notion integration (NOTION_OAUTH_REDIRECT_URI).
+	NotionOAuthRedirectURI string
+
 	// RedisQueueName is the Redis list that carries execution jobs
 	// (REDIS_QUEUE_NAME, default DefaultRedisQueueName).
 	RedisQueueName string
@@ -151,6 +159,9 @@ func LoadFrom(getenv func(string) string) (Config, error) {
 		GoogleClientID:          strings.TrimSpace(getenv("GOOGLE_CLIENT_ID")),
 		GoogleClientSecret:      strings.TrimSpace(getenv("GOOGLE_CLIENT_SECRET")),
 		GoogleOAuthRedirectURI:  strings.TrimSpace(getenv("GOOGLE_OAUTH_REDIRECT_URI")),
+		NotionClientID:          strings.TrimSpace(getenv("NOTION_CLIENT_ID")),
+		NotionClientSecret:      strings.TrimSpace(getenv("NOTION_CLIENT_SECRET")),
+		NotionOAuthRedirectURI:  strings.TrimSpace(getenv("NOTION_OAUTH_REDIRECT_URI")),
 		RedisQueueName:          DefaultRedisQueueName,
 		WorkerCount:             DefaultWorkerCount,
 		WorkerShutdownTimeout:   DefaultWorkerShutdownTimeout,
@@ -248,10 +259,19 @@ func (c Config) GoogleOAuthConfigured() bool {
 	return c.GoogleClientID != "" && c.GoogleClientSecret != "" && c.GoogleOAuthRedirectURI != ""
 }
 
-// googleProblems reports a partial or malformed Google OAuth configuration.
-func (c Config) googleProblems() []string {
+// NotionOAuthConfigured reports whether the Notion OAuth client is
+// configured (all of NOTION_CLIENT_ID, NOTION_CLIENT_SECRET and
+// NOTION_OAUTH_REDIRECT_URI).
+func (c Config) NotionOAuthConfigured() bool {
+	return c.NotionClientID != "" && c.NotionClientSecret != "" && c.NotionOAuthRedirectURI != ""
+}
+
+// oauthClientProblems reports a partial or malformed OAuth client
+// configuration: prefix is the variables' prefix ("GOOGLE"), provider the
+// callback path segment ("google").
+func oauthClientProblems(prefix, provider, id, secret, redirect string) []string {
 	set := 0
-	for _, v := range []string{c.GoogleClientID, c.GoogleClientSecret, c.GoogleOAuthRedirectURI} {
+	for _, v := range []string{id, secret, redirect} {
 		if v != "" {
 			set++
 		}
@@ -260,12 +280,18 @@ func (c Config) googleProblems() []string {
 	case set == 0:
 		return nil
 	case set < 3:
-		return []string{"GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET and GOOGLE_OAUTH_REDIRECT_URI must be set together"}
-	case !strings.HasSuffix(c.GoogleOAuthRedirectURI, "/api/v1/oauth/callback/google") ||
-		!(strings.HasPrefix(c.GoogleOAuthRedirectURI, "https://") || strings.HasPrefix(c.GoogleOAuthRedirectURI, "http://")):
-		return []string{"GOOGLE_OAUTH_REDIRECT_URI must be an absolute URL ending with /api/v1/oauth/callback/google"}
+		return []string{prefix + "_CLIENT_ID, " + prefix + "_CLIENT_SECRET and " + prefix + "_OAUTH_REDIRECT_URI must be set together"}
+	case !strings.HasSuffix(redirect, "/api/v1/oauth/callback/"+provider) ||
+		!(strings.HasPrefix(redirect, "https://") || strings.HasPrefix(redirect, "http://")):
+		return []string{prefix + "_OAUTH_REDIRECT_URI must be an absolute URL ending with /api/v1/oauth/callback/" + provider}
 	}
 	return nil
+}
+
+// oauthProblems reports partial or malformed OAuth client configurations.
+func (c Config) oauthProblems() []string {
+	return append(oauthClientProblems("GOOGLE", "google", c.GoogleClientID, c.GoogleClientSecret, c.GoogleOAuthRedirectURI),
+		oauthClientProblems("NOTION", "notion", c.NotionClientID, c.NotionClientSecret, c.NotionOAuthRedirectURI)...)
 }
 
 // ValidateAPI checks everything an API process needs.
@@ -290,7 +316,7 @@ func (c Config) ValidateAPI() error {
 		problems = append(problems, fmt.Sprintf("AUTH_TOKEN_TTL must be positive, got %s", c.AuthTokenTTL))
 	}
 	problems = append(problems, c.Reliability.OrDefaults().problems(c.RedisQueueName)...)
-	problems = append(problems, c.googleProblems()...)
+	problems = append(problems, c.oauthProblems()...)
 	if len(problems) > 0 {
 		return fmt.Errorf("%w: %s", ErrInvalidConfig, strings.Join(problems, "; "))
 	}
@@ -316,7 +342,7 @@ func (c Config) ValidateWorker() error {
 		problems = append(problems, fmt.Sprintf("WORKER_SHUTDOWN_TIMEOUT must be positive, got %s", c.WorkerShutdownTimeout))
 	}
 	problems = append(problems, c.Reliability.OrDefaults().problems(c.RedisQueueName)...)
-	problems = append(problems, c.googleProblems()...)
+	problems = append(problems, c.oauthProblems()...)
 	if len(problems) > 0 {
 		return fmt.Errorf("%w: %s", ErrInvalidConfig, strings.Join(problems, "; "))
 	}

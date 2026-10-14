@@ -1,6 +1,7 @@
-// Package apitest runs Google integration nodes in tests: the production
-// composition with a static Google credential (no OAuth) and the Google APIs
-// pointed at test servers, executed by the real graph executor.
+// Package apitest runs integration nodes (Google, Notion) in tests: the
+// production composition with a static OAuth credential (no OAuth flow) and
+// the provider APIs pointed at test servers, executed by the real graph
+// executor.
 package apitest
 
 import (
@@ -22,7 +23,8 @@ import (
 // Token is the access token the static credential resolves to.
 const Token = "ya29.test-access-token"
 
-// Resolver resolves every credential of Workspace to Token, and nothing else.
+// Resolver resolves every credential of Workspace to Token (for whichever
+// provider asks), and nothing else.
 type Resolver struct {
 	Workspace uuid.UUID
 	Calls     int
@@ -31,10 +33,10 @@ type Resolver struct {
 // Resolve implements credential.Resolver.
 func (r *Resolver) Resolve(_ context.Context, ws, id uuid.UUID, provider string) (credential.ResolvedCredential, error) {
 	r.Calls++
-	if ws != r.Workspace || provider != "google" {
+	if ws != r.Workspace {
 		return credential.ResolvedCredential{}, credential.ErrNotFound
 	}
-	return credential.ResolvedCredential{ID: id, Provider: "google", Type: credential.TypeOAuth2, Secret: credential.NewSecret(Token)}, nil
+	return credential.ResolvedCredential{ID: id, Provider: provider, Type: credential.TypeOAuth2, Secret: credential.NewSecret(Token)}, nil
 }
 
 // Authorized reports whether a request carries exactly the test token.

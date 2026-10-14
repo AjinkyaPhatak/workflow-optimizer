@@ -23,14 +23,15 @@ func TestBootstrapRegistersAllV1Nodes(t *testing.T) {
 		t.Fatalf("Bootstrap error: %v", err)
 	}
 	// Expect the 11 V1 nodes plus 5 Gmail actions (Phase C3), 3 Google
-	// Sheets and 2 Google Calendar actions (C4)
+	// Sheets and 2 Google Calendar actions (C4) and 4 Notion actions (C5)
 	got := len(a.NodeRegistry.List())
-	if got != 21 {
-		t.Fatalf("expected 21 nodes (11 V1 + 5 Gmail + 3 Sheets + 2 Calendar), got %d", got)
+	if got != 25 {
+		t.Fatalf("expected 25 nodes (11 V1 + 5 Gmail + 3 Sheets + 2 Calendar + 4 Notion), got %d", got)
 	}
 	for _, typ := range []string{"gmail.search", "gmail.read", "gmail.create_draft", "gmail.send", "gmail.reply",
 		"google_sheets.read_rows", "google_sheets.append_row", "google_sheets.update_row",
-		"google_calendar.list_events", "google_calendar.create_event"} {
+		"google_calendar.list_events", "google_calendar.create_event",
+		"notion.search", "notion.query_database", "notion.create_page", "notion.update_page"} {
 		if !a.NodeRegistry.HasNodeType(typ) {
 			t.Fatalf("%s is not registered", typ)
 		}
@@ -67,7 +68,7 @@ func TestValidateWithRegistry_UnknownNodeType(t *testing.T) {
 	}
 	def := workflow.Definition{Version: workflow.DefinitionSchemaVersion,
 		Nodes: []workflow.Node{{
-			ID: "node1", Type: "notion.search", Name: "notion", Position: &workflow.Position{X: 0, Y: 0}, Config: map[string]any{},
+			ID: "node1", Type: "trello.create_card", Name: "trello", Position: &workflow.Position{X: 0, Y: 0}, Config: map[string]any{},
 		}},
 		Edges:    []workflow.Edge{},
 		Settings: map[string]any{},

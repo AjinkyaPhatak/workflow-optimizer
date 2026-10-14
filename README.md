@@ -251,3 +251,46 @@ Not requested: `drive` or `calendar`. An account connected before C4 lacks
 them: its Sheets and Calendar calls fail with `PERMISSION_DENIED` asking to
 reconnect the account. In Google Cloud, the Sheets API and the Calendar API
 must be enabled and both scopes added to the consent screen's Data Access.
+
+## Notion (Phase C5)
+
+Notion workspaces connect with OAuth like Google (a Notion **public
+integration**; provider `notion`, `internal/oauth/notion`). In Notion's consent
+screen the user picks which pages and databases to share; Notion has no
+scopes. Notion does not support PKCE, so the flow's challenge is not sent (the
+single-use state and browser binding still apply). The account is the
+authorizing user in that workspace (`<workspace_id>/<user_id>`). Refresh
+tokens rotate on every refresh; `invalid_grant` marks the account REVOKED.
+Disconnecting revokes the access token at Notion.
+
+The API client uses `Notion-Version: 2025-09-03`, where a database's table is
+a **data source**: the Database setting takes a database link or ID (its first
+data source is used) or a data source ID from Search.
+
+| Node | Side effects | Output |
+|---|---|---|
+| `notion.search` | none | `results` [{`id`, `type` (page/database), `title`, `url`, `last_edited_time`}], `count`, `id` (first) |
+| `notion.query_database` (Find Database Rows) | none | `rows` [{`page_id`, `url`, `created_time`, `last_edited_time`, `<property>`: value}], `count`, `page_id` (first), `first_row` |
+| `notion.create_page` (Add Database Row) | unsafe | `page_id`, `url` |
+| `notion.update_page` (Update Database Row) | idempotent | `page_id`, `url`, `row` |
+
+**Rows are plain objects** keyed by property name. Reading: title and text as
+text, number, checkbox as boolean, select/status as the option name,
+multi-select/people/relations/files as lists, dates as their start, formulas
+and rollups as their value. Writing (Properties, matched ignoring case):
+text, numbers (or numeric text), checkboxes (true/false, yes/no), select and
+status by option name, multi-select as a list or comma-separated text, dates
+as `2026-10-20` or RFC 3339, relations and people as IDs; empty text clears a
+value. Unknown or read-only properties (formula, rollup, created time...) fail
+with `INVALID_REQUEST` before anything is written. Find Database Rows filters
+on one property (equals, or contains for text) or takes an advanced Notion
+filter object, and can sort by a property or created/edited time. Add Database
+Row can also write text into the page (paragraphs split on blank lines).
+
+Errors: 404 `RESOURCE_NOT_FOUND` says the object may not be shared with the
+integration (••• → Connections in Notion); Notion's own error messages are
+never copied into errors.
+
+**Configuration**: `NOTION_CLIENT_ID`, `NOTION_CLIENT_SECRET`,
+`NOTION_OAUTH_REDIRECT_URI` (all or none; the redirect URI ends with
+`/api/v1/oauth/callback/notion`), read by both the API and the worker.

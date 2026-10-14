@@ -216,3 +216,41 @@ func TestGoogleOAuthConfig(t *testing.T) {
 		}
 	}
 }
+
+func TestNotionOAuthConfig(t *testing.T) {
+	base := map[string]string{"DATABASE_URL": "postgres://x", "REDIS_URL": "redis://x", "AUTH_TOKEN_SECRET": strings.Repeat("s", 32)}
+	with := func(extra map[string]string) config.Config {
+		m := map[string]string{}
+		for k, v := range base {
+			m[k] = v
+		}
+		for k, v := range extra {
+			m[k] = v
+		}
+		cfg, err := config.LoadFrom(env(m))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return cfg
+	}
+	if cfg := with(nil); cfg.NotionOAuthConfigured() || cfg.ValidateAPI() != nil {
+		t.Fatal("Notion OAuth is optional")
+	}
+	full := map[string]string{"NOTION_CLIENT_ID": " notion-id ", "NOTION_CLIENT_SECRET": "secret",
+		"NOTION_OAUTH_REDIRECT_URI": "http://localhost:3000/api/v1/oauth/callback/notion"}
+	if cfg := with(full); !cfg.NotionOAuthConfigured() || cfg.NotionClientID != "notion-id" || cfg.ValidateAPI() != nil || cfg.ValidateWorker() != nil {
+		t.Fatalf("configured: %+v", cfg)
+	}
+	for name, m := range map[string]map[string]string{
+		"partial":         {"NOTION_CLIENT_ID": "id"},
+		"google callback": {"NOTION_CLIENT_ID": "id", "NOTION_CLIENT_SECRET": "s", "NOTION_OAUTH_REDIRECT_URI": "http://localhost:3000/api/v1/oauth/callback/google"},
+	} {
+		cfg := with(m)
+		if err := cfg.ValidateAPI(); err == nil || !strings.Contains(err.Error(), "NOTION_") {
+			t.Errorf("%s: %v", name, err)
+		}
+		if err := cfg.ValidateWorker(); err == nil {
+			t.Errorf("%s accepted by the worker", name)
+		}
+	}
+}
