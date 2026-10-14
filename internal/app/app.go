@@ -9,7 +9,9 @@ import (
 	"workflow-optimizer/internal/config"
 	"workflow-optimizer/internal/credential"
 	"workflow-optimizer/internal/integration"
+	"workflow-optimizer/internal/integration/calendar"
 	"workflow-optimizer/internal/integration/gmail"
+	"workflow-optimizer/internal/integration/sheets"
 	"workflow-optimizer/internal/node"
 	"workflow-optimizer/internal/node/condition"
 	nodehttp "workflow-optimizer/internal/node/http"
@@ -51,9 +53,11 @@ type Dependencies struct {
 	// the integration registry, actions into the node registry (Phase C1).
 	// Production passes none; tests install the fake integration here.
 	Integrations []integration.Module
-	// Gmail configures the Gmail API client (tests point it at a mock API;
-	// the zero value is the real API).
-	Gmail gmail.Options
+	// Gmail, Sheets and Calendar configure the Google API clients (tests
+	// point them at mock APIs; the zero value is the real API).
+	Gmail    gmail.Options
+	Sheets   sheets.Options
+	Calendar calendar.Options
 }
 
 // Bootstrap composes the application without runtime dependencies (no
@@ -122,14 +126,23 @@ func BootstrapWith(cfg config.Config, deps Dependencies) (*Application, error) {
 	}
 
 	// 5. Install integrations: their actions are ordinary nodes. Gmail
-	// (Phase C3) is part of the production catalog; it uses Google connected
-	// accounts, offered only when Google OAuth is configured.
+	// (Phase C3), Google Sheets and Google Calendar (C4) are part of the
+	// production catalog; they use Google connected accounts, offered only
+	// when Google OAuth is configured.
 	integrationReg := integration.NewRegistry()
 	gmailModule, err := gmail.Module(deps.Credentials, deps.Gmail)
 	if err != nil {
 		return nil, fmt.Errorf("bootstrap gmail: %w", err)
 	}
-	for _, m := range append([]integration.Module{gmailModule}, deps.Integrations...) {
+	sheetsModule, err := sheets.Module(deps.Credentials, deps.Sheets)
+	if err != nil {
+		return nil, fmt.Errorf("bootstrap google sheets: %w", err)
+	}
+	calendarModule, err := calendar.Module(deps.Credentials, deps.Calendar)
+	if err != nil {
+		return nil, fmt.Errorf("bootstrap google calendar: %w", err)
+	}
+	for _, m := range append([]integration.Module{gmailModule, sheetsModule, calendarModule}, deps.Integrations...) {
 		if err := integration.Install(integrationReg, nodeReg, m); err != nil {
 			return nil, fmt.Errorf("bootstrap install integration %q: %w", m.Integration.ID, err)
 		}

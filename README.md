@@ -172,11 +172,18 @@ hands the Gmail client a valid access token (refreshing it when needed).
 
 | Node | Side effects | Output |
 |---|---|---|
-| `gmail.search` | none | `messages` [{`message_id`, `thread_id`, `sender`, `subject`, `snippet`, `timestamp`, `unread`}], `count` |
+| `gmail.search` | none | `messages` [{`message_id`, `thread_id`, `sender`, `subject`, `snippet`, `timestamp`, `unread`}], `count`, and the newest match's `message_id` / `thread_id` (empty when nothing matched) |
 | `gmail.read` | none | `message_id`, `thread_id`, `sender`, `recipients` [], `subject`, `body` (plain text; HTML-only mail converted), `timestamp` (RFC 3339), `attachments` [{`filename`, `mime_type`, `size`, `attachment_id`}] |
 | `gmail.create_draft` | unsafe | `draft_id`, `message_id`, `status` = `draft` |
 | `gmail.send` | unsafe | `message_id`, `thread_id`, `status` = `sent` |
 | `gmail.reply` | unsafe | `message_id`, `thread_id`, `status` = `sent` (same thread, to Reply-To/From, `Re:` subject, In-Reply-To/References) |
+
+**Choosing a message** (C3.1): Read Email and Reply act on the `message_id`
+input (connect Search Emails' `message_id` output to it), else the **Message
+ID** setting, else **Find message**: a Gmail query whose newest match is used
+(e.g. `from:boss@example.com is:unread`), so a workflow never needs a copied
+ID. An empty connected ID (the search found nothing) or a query without a
+match fails with `RESOURCE_NOT_FOUND`.
 
 Gmail has no idempotency key, so the three writing actions are `unsafe`: the
 Phase 10 engine never repeats them after a failure that may have applied
@@ -187,7 +194,7 @@ integration kinds: 401 `AUTHENTICATION_FAILED`, 403 `PERMISSION_DENIED`, 404
 unreadable answers `MALFORMED_RESPONSE`. A Google `invalid_grant` on refresh
 marks the account REVOKED and fails with `CREDENTIAL_REVOKED` (not retried).
 
-**Scopes** (minimum): `openid` and `email` (the account's stable ID `sub`,
+**Scopes** (minimum; C4 adds two, see below): `openid` and `email` (the account's stable ID `sub`,
 used as `provider_account_id`, and its address as the label);
 `gmail.readonly` (search, read); `gmail.compose` (drafts, send, reply). Not
 requested: full mailbox access (`https://mail.google.com/`) or
@@ -197,3 +204,50 @@ requested: full mailbox access (`https://mail.google.com/`) or
 `GOOGLE_OAUTH_REDIRECT_URI` (all or none; see `.env.example`), read by both the
 API and the worker (the worker refreshes tokens). Without them Google is not
 offered; the Gmail nodes stay in the catalog and ask for a Google account.
+
+## Google Sheets and Google Calendar (Phase C4)
+
+Two more integrations on the same Google connected account (one connection
+covers Gmail, Sheets and Calendar). They share the Google REST plumbing in
+`internal/integration/googleapi` with Gmail.
+
+| Node | Side effects | Output |
+|---|---|---|
+| `google_sheets.read_rows` | none | `rows` [{`<column>`: text, ..., `row_number`}], `count`, `headers` [], `first_row` {} |
+| `google_sheets.append_row` | unsafe | `row_number`, `updated_range` |
+| `google_sheets.update_row` | idempotent | `row_number`, `updated_range`, `row` {} (the row after the update) |
+| `google_calendar.list_events` | none | `events` [{`event_id`, `summary`, `description`, `location`, `start`, `end`, `all_day`, `attendees` [], `organizer`, `html_link`, `status`}], `count`, `event_id` (earliest) |
+| `google_calendar.create_event` | idempotent | `event_id`, `html_link`, `start`, `end`, `status` |
+
+**Sheets are tables**: row 1 holds the column names and rows are objects keyed
+by them; Values are an object of column names (`{"Email": "{{read.sender}}"}`,
+names matched ignoring case; an unknown column fails with
+`INVALID_REQUEST` listing the sheet's columns). The spreadsheet setting takes
+the browser link or the ID; an empty Sheet means the first tab. Update Row
+finds its row by Row number or by the first row whose cell in a column equals
+a value, and keeps the other cells. Value handling `USER_ENTERED` (default)
+treats values like typing (numbers, dates, and text starting with `=` as a
+formula); `RAW` stores exact text, safer for untrusted text such as email
+content.
+
+**Calendar**: List Events looks from now to Days ahead (repeating events
+expanded, earliest first). Create Event takes Start as `2026-10-20 15:00`
+with a Time zone (IANA, e.g. `Asia/Kolkata`), an RFC 3339 time with offset,
+or a date for an all-day event; End defaults to Start + Duration (or one day).
+Attendees are emailed only when Notify attendees is on. Its event ID is
+derived from the node's idempotency key, so a retry after a failure that
+applied finds the first attempt's event (Google answers 409) instead of
+creating a second one.
+
+**Connecting nodes**: each Sheets and Calendar action has one input that
+accepts any upstream data (`json`), so it can follow any node and use that
+node's outputs in `{{variables}}`. A settings value wins over the input
+(Values) or the input's text wins (Calendar search, description), as noted per
+port.
+
+**Scopes** added for C4: `spreadsheets` (spreadsheets the account can open; no
+other Drive files) and `calendar.events` (events, not calendar management).
+Not requested: `drive` or `calendar`. An account connected before C4 lacks
+them: its Sheets and Calendar calls fail with `PERMISSION_DENIED` asking to
+reconnect the account. In Google Cloud, the Sheets API and the Calendar API
+must be enabled and both scopes added to the consent screen's Data Access.

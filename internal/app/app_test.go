@@ -22,12 +22,15 @@ func TestBootstrapRegistersAllV1Nodes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Bootstrap error: %v", err)
 	}
-	// Expect the 11 V1 nodes plus the 5 Gmail actions (Phase C3)
+	// Expect the 11 V1 nodes plus 5 Gmail actions (Phase C3), 3 Google
+	// Sheets and 2 Google Calendar actions (C4)
 	got := len(a.NodeRegistry.List())
-	if got != 16 {
-		t.Fatalf("expected 16 nodes (11 V1 + 5 Gmail), got %d", got)
+	if got != 21 {
+		t.Fatalf("expected 21 nodes (11 V1 + 5 Gmail + 3 Sheets + 2 Calendar), got %d", got)
 	}
-	for _, typ := range []string{"gmail.search", "gmail.read", "gmail.create_draft", "gmail.send", "gmail.reply"} {
+	for _, typ := range []string{"gmail.search", "gmail.read", "gmail.create_draft", "gmail.send", "gmail.reply",
+		"google_sheets.read_rows", "google_sheets.append_row", "google_sheets.update_row",
+		"google_calendar.list_events", "google_calendar.create_event"} {
 		if !a.NodeRegistry.HasNodeType(typ) {
 			t.Fatalf("%s is not registered", typ)
 		}

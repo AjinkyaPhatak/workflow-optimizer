@@ -8,7 +8,9 @@ import (
 	"workflow-optimizer/internal/credential"
 	"workflow-optimizer/internal/infrastructure/postgres"
 	"workflow-optimizer/internal/integration"
+	"workflow-optimizer/internal/integration/calendar"
 	"workflow-optimizer/internal/integration/gmail"
+	"workflow-optimizer/internal/integration/sheets"
 	"workflow-optimizer/internal/oauth"
 	"workflow-optimizer/internal/oauth/google"
 )
@@ -22,8 +24,11 @@ type Extensions struct {
 	// Integrations builds integration modules around the runtime credential
 	// resolver (the OAuth token manager).
 	Integrations func(credentials credential.Resolver) []integration.Module
-	// Gmail overrides the Gmail API client options (tests).
-	Gmail gmail.Options
+	// Gmail, Sheets and Calendar override the Google API client options
+	// (tests).
+	Gmail    gmail.Options
+	Sheets   sheets.Options
+	Calendar calendar.Options
 }
 
 // oauthProviders are the providers of a runtime: Google when its OAuth
@@ -74,7 +79,7 @@ func newCredentialChain(cfg config.Config, store *postgres.Store, enc credential
 }
 
 func (c *credentialChain) dependencies(ext Extensions) Dependencies {
-	deps := Dependencies{Credentials: c.resolver, Gmail: ext.Gmail}
+	deps := Dependencies{Credentials: c.resolver, Gmail: ext.Gmail, Sheets: ext.Sheets, Calendar: ext.Calendar}
 	if ext.Integrations != nil {
 		deps.Integrations = ext.Integrations(c.resolver)
 	}

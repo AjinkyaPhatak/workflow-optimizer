@@ -1,153 +1,37 @@
 package gmail
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"strings"
-	"time"
 
 	"workflow-optimizer/internal/credential"
+	"workflow-optimizer/internal/integration/googleapi"
 	"workflow-optimizer/internal/integration"
-	"workflow-optimizer/internal/node"
 )
 
 // DefaultBaseURL is the Gmail REST API root.
 const DefaultBaseURL = "https://gmail.googleapis.com/gmail/v1"
 
-// DefaultTimeout bounds one Gmail API request.
-const DefaultTimeout = 30 * time.Second
-
-// maxResponseBytes bounds a Gmail response read into memory.
-const maxResponseBytes = 32 << 20
-
 // Options configure the Gmail client (tests point BaseURL at a mock API).
-type Options struct {
-	BaseURL    string
-	HTTPClient *http.Client
-	Timeout    time.Duration
-}
+type Options = googleapi.Options
 
-// Client is the Gmail REST client for one action call. It holds the
-// resolved access token in memory only, sends it only as the Authorization
-// header to the Gmail API, and never logs. It does not refresh tokens: the
-// token manager handed it a valid one.
+// Client is the Gmail REST client for one action call, on the shared Google
+// REST plumbing (googleapi): the access token stays in memory and is sent
+// only as the Authorization header to the Gmail API.
 type Client struct {
-	base    string
-	http    *http.Client
-	timeout time.Duration
-	token   credential.Secret
+	api *googleapi.Client
 }
 
 // NewClient returns a client with the access token of a resolved credential.
 func NewClient(o Options, token credential.Secret) *Client {
-	base := strings.TrimRight(o.BaseURL, "/")
-	if base == "" {
-		base = DefaultBaseURL
-	}
-	hc := o.HTTPClient
-	if hc == nil {
-		hc = &http.Client{}
-	}
-	timeout := o.Timeout
-	if timeout <= 0 {
-		timeout = DefaultTimeout
-	}
-	return &Client{base: base, http: hc, timeout: timeout, token: token}
+	return &Client{api: googleapi.New("Gmail", DefaultBaseURL, o, token)}
 }
 
-// apiError is Gmail's error body. Only the reasons are read (to tell rate
-// limiting from permission problems on 403); messages are untrusted and are
-// never copied into errors.
-type apiError struct {
-	Error struct {
-		Errors []struct {
-			Reason string `json:"reason"`
-		} `json:"errors"`
-		Status string `json:"status"`
-	} `json:"error"`
-}
-
-var rateLimitReasons = map[string]bool{"rateLimitExceeded": true, "userRateLimitExceeded": true, "dailyLimitExceeded": false, "quotaExceeded": false}
-
-// classify maps an unsuccessful response to the integration error model.
-func classify(resp *http.Response, body []byte, what string) error {
-	retryAfter, _ := node.ParseRetryAfter(resp.Header.Get("Retry-After"), time.Now())
-	e := integration.FromHTTPStatus(resp.StatusCode, retryAfter, what+" failed")
-	if resp.StatusCode == http.StatusForbidden {
-		var a apiError
-		if json.Unmarshal(body, &a) == nil {
-			for _, r := range a.Error.Errors {
-				if rateLimitReasons[r.Reason] {
-					// Gmail reports per-user rate limits as 403.
-					e = integration.FromHTTPStatus(http.StatusTooManyRequests, retryAfter, what+" was rate limited")
-					e.StatusCode = http.StatusForbidden
-				}
-			}
-		}
-	}
-	switch e.Kind {
-	case integration.KindAuthentication:
-		e.Message = what + " failed: Google rejected the account's access; reconnect the account"
-	case integration.KindPermissionDenied:
-		e.Message = what + " failed: the account did not grant this permission"
-	case integration.KindNotFound:
-		e.Message = what + " failed: not found"
-	}
-	return e
-}
-
-// do sends one request and decodes a JSON answer into out (nil: ignored).
 func (c *Client) do(ctx context.Context, method, path string, query url.Values, in, out any, what string) error {
-	ctx, cancel := context.WithTimeout(ctx, c.timeout)
-	defer cancel()
-	var body io.Reader
-	if in != nil {
-		b, err := json.Marshal(in)
-		if err != nil {
-			return integration.NewError(integration.KindInvalidRequest, what+": the request could not be encoded")
-		}
-		body = bytes.NewReader(b)
-	}
-	u := c.base + path
-	if len(query) > 0 {
-		u += "?" + query.Encode()
-	}
-	req, err := http.NewRequestWithContext(ctx, method, u, body)
-	if err != nil {
-		return integration.NewError(integration.KindInvalidRequest, what+": invalid request")
-	}
-	req.Header.Set("Authorization", "Bearer "+c.token.Reveal())
-	req.Header.Set("Accept", "application/json")
-	if in != nil {
-		req.Header.Set("Content-Type", "application/json")
-	}
-	resp, err := c.http.Do(req)
-	if err != nil {
-		// A transport error (its text can contain the URL, never the
-		// header): integration.ToNodeError classifies timeouts and network
-		// failures without printing it.
-		return err
-	}
-	defer resp.Body.Close()
-	data, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
-	if err != nil {
-		return err
-	}
-	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		return classify(resp, data, what)
-	}
-	if out == nil {
-		return nil
-	}
-	if err := json.Unmarshal(data, out); err != nil {
-		return integration.NewError(integration.KindMalformedResponse, what+": Gmail returned a malformed response")
-	}
-	return nil
+	return c.api.Do(ctx, method, path, query, in, out, what)
 }
 
 // listResponse is users.messages.list.

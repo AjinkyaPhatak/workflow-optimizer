@@ -284,7 +284,8 @@ func TestGoogleIsOfferedOnlyWhenConfigured(t *testing.T) {
 	q := authURL.Query()
 	if authURL.Host != "accounts.google.com" || q.Get("client_id") != "real-id.apps.googleusercontent.com" || q.Get("redirect_uri") != callbackURL ||
 		q.Get("access_type") != "offline" || q.Get("code_challenge_method") != "S256" ||
-		q.Get("scope") != "openid email https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.compose" {
+		q.Get("scope") != "openid email https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.compose "+
+			"https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/calendar.events" { // C4 added the last two
 		t.Fatalf("authorization URL: %s", authURL)
 	}
 	on.mu.Lock()

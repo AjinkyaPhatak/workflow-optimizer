@@ -288,6 +288,83 @@ func TestReadPlainAndMultipart(t *testing.T) {
 	}
 }
 
+// chain is input -> Search -> (message_id) -> typ -> output of port.
+func (e *env) chain(query, typ, port string, cfg map[string]any) workflow.Definition {
+	cfg["credential_id"] = e.credID.String()
+	return workflow.Definition{Version: workflow.DefinitionSchemaVersion, Settings: map[string]any{},
+		Nodes: []workflow.Node{
+			{ID: "in", Type: "input", Name: "Input", Position: pos, Config: map[string]any{}},
+			{ID: "s", Type: "gmail.search", Name: "Search", Position: pos, Config: map[string]any{"credential_id": e.credID.String(), "query": query}},
+			{ID: "g", Type: typ, Name: "Gmail", Position: pos, Config: cfg},
+			{ID: "out", Type: "output", Name: "Output", Position: pos, Config: map[string]any{}},
+		},
+		Edges: []workflow.Edge{
+			{ID: "e1", Source: "in", SourcePort: "data", Target: "s", TargetPort: "query"},
+			{ID: "e2", Source: "s", SourcePort: "message_id", Target: "g", TargetPort: "message_id"},
+			{ID: "e3", Source: "g", SourcePort: port, Target: "out", TargetPort: "value"},
+		}}
+}
+
+// C3.1: Search connects straight to Read and Reply, and both can find their
+// message by query instead of an ID.
+func TestSearchChainsAndFind(t *testing.T) {
+	e := newEnv(t)
+	out, err := e.result("gmail.search", map[string]any{"query": "from:grace"}, map[string]any{})
+	if err != nil || out["message_id"] != "m-1" || out["thread_id"] != "t-1" {
+		t.Fatalf("search exposes the newest match: %v %v", out, err)
+	}
+	out, err = e.result("gmail.search", map[string]any{"query": "from:nobody"}, map[string]any{})
+	if err != nil || out["message_id"] != "" || out["thread_id"] != "" {
+		t.Fatalf("no match: %v %v", out, err)
+	}
+
+	// Search -> Read over a validated edge.
+	_, err = e.run(e.chain("from:news", "gmail.read", "body", map[string]any{}), map[string]any{}, e.ws)
+	if body, _ := e.outputs[len(e.outputs)-2].GetPort("body"); err != nil || body.Data != "News in text" {
+		t.Fatalf("search -> read: %v %v", body, err)
+	}
+	// Search found nothing: the chained Read fails clearly, without a request.
+	before := len(e.mock.Requests())
+	_, err = e.run(e.chain("from:nobody", "gmail.read", "body", map[string]any{}), map[string]any{}, e.ws)
+	if f := failure(t, err); f.Code != "RESOURCE_NOT_FOUND" || f.Retryable || !strings.Contains(f.Message, "found nothing") {
+		t.Fatalf("empty chain: %+v", f)
+	}
+	if len(e.mock.Requests()) != before+1 { // only the search
+		t.Fatalf("read must not call Gmail: %d", len(e.mock.Requests())-before)
+	}
+
+	// Find by query, no ID anywhere.
+	out, err = e.result("gmail.read", map[string]any{"find": "from:{{input.who}}"}, map[string]any{"who": "grace"})
+	if err != nil || out["message_id"] != "m-1" || out["subject"] != "Invoice October" {
+		t.Fatalf("read by find: %v %v", out, err)
+	}
+	out, err = e.result("gmail.reply", map[string]any{"find": "from:grace", "body": "Thanks"}, map[string]any{})
+	if err != nil || out["thread_id"] != "t-1" || e.mock.Sent()[0].ThreadID != "t-1" {
+		t.Fatalf("reply by find: %v %v", out, err)
+	}
+	// An explicit Message ID wins over Find.
+	out, err = e.result("gmail.read", map[string]any{"message_id": "m-2", "find": "from:grace"}, map[string]any{})
+	if err != nil || out["message_id"] != "m-2" {
+		t.Fatalf("message id precedence: %v %v", out, err)
+	}
+	if f := failure(t, func() error {
+		_, err := e.result("gmail.read", map[string]any{"find": "from:nobody"}, map[string]any{})
+		return err
+	}()); f.Code != "RESOURCE_NOT_FOUND" {
+		t.Fatalf("find without a match: %+v", f)
+	}
+	before = len(e.mock.Requests())
+	if f := failure(t, func() error {
+		_, err := e.result("gmail.reply", map[string]any{"body": "x"}, map[string]any{})
+		return err
+	}()); f.Code != "INVALID_REQUEST" || !strings.Contains(f.Message, "Find message") {
+		t.Fatalf("neither id nor find: %+v", f)
+	}
+	if len(e.mock.Requests()) != before {
+		t.Fatal("a reply without a target must not reach Gmail")
+	}
+}
+
 func decodeSent(t *testing.T, s gmailtest.Sent) (*mail.Message, string) {
 	t.Helper()
 	m, err := mail.ReadMessage(strings.NewReader(s.RFC822))

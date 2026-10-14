@@ -37,7 +37,7 @@ const (
 )
 
 // Scopes requested when connecting a Google account. They are the minimum
-// for the Gmail actions (see docs on each):
+// for the Gmail (C3), Google Sheets and Google Calendar (C4) actions:
 //
 //   - openid, email: the account's stable ID (sub) and its address, shown as
 //     the account label. No profile, contacts or other Google data.
@@ -45,14 +45,21 @@ const (
 //     messages; it cannot change or delete anything).
 //   - gmail.compose: gmail.create_draft, gmail.send and gmail.reply (create
 //     drafts and send messages; it cannot read the mailbox or delete mail).
+//   - spreadsheets: google_sheets.* (read and edit spreadsheets the account
+//     can open; no other Drive files).
+//   - calendar.events: google_calendar.* (read and create events; it cannot
+//     create, share or delete calendars).
 //
-// Not requested: https://mail.google.com/ (full mailbox control) and
-// gmail.modify (label changes, trash).
+// Not requested: https://mail.google.com/ (full mailbox control),
+// gmail.modify (label changes, trash), drive (all Drive files) and calendar
+// (calendar management and sharing).
 var Scopes = []string{
 	"openid",
 	"email",
 	"https://www.googleapis.com/auth/gmail.readonly",
 	"https://www.googleapis.com/auth/gmail.compose",
+	"https://www.googleapis.com/auth/spreadsheets",
+	"https://www.googleapis.com/auth/calendar.events",
 }
 
 // Options configure the provider. ClientID, ClientSecret and RedirectURL
@@ -95,7 +102,7 @@ func New(o Options) (*Provider, error) {
 		return nil, oauth.NewError(oauth.KindInvalidConfiguration, "google: a client ID and a client secret are required")
 	}
 	cfg := oauth.ProviderConfig{
-		ID: ID, Name: "Google", Description: "Gmail: search and read email, create drafts, send and reply.",
+		ID: ID, Name: "Google", Description: "Gmail, Google Sheets and Google Calendar: email, spreadsheet rows and calendar events.",
 		ClientID: strings.TrimSpace(o.ClientID), ClientSecret: o.ClientSecret,
 		AuthURL: or(o.AuthURL, DefaultAuthURL), TokenURL: or(o.TokenURL, DefaultTokenURL), RevokeURL: or(o.RevokeURL, DefaultRevokeURL),
 		RedirectURL: strings.TrimSpace(o.RedirectURL), Scopes: append([]string(nil), Scopes...),

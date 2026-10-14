@@ -225,15 +225,15 @@ func TestFakeIntegrationIsDiscoverableAsOrdinaryNodes(t *testing.T) {
 		}
 		noSecret(t, "node definition", mustJSON(t, def))
 	}
-	if l := f.app.IntegrationRegistry.List(); len(l) != 2 || l[0].ID != "gmail" || l[1].ID != fake.ID {
+	if l := f.app.IntegrationRegistry.List(); len(l) != 4 || l[0].ID != "gmail" || l[3].ID != fake.ID {
 		t.Fatalf("integration registry: %+v", l)
 	}
-	// Production composition installs Gmail only (Phase C3), never the fake.
+	// Production composition installs the Google integrations (C3, C4), never the fake.
 	prod, err := app.Bootstrap(config.Config{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if l := prod.IntegrationRegistry.List(); len(l) != 1 || l[0].ID != "gmail" || prod.NodeRegistry.HasNodeType(fake.ReadType) {
+	if l := prod.IntegrationRegistry.List(); len(l) != 3 || l[0].ID != "gmail" || l[1].ID != "google_calendar" || l[2].ID != "google_sheets" || prod.NodeRegistry.HasNodeType(fake.ReadType) {
 		t.Fatal("the fake integration must not be part of the production composition")
 	}
 }

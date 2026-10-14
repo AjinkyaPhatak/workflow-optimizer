@@ -54,6 +54,12 @@ func recipientsFields() []node.ConfigField {
 	}
 }
 
+// findField lets Read and Reply pick their message by search query, so a
+// workflow needs no opaque message ID.
+func findField(desc string) node.ConfigField {
+	return field("find", "Find message", desc+" {{variables}} are filled in.", false)
+}
+
 func sentOutputs() []node.PortDefinition {
 	return []node.PortDefinition{
 		node.NewPortDefinition("message_id", node.ValueTypeString, true, "ID of the sent message"),
@@ -86,6 +92,10 @@ func Integration() integration.Integration {
 				Outputs: []node.PortDefinition{
 					node.NewPortDefinition("messages", node.ValueTypeArray, true, "Matching messages: message_id, thread_id, sender, subject, snippet, timestamp, unread"),
 					node.NewPortDefinition("count", node.ValueTypeNumber, true, "Number of messages returned"),
+					// The newest match as plain text, so Search connects
+					// straight to Read Email or Reply.
+					node.NewPortDefinition("message_id", node.ValueTypeString, true, "ID of the newest matching message (empty when nothing matched)"),
+					node.NewPortDefinition("thread_id", node.ValueTypeString, true, "Conversation ID of the newest matching message (empty when nothing matched)"),
 				},
 				Config: []node.ConfigField{
 					field("query", "Query", "Gmail search syntax, e.g. from:foo@example.com subject:invoice is:unread. Empty matches all mail.", false),
@@ -107,7 +117,10 @@ func Integration() integration.Integration {
 					node.NewPortDefinition("timestamp", node.ValueTypeString, true, "When it was received (RFC 3339)"),
 					node.NewPortDefinition("attachments", node.ValueTypeArray, true, "Attachment metadata: filename, mime_type, size, attachment_id"),
 				},
-				Config: []node.ConfigField{field("message_id", "Message ID", "Used when the message_id input is not connected; {{variables}} are filled in.", false)},
+				Config: []node.ConfigField{
+					findField("Find with a search query: reads the newest message that matches (e.g. from:boss@example.com is:unread). Used when no Message ID is given."),
+					field("message_id", "Message ID", "A specific message, e.g. from Search Emails. Used when the message_id input is not connected; {{variables}} are filled in.", false),
+				},
 			},
 			{
 				// Gmail has no idempotency key for drafts: a repeated call
@@ -139,7 +152,8 @@ func Integration() integration.Integration {
 				},
 				Outputs: sentOutputs(),
 				Config: append([]node.ConfigField{
-					field("message_id", "Message ID", "The message to reply to. Used when the message_id input is not connected.", false),
+					findField("Find with a search query: replies to the newest message that matches (e.g. from:boss@example.com subject:report). Used when no Message ID is given."),
+					field("message_id", "Message ID", "A specific message, e.g. from Search Emails. Used when the message_id input is not connected; {{variables}} are filled in.", false),
 					field("body", "Body", "Plain-text reply. Used when the body input is not connected; {{variables}} are filled in.", false).WithMultiline(),
 				}, recipientsFields()...),
 			},
@@ -156,6 +170,11 @@ func text(in node.NodeInput, name string) string {
 	}
 	s, _ := in.GetStringConfig(name)
 	return s
+}
+
+func isString(v node.Value) bool {
+	_, ok := v.String()
+	return ok
 }
 
 func invalid(msg string) error { return integration.NewError(integration.KindInvalidRequest, msg) }
@@ -188,16 +207,45 @@ func search(ctx context.Context, c *Client, in node.NodeInput) (node.NodeOutput,
 	for _, m := range msgs {
 		list = append(list, summary(m))
 	}
+	first, firstThread := "", ""
+	if len(msgs) > 0 {
+		first, firstThread = msgs[0].ID, msgs[0].ThreadID
+	}
 	out := node.NewNodeOutput(nil)
 	out.SetPort("messages", node.NewArrayValue(list))
 	out.SetPort("count", node.NewNumberValue(float64(len(list))))
+	out.SetPort("message_id", node.NewStringValue(first))
+	out.SetPort("thread_id", node.NewStringValue(firstThread))
 	return out, nil
 }
 
+// target is the message Read or Reply acts on: the message_id input, else
+// the Message ID setting, else the newest match of the Find query.
+func target(ctx context.Context, c *Client, in node.NodeInput) (string, error) {
+	if id := strings.TrimSpace(text(in, "message_id")); id != "" {
+		return id, nil
+	}
+	query := strings.TrimSpace(text(in, "find"))
+	if query == "" {
+		if v, connected := in.GetPort("message_id"); connected && isString(v) {
+			return "", integration.NewError(integration.KindNotFound, "no message ID was passed in: the search before this node may have found nothing")
+		}
+		return "", invalid("set a Message ID or a Find message query")
+	}
+	msgs, err := c.Search(ctx, query, 1)
+	if err != nil {
+		return "", err
+	}
+	if len(msgs) == 0 {
+		return "", integration.NewError(integration.KindNotFound, "no message matches the Find message query")
+	}
+	return msgs[0].ID, nil
+}
+
 func read(ctx context.Context, c *Client, in node.NodeInput) (node.NodeOutput, error) {
-	id := strings.TrimSpace(text(in, "message_id"))
-	if id == "" {
-		return node.NodeOutput{}, invalid("a message_id is required")
+	id, err := target(ctx, c, in)
+	if err != nil {
+		return node.NodeOutput{}, err
 	}
 	m, err := c.Get(ctx, id, "full")
 	if err != nil {
@@ -277,11 +325,12 @@ func send(ctx context.Context, c *Client, in node.NodeInput) (node.NodeOutput, e
 // reply answers a message in its thread: to its Reply-To (else From), with
 // "Re: <subject>", In-Reply-To and References.
 func reply(ctx context.Context, c *Client, in node.NodeInput) (node.NodeOutput, error) {
-	id := strings.TrimSpace(text(in, "message_id"))
-	if id == "" {
-		return node.NodeOutput{}, invalid("a message_id is required")
-	}
+	// Validate local input before any request reaches Gmail.
 	r, err := recipients(in, "cc", "bcc")
+	if err != nil {
+		return node.NodeOutput{}, err
+	}
+	id, err := target(ctx, c, in)
 	if err != nil {
 		return node.NodeOutput{}, err
 	}
