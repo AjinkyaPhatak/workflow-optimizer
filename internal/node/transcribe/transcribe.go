@@ -1,6 +1,6 @@
 // Package transcribe is the Transcribe Audio node (Phase G): the text of an
-// uploaded recording, from a speech-to-text provider (Groq Whisper, free;
-// or OpenAI).
+// uploaded recording, from a provider that understands speech (Gemini,
+// free; or Groq or OpenAI Whisper).
 package transcribe
 
 import (
@@ -25,14 +25,17 @@ type Provider struct {
 	Transcriber providerllm.Transcriber
 }
 
-// DefaultProvider is the free one.
-const DefaultProvider = "groq"
+// DefaultProvider and DefaultModel are the free Gemini tier.
+const (
+	DefaultProvider = "gemini"
+	DefaultModel    = "gemini-2.5-flash"
+)
 
 // Definition is the node's metadata; the provider and model choices are
 // those of the given providers.
 func Definition(providers []Provider) node.NodeDefinition {
 	providerField := node.NewConfigField("provider", node.ValueTypeString, true, DefaultProvider, "Which service turns the speech into text.").WithLabel("Service")
-	modelField := node.NewConfigField("model", node.ValueTypeString, true, "whisper-large-v3-turbo", "The speech-to-text model.").WithLabel("Model")
+	modelField := node.NewConfigField("model", node.ValueTypeString, true, DefaultModel, "The model that listens to the recording.").WithLabel("Model")
 	if len(providers) > 0 {
 		var provOpts, modelOpts []node.ConfigOption
 		for _, p := range providers {
@@ -46,7 +49,7 @@ func Definition(providers []Provider) node.NodeDefinition {
 	}
 	return node.NodeDefinition{
 		Type: NodeType, Name: "Transcribe Audio", Category: node.CategoryMultiModal,
-		Description: "Turns a recording (MP3, M4A, WAV, OGG, WebM, FLAC or MP4, up to 20 MB) into text, e.g. a meeting to summarize.",
+		Description: "Turns a recording (MP3, M4A, WAV, OGG, WebM, FLAC or MP4) into text, e.g. a meeting to summarize. Gemini takes recordings up to 14 MB.",
 		Inputs: []node.PortDefinition{
 			node.NewPortDefinition("audio", node.ValueTypeJSON, false, "Any upstream data; a file ID (or an object with file_id) is used as the recording"),
 		},

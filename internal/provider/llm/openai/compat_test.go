@@ -145,14 +145,48 @@ func TestTranscribe(t *testing.T) {
 	if !errors.As(err, &pe) || pe.Code != llm.CodeAuthenticationFailed || strings.Contains(err.Error(), apiKey) {
 		t.Fatalf("bad key: %v", err)
 	}
-	gemini := compat(t, openai.Gemini, func(w http.ResponseWriter, r *http.Request) { t.Error("must not be called") })
-	if _, err := gemini.Transcribe(context.Background(), llm.TranscribeRequest{Model: "m", Audio: []byte("x"), Credential: keyFor("gemini")}); !errors.As(err, &pe) || pe.Code != llm.CodeModelNotSupported {
-		t.Fatalf("gemini: %v", err)
+	noTranscription := openai.Groq
+	noTranscription.TranscriptionModels = nil
+	none := compat(t, noTranscription, func(w http.ResponseWriter, r *http.Request) { t.Error("must not be called") })
+	if _, err := none.Transcribe(context.Background(), llm.TranscribeRequest{Model: "m", Audio: []byte("x"), Credential: keyFor("groq")}); !errors.As(err, &pe) || pe.Code != llm.CodeModelNotSupported {
+		t.Fatalf("no transcription models: %v", err)
 	}
 	never := compat(t, openai.Groq, func(w http.ResponseWriter, r *http.Request) { t.Error("must not be called") })
 	for _, audio := range [][]byte{nil, make([]byte, openai.MaxAudioBytes+1)} {
 		if _, err := never.Transcribe(context.Background(), llm.TranscribeRequest{Model: "m", Audio: audio, Credential: keyFor("groq")}); err == nil {
 			t.Fatal("invalid audio was sent")
 		}
+	}
+}
+
+// Gemini has no transcriptions endpoint: the recording goes to the chat
+// endpoint as input_audio with an instruction to write it down.
+func TestGeminiTranscribesThroughChat(t *testing.T) {
+	var body map[string]any
+	var path string
+	p := compat(t, openai.Gemini, func(w http.ResponseWriter, r *http.Request) {
+		raw, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(raw, &body)
+		path = r.URL.Path
+		_, _ = fmt.Fprint(w, `{"model":"gemini-2.5-flash","choices":[{"message":{"content":"\nLet us ship on Friday.\n"},"finish_reason":"stop"}]}`)
+	})
+	if ms := p.TranscriptionModels(); len(ms) == 0 || ms[0].ID != "gemini-2.5-flash" {
+		t.Fatalf("models: %v", ms)
+	}
+	resp, err := p.Transcribe(context.Background(), llm.TranscribeRequest{Model: "gemini-2.5-flash", Audio: []byte("RIFFwav"),
+		Filename: "Call.WAV", Language: "hi", Credential: keyFor("gemini")})
+	if err != nil || resp.Text != "Let us ship on Friday." {
+		t.Fatalf("%v %+v", err, resp)
+	}
+	parts := body["messages"].([]any)[0].(map[string]any)["content"].([]any)
+	text := parts[0].(map[string]any)["text"].(string)
+	audio := parts[1].(map[string]any)["input_audio"].(map[string]any)
+	if path != "/v1/chat/completions" || body["model"] != "gemini-2.5-flash" || !strings.Contains(text, "Write down exactly what is said") ||
+		!strings.Contains(text, "code hi") || audio["format"] != "wav" || audio["data"] != "UklGRndhdg==" {
+		t.Fatalf("request: %s %v", path, body)
+	}
+	never := compat(t, openai.Gemini, func(w http.ResponseWriter, r *http.Request) { t.Error("must not be called") })
+	if _, err := never.Transcribe(context.Background(), llm.TranscribeRequest{Model: "m", Audio: make([]byte, openai.MaxChatAudioBytes+1), Credential: keyFor("gemini")}); err == nil {
+		t.Fatal("an oversized recording was sent")
 	}
 }

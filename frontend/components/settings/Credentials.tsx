@@ -16,7 +16,7 @@ const KIND_LABELS: Record<string, string> = { http: "HTTP API", openai: "OpenAI"
 /** Where to get each AI key, in plain words (Phase G: Gemini and Groq are
  * free, no card needed). */
 const KEY_HELP: Partial<Record<Kind, { text: string; url: string; label: string }>> = {
-  gemini: { text: "Free, no card needed. Sign in with Google, click Create API key, and paste it here.", url: "https://aistudio.google.com/apikey", label: "Get a free Gemini key" },
+  gemini: { text: "Free, no card needed. Used for AI answers, pictures, recordings and knowledge search. Sign in with Google, click Create API key, and paste it here.", url: "https://aistudio.google.com/apikey", label: "Get a free Gemini key" },
   groq: { text: "Free, no card needed. Sign up, open API Keys, click Create API Key, and paste it here.", url: "https://console.groq.com/keys", label: "Get a free Groq key" },
   openai: { text: "Paid: OpenAI charges for every use.", url: "https://platform.openai.com/api-keys", label: "OpenAI API keys" },
 };
@@ -60,9 +60,9 @@ function AddCredential({ busy, onCreate }: { busy: boolean; onCreate: Credential
       <div className="field">
         <label htmlFor="cred-kind">For</label>
         <select id="cred-kind" value={kind} onChange={(e) => setKind(e.target.value as Kind)}>
-          <option value="gemini">Google Gemini: AI, free</option>
-          <option value="groq">Groq: AI and audio transcription, free</option>
+          <option value="gemini">Google Gemini: AI, free (recommended)</option>
           <option value="openai">OpenAI: AI, paid</option>
+          <option value="groq">Groq: AI, free (optional)</option>
           <option value="http">Any other service (HTTP Request)</option>
         </select>
         {KEY_HELP[kind] && (

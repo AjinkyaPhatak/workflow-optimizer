@@ -51,8 +51,13 @@ type Spec struct {
 	// models trained to be shortened, such as gemini-embedding-001).
 	TruncateEmbeddings bool
 	// TranscriptionModels are the speech-to-text models offered (none: the
-	// API has no transcription endpoint).
+	// API cannot transcribe).
 	TranscriptionModels []llm.Model
+	// TranscribeWithChat: the API has no transcriptions endpoint, but its
+	// chat models listen to audio, so a recording is sent to the chat
+	// endpoint as an input_audio part with an instruction to write it down
+	// (Gemini).
+	TranscribeWithChat bool
 }
 
 // OpenAI is the OpenAI API.
@@ -75,7 +80,8 @@ var OpenAI = Spec{
 // with low rate limits.
 var Gemini = Spec{
 	Name: "gemini", Label: "Google Gemini (free)", BaseURL: "https://generativelanguage.googleapis.com/v1beta/openai",
-	MaxTokensField: "max_tokens", TruncateEmbeddings: true,
+	MaxTokensField: "max_tokens", TruncateEmbeddings: true, TranscribeWithChat: true,
+	TranscriptionModels: []llm.Model{{ID: "gemini-2.5-flash", Label: "Gemini 2.5 Flash (free)"}, {ID: "gemini-2.5-flash-lite", Label: "Gemini 2.5 Flash-Lite (free, fastest)"}},
 	Models: []llm.Model{
 		{ID: "gemini-2.5-flash", Label: "Gemini 2.5 Flash (free)"},
 		{ID: "gemini-2.5-flash-lite", Label: "Gemini 2.5 Flash-Lite (free, fastest)"},
@@ -164,9 +170,17 @@ type imageURL struct {
 }
 
 type contentPart struct {
-	Type     string    `json:"type"`
-	Text     string    `json:"text,omitempty"`
-	ImageURL *imageURL `json:"image_url,omitempty"`
+	Type       string      `json:"type"`
+	Text       string      `json:"text,omitempty"`
+	ImageURL   *imageURL   `json:"image_url,omitempty"`
+	InputAudio *inputAudio `json:"input_audio,omitempty"`
+}
+
+// inputAudio is a recording sent to a chat model (base64, with its format:
+// "mp3", "wav"...).
+type inputAudio struct {
+	Data   string `json:"data"`
+	Format string `json:"format"`
 }
 
 // content is a message's text, with its images as parts (bytes as a data
@@ -233,6 +247,11 @@ func (p *Provider) Generate(ctx context.Context, req llm.Request) (llm.Response,
 	if err != nil {
 		return llm.Response{}, &llm.Error{Provider: p.name, Code: llm.CodeInvalidRequest, Message: "request could not be encoded"}
 	}
+	return p.complete(ctx, cred, body)
+}
+
+// complete sends an encoded chat request and reads the answer.
+func (p *Provider) complete(ctx context.Context, cred credential.ResolvedCredential, body []byte) (llm.Response, error) {
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, p.baseURL+"/chat/completions", bytes.NewReader(body))
 	if err != nil {
 		return llm.Response{}, &llm.Error{Provider: p.name, Code: llm.CodeInvalidRequest, Message: "request could not be built"}

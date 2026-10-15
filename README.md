@@ -508,8 +508,8 @@ the OpenAI format, so one client (`internal/provider/llm/openai`, an
 
 | Provider | Free? | Used for | Key from |
 |---|---|---|---|
-| `gemini` | yes (free tier, rate limited) | LLM node (default: `gemini-2.5-flash`), images, knowledge base embeddings | https://aistudio.google.com/apikey |
-| `groq` | yes (free plan, rate limited) | LLM node (`openai/gpt-oss-120b`...), Transcribe Audio (Whisper) | https://console.groq.com/keys |
+| `gemini` | yes (free tier, rate limited) | LLM node (default: `gemini-2.5-flash`), images, knowledge base embeddings, Transcribe Audio (default) | https://aistudio.google.com/apikey |
+| `groq` | yes (free plan, rate limited; optional) | LLM node (`openai/gpt-oss-120b`...), Transcribe Audio (Whisper) | https://console.groq.com/keys |
 | `openai` | no | LLM node, embeddings, Transcribe Audio | https://platform.openai.com/api-keys |
 
 Keys are workspace credentials (Credentials page; the provider is the
@@ -526,10 +526,13 @@ keys cannot embed (400).
 
 **Transcribe Audio** (`transcribe_audio`, multimodal): the text of an
 uploaded recording (MP3, M4A, WAV, OGG, WebM, FLAC, MP4; the Files page now
-takes them, 20 MB each), with Service (Groq, free, or OpenAI), Model,
+takes them, 20 MB each), with Service (Gemini, free and the default; Groq
+or OpenAI Whisper), Model,
 Credential, Recording (picker of the workspace's audio files, or a
 connected file ID) and an optional Language hint. Outputs `text` and
-`name`. Use it for meeting recordings: Transcribe Audio, then an LLM to
+`name`. Gemini has no transcription endpoint: the recording is sent to its
+chat endpoint as an `input_audio` part (up to 14 MB, base64 inline) with an
+instruction to write down exactly what is said. Use it for meeting recordings: Transcribe Audio, then an LLM to
 summarize.
 
 `GEMINI_BASE_URL` and `GROQ_BASE_URL` override the endpoints (tests).
