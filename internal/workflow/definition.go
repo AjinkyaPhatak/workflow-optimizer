@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"strings"
 )
 
 // DefinitionSchemaVersion is the supported JSON schema version. It is separate
@@ -46,6 +47,28 @@ type Variable struct {
 }
 
 var variableNamePattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
+// VariableInputPrefix marks a variable input (Phase H4): an edge whose
+// target port is "var:<name>" feeds {{name}} in the target node's settings.
+// Any node but an entry node takes variable inputs; each takes one edge, of
+// any type. Unconnected, {{name}} still reads the workflow input.
+const VariableInputPrefix = "var:"
+
+// VariableInput returns the variable name of a variable input port, and
+// whether the port is one ("var:" prefix). The name may still be invalid:
+// check ValidVariableInputName.
+func VariableInput(port string) (string, bool) {
+	if !strings.HasPrefix(port, VariableInputPrefix) {
+		return "", false
+	}
+	return port[len(VariableInputPrefix):], true
+}
+
+// ValidVariableInputName reports whether a variable input can be named so:
+// a variable name other than the reserved "input".
+func ValidVariableInputName(name string) bool {
+	return ValidVariableName(name) && name != "input"
+}
 
 // ValidVariableName reports whether name can be referenced as {{name}}.
 func ValidVariableName(name string) bool {

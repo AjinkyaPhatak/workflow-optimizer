@@ -20,6 +20,8 @@ const inputNamespace = "input"
 //
 // Resolution of an expression "s0.s1...sn" (grammar owned by
 // workflow.VariableReferences):
+//  0. s0 is connected to a variable input of the node ("var:s0", Phase H4)
+//     → path s1..sn inside the connected value.
 //  1. s0 == "input"        → path s1..sn inside the workflow input map.
 //  2. s0 is a node ID      → s1 names an output port of that node's
 //     NodeOutput; s2..sn walk into the port Value's data. The node must be a
@@ -37,6 +39,8 @@ type variableScope struct {
 	// empty string inside text, null as a whole value.
 	skipped map[string]bool
 	input   map[string]any
+	// vars are the node's connected variable inputs (Phase H4).
+	vars map[string]any
 }
 
 // resolveConfig returns a resolved deep copy of a node's static configuration.
@@ -137,6 +141,12 @@ func (s variableScope) lookup(expr string) (any, error) {
 		input = map[string]any{}
 	}
 
+	if v, ok := s.vars[segs[0]]; ok {
+		if v == nil {
+			return nil, nil // its edge is inactive
+		}
+		return walkPath(v, segs[1:], expr)
+	}
 	if segs[0] == inputNamespace {
 		return walkPath(input, segs[1:], expr)
 	}

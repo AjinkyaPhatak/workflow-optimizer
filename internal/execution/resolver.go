@@ -32,6 +32,9 @@ func resolveInputs(
 	byPort := make(map[string][]int)
 	edges := plan.Incoming(nodeID)
 	for i, e := range edges {
+		if _, isVar := workflow.VariableInput(e.TargetPort); isVar {
+			continue // feeds {{name}}, not a port (resolveVariableInputs)
+		}
 		byPort[e.TargetPort] = append(byPort[e.TargetPort], i)
 	}
 	portNames := make([]string, 0, len(byPort))
@@ -53,26 +56,13 @@ func resolveInputs(
 
 		values := make([]node.Value, 0, len(idx))
 		for _, i := range idx {
-			e := edges[i]
-			if state.Skipped[e.Source] {
-				continue // a branch not taken (Phase E1): this edge is inactive
+			v, active, err := edgeValue(edges[i], state, bound)
+			if err != nil {
+				return nil, err
 			}
-			out, ok := state.Results[e.Source]
-			if !ok {
-				return nil, fmt.Errorf("%w: edge %q from node %q has not produced a result", ErrMissingUpstreamResult, e.ID, e.Source)
+			if active {
+				values = append(values, v)
 			}
-			v, ok := out.GetPort(e.SourcePort)
-			if !ok && state.Failed[e.Source] {
-				continue // a handled failure (Phase E2): its outputs are absent
-			}
-			if !ok {
-				srcPort, declared := workflow.OutputPort(bound[e.Source].def, bound[e.Source].spec, e.SourcePort)
-				if declared && !srcPort.Required {
-					continue // optional output not emitted: this edge is inactive
-				}
-				return nil, fmt.Errorf("%w: edge %q expects port %q on node %q", ErrMissingSourcePort, e.ID, e.SourcePort, e.Source)
-			}
-			values = append(values, v)
 		}
 		if len(values) == 0 {
 			continue
@@ -88,4 +78,55 @@ func resolveInputs(
 		ports[portName] = values[0]
 	}
 	return ports, nil
+}
+
+// edgeValue is the value an edge carries, or active=false when the edge is
+// inactive: its source was skipped (a branch not taken, Phase E1), is a
+// handled failure (Phase E2), or did not emit an optional output.
+func edgeValue(e workflow.Edge, state *ExecutionState, bound map[string]boundNode) (node.Value, bool, error) {
+	if state.Skipped[e.Source] {
+		return node.Value{}, false, nil
+	}
+	out, ok := state.Results[e.Source]
+	if !ok {
+		return node.Value{}, false, fmt.Errorf("%w: edge %q from node %q has not produced a result", ErrMissingUpstreamResult, e.ID, e.Source)
+	}
+	v, ok := out.GetPort(e.SourcePort)
+	if !ok && state.Failed[e.Source] {
+		return node.Value{}, false, nil
+	}
+	if !ok {
+		srcPort, declared := workflow.OutputPort(bound[e.Source].def, bound[e.Source].spec, e.SourcePort)
+		if declared && !srcPort.Required {
+			return node.Value{}, false, nil
+		}
+		return node.Value{}, false, fmt.Errorf("%w: edge %q expects port %q on node %q", ErrMissingSourcePort, e.ID, e.SourcePort, e.Source)
+	}
+	return v, true, nil
+}
+
+// resolveVariableInputs collects a node's variable inputs (Phase H4): for
+// each edge into "var:<name>", the value {{name}} resolves to in the node's
+// settings. An inactive edge resolves to nothing (nil), like a skipped node.
+func resolveVariableInputs(nodeID string, plan *Plan, state *ExecutionState, bound map[string]boundNode) (map[string]any, error) {
+	var vars map[string]any
+	for _, e := range plan.Incoming(nodeID) {
+		name, isVar := workflow.VariableInput(e.TargetPort)
+		if !isVar {
+			continue
+		}
+		v, active, err := edgeValue(e, state, bound)
+		if err != nil {
+			return nil, err
+		}
+		if vars == nil {
+			vars = map[string]any{}
+		}
+		if active {
+			vars[name] = v.Data
+		} else {
+			vars[name] = nil
+		}
+	}
+	return vars, nil
 }

@@ -119,3 +119,66 @@ func TestUnresolvedReferencesFailClearly(t *testing.T) {
 		})
 	}
 }
+
+// Phase H4: an edge into "var:<name>" feeds {{name}} in the target's
+// settings, with the value's type kept for an exact reference; it is not a
+// port. Unconnected names still read the workflow input.
+func TestVariableInputsFeedReferences(t *testing.T) {
+	e := newEnv(t)
+	def := graph(nodes(entry("in"), probeWith("P", map[string]any{"message": "Ada"}),
+		probeWith("R", map[string]any{"message": "Hi {{who}}, about {{query}}", "payload": map[string]any{"whole": "{{data}}", "deep": "{{data.query}}"}}), exit("out")),
+		edge("in", "data", "P", "in"),
+		edge("P", "text", "R", "var:who"), edge("in", "data", "R", "var:data"),
+		edge("R", "out", "out", "value"))
+	if res := workflow.NewValidator(e.reg).Validate(def); !res.Valid {
+		t.Fatalf("invalid: %+v", res.Errors)
+	}
+	if _, err := e.run(t, def, map[string]any{"query": "DAGs"}); err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	r := e.rec.call(t, "R").Input
+	payload := r.Config["payload"].(map[string]any)
+	if r.Config["message"] != "Hi Ada, about DAGs" || !reflect.DeepEqual(payload["whole"], map[string]any{"query": "DAGs"}) || payload["deep"] != "DAGs" {
+		t.Fatalf("config = %#v", r.Config)
+	}
+	if len(r.Ports) != 0 {
+		t.Fatalf("variable inputs are not ports: %#v", r.Ports)
+	}
+}
+
+func TestVariableInputValidation(t *testing.T) {
+	e := newEnv(t)
+	for name, c := range map[string]struct {
+		port string
+		code workflow.ValidationErrorCode
+	}{
+		"bad name":     {"var:2x", workflow.ErrInvalidTargetPort},
+		"reserved":     {"var:input", workflow.ErrInvalidTargetPort},
+		"empty":        {"var:", workflow.ErrInvalidTargetPort},
+		"not declared": {"who", workflow.ErrInvalidTargetPort},
+	} {
+		def := graph(nodes(entry("in"), probe("P"), exit("out")), edge("in", "data", "P", c.port), edge("P", "out", "out", "value"))
+		if res := workflow.NewValidator(e.reg).Validate(def); res.Valid || !hasCode(res, c.code, "P") {
+			t.Fatalf("%s: %+v", name, res.Errors)
+		}
+	}
+	// One connection per variable input; never into the entry node.
+	def := graph(nodes(entry("in"), probe("P"), probe("Q"), exit("out")),
+		edge("in", "data", "P", "in"), edge("in", "data", "Q", "var:x"), edge("P", "out", "Q", "var:x"), edge("Q", "out", "out", "value"))
+	if res := workflow.NewValidator(e.reg).Validate(def); res.Valid || !hasCode(res, workflow.ErrMultipleConnections, "Q") || len(res.Errors) != 1 {
+		t.Fatalf("fan-in: %+v", res.Errors)
+	}
+	def = graph(nodes(entry("in"), probe("P"), exit("out")), edge("P", "out", "in", "var:x"), edge("in", "data", "P", "in"), edge("P", "out", "out", "value"))
+	if res := workflow.NewValidator(e.reg).Validate(def); res.Valid {
+		t.Fatal("a variable input on the entry node was accepted")
+	}
+}
+
+func hasCode(res workflow.ValidationResult, code workflow.ValidationErrorCode, nodeID string) bool {
+	for _, e := range res.Errors {
+		if e.Code == code && e.NodeID == nodeID {
+			return true
+		}
+	}
+	return false
+}

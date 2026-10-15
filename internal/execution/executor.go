@@ -222,7 +222,11 @@ func (e *GraphExecutor) ExecuteWithOptions(ctx context.Context, definition workf
 		}
 
 		stage := StageResolveConfig
-		cfg, err := resolveConfig(b.spec.Config, variableScope{nodeID: id, plan: &plan, results: state.Results, skipped: state.Skipped, input: input})
+		vars, err := resolveVariableInputs(id, &plan, state, bound)
+		var cfg map[string]any
+		if err == nil {
+			cfg, err = resolveConfig(b.spec.Config, variableScope{nodeID: id, plan: &plan, results: state.Results, skipped: state.Skipped, input: input, vars: vars})
+		}
 		var ports map[string]node.Value
 		if err == nil {
 			stage = StageResolveInputs

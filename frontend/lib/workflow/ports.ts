@@ -4,6 +4,7 @@
 // on save, validate and publish.
 
 import type { NodeDefinition, PortDefinition, ValueType, WorkflowDefinition, WorkflowNode } from "@/types/api";
+import { validVariableInputName, variableInputName, variablePort } from "@/lib/workflow/variableInputs";
 
 /** The extra output of a node set to "go to the error output" (Phase E2). */
 export const ERROR_PORT: PortDefinition = {
@@ -45,7 +46,12 @@ export function checkConnection(
   const targetDef = catalog.get(target.type);
   if (!sourceDef || !targetDef) return { ok: false, reason: "Unknown node type" };
   const out = nodeOutputs(sourceDef, source).find((p) => p.name === c.sourcePort);
-  const inp = targetDef.inputs.find((p) => p.name === c.targetPort);
+  // A variable input ({{name}}, Phase H4) takes any value.
+  const varName = variableInputName(c.targetPort);
+  if (varName !== null && (targetDef.role === "entry" || !validVariableInputName(varName))) {
+    return { ok: false, reason: targetDef.role === "entry" ? `${targetDef.name} has no inputs` : `"${varName}" cannot be a variable name` };
+  }
+  const inp = varName !== null ? variablePort(varName) : targetDef.inputs.find((p) => p.name === c.targetPort);
   if (!out) return { ok: false, reason: `"${c.sourcePort}" is not an output of ${sourceDef.name}` };
   if (!inp) return { ok: false, reason: `"${c.targetPort}" is not an input of ${targetDef.name}` };
   if (!portTypesCompatible(out.type, inp.type)) {
@@ -56,7 +62,7 @@ export function checkConnection(
     return { ok: false, reason: "These ports are already connected" };
   }
   if (!inp.multiple && incoming.length > 0) {
-    return { ok: false, reason: `Input "${inp.name}" accepts one connection` };
+    return { ok: false, reason: `Input "${varName ?? inp.name}" accepts one connection` };
   }
   return { ok: true };
 }

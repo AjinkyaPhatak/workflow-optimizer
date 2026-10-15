@@ -510,3 +510,4 @@ pre.json { background: var(--subtle); border: 1px solid var(--border); border-ra
 .wf-node-body .field.compact textarea { min-height: 52px; max-height: 140px; }
 .wf-node-body .field.compact .hint { font-size: 11px; }
 .wf-node-more { font-size: 12px; margin: 0 0 6px; padding: 0; background: none; border: none; box-shadow: none; color: var(--accent); cursor: pointer; }
+.wf-port .var-brace { color: var(--muted); font-family: var(--mono); font-size: 10px; }

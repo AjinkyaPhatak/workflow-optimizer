@@ -145,6 +145,17 @@ func (v *GraphValidator) ValidateWithOptions(d Definition, options ValidationOpt
 		_, sin := ds[s.ID].GetInputPort(e.SourcePort)
 		tp, inp := ds[t.ID].GetInputPort(e.TargetPort)
 		_, tout := ds[t.ID].GetOutputPort(e.TargetPort)
+		if name, isVar := VariableInput(e.TargetPort); isVar {
+			// A variable input (Phase H4) takes any value.
+			switch {
+			case ds[t.ID].Role == nodepkg.SemanticRoleEntry:
+				add(ErrInvalidTargetPort, "an entry node has no variable inputs", t.ID, e.ID, e.TargetPort, nil)
+			case !ValidVariableInputName(name):
+				add(ErrInvalidTargetPort, "a variable input is named like a variable: a letter or _, then letters, digits and _ (not \"input\")", t.ID, e.ID, e.TargetPort, nil)
+			default:
+				tp, inp = nodepkg.PortDefinition{Name: e.TargetPort, Type: nodepkg.ValueTypeJSON}, true
+			}
+		}
 		if !out {
 			c := ErrInvalidSourcePort
 			if sin {
@@ -190,6 +201,13 @@ func (v *GraphValidator) ValidateWithOptions(d Definition, options ValidationOpt
 		}
 	}
 	// Fan-in conflicts are structural defects, so drafts must reject them too.
+	for id, ports := range in {
+		for port, c := range ports {
+			if _, isVar := VariableInput(port); isVar && c > 1 {
+				add(ErrMultipleConnections, "a variable input accepts one connection", id, "", port, nil)
+			}
+		}
+	}
 	for id, def := range ds {
 		for _, p := range def.Inputs {
 			if c := in[id][p.Name]; !p.Multiple && c > 1 {

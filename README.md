@@ -602,3 +602,32 @@ panel) share the Run tab input; each tested node shows ✓ / ✕ / — on the
 canvas, the panel shows its output or error, and the `{{variable}}` picker
 shows example values from the last test (e.g. `{{read.subject}} = Invoice
 October`). Test results are cleared when another workflow opens.
+
+## Editor for everyone (Phase H)
+
+The editor is built for people who do not want to see how it works inside.
+
+**Palette bar** (H1): above the canvas, tabs Basics, AI, Knowledge, Apps,
+Media and Logic (from the node catalog; `features/nodes/palette.ts`). An app
+(integration) is one tile with its logo (`simple-icons`); clicking it asks
+"What should Gmail do?" and lists its actions. Apps that do not exist yet
+show as greyed "Coming soon" tiles until an integration with that ID is in
+the catalog. Search still lists every matching step.
+
+**Cards** (H2/H3): a card shows the step's account or key and its main
+settings (at most three: required ones without a default, then text the user
+writes, then the rest; fine-tuning and technical IDs stay under "More
+settings", which opens the side panel; `lib/workflow/card.ts`). An app's card
+has a menu to switch its action; settings both actions share (the account)
+are kept and connections the new action cannot take are removed, as one
+undoable step (`changeNodeType`). New app cards are named after the app
+("Gmail"). Connection points show plain names, not data types.
+
+**`{{name}}` inputs** (H4): typing `{{topic}}` in a step's settings adds a
+`{{topic}}` connection point to its card. Whatever is connected there fills
+`{{topic}}` (an exact `{{topic}}` keeps the value's type; `{{topic.field}}`
+reads inside it). In the definition such an edge targets the port
+`var:topic` (`workflow.VariableInputPrefix`); any step but an entry step takes
+them, one connection each, of any type; they are not node ports. Without a
+connection `{{topic}}` reads the run input, as before. Names follow variable
+rules and cannot be `input`.

@@ -2,8 +2,8 @@
 
 import { nodeOutputs } from "@/lib/workflow/ports";
 import { useNodeTestResult } from "@/stores/test-run/store";
-import { Handle, Position, type NodeProps } from "@xyflow/react";
-import { memo } from "react";
+import { Handle, Position, useUpdateNodeInternals, type NodeProps } from "@xyflow/react";
+import { memo, useEffect } from "react";
 import { useCanvasState } from "@/components/canvas/CanvasContext";
 import { FieldEditor } from "@/components/panels/ConfigPanel";
 import { NodeIcon } from "@/components/ui/NodeIcon";
@@ -13,6 +13,7 @@ import { tabOf } from "@/features/nodes/palette";
 import { cardFields, credentialField, siblingActions } from "@/lib/workflow/card";
 import type { CanvasNode } from "@/lib/workflow/mapping";
 import { checkConnection } from "@/lib/workflow/ports";
+import { variableInputName, variableInputs, variablePort } from "@/lib/workflow/variableInputs";
 import { useEditorStore } from "@/stores/workflow-editor/store";
 import type { PortDefinition } from "@/types/api";
 
@@ -34,6 +35,11 @@ function WorkflowNodeView({ id, data, selected, dragging }: NodeProps<CanvasNode
   const { issues, connecting } = useCanvasState();
   const def = catalog.get(data.node.type);
   const edges = useEditorStore((s) => s.definition.edges);
+  // Phase H4: each {{name}} in the settings is an input too.
+  const varNames = useEditorStore((s) => variableInputs(data.node, s.definition).join(" "));
+  const varPorts = varNames ? varNames.split(" ").map(variablePort) : [];
+  const updateInternals = useUpdateNodeInternals();
+  useEffect(() => updateInternals(id), [id, varNames, data.node.type, updateInternals]);
   const readonly = useEditorStore((s) => s.mode === "readonly");
   const changeType = useEditorStore((s) => s.changeNodeType);
   // Most specific first: a named port or field says exactly what to fix.
@@ -77,7 +83,7 @@ function WorkflowNodeView({ id, data, selected, dragging }: NodeProps<CanvasNode
         id={p.name}
         className={connected(p.name, dir) ? "connected" : undefined}
       />
-      <span className="pname">{portLabel(p.name)}</span>
+      <span className="pname">{variableInputName(p.name) !== null ? <><span className="var-brace">{"{{"}</span>{variableInputName(p.name)}<span className="var-brace">{"}}"}</span></> : portLabel(p.name)}</span>
     </div>
   );
 
@@ -135,7 +141,7 @@ function WorkflowNodeView({ id, data, selected, dragging }: NodeProps<CanvasNode
         </div>
       )}
       <div className="wf-ports">
-        <div>{def?.inputs.map((p) => port(p, "in"))}</div>
+        <div>{[...(def?.inputs ?? []), ...(def?.role === "entry" ? [] : varPorts)].map((p) => port(p, "in"))}</div>
         <div>{nodeOutputs(def, data.node).map((p) => port(p, "out"))}</div>
       </div>
       {nodeIssues.length > 0 && (

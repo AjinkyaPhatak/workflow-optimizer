@@ -106,3 +106,34 @@ describe("switching an app card's action", () => {
     expect(useEditorStore.getState().definition.nodes.find((n) => n.id === "g")!.name).toBe("Unread mail");
   });
 });
+
+describe("{{name}} inputs", () => {
+  it("turns names typed in settings into inputs, not node or input references", async () => {
+    const { variableInputs, variableInputName } = await import("@/lib/workflow/variableInputs");
+    const definition = {
+      nodes: [{ id: "in", type: "input", name: "Input", position: null, config: {} },
+        { id: "ai", type: "llm", name: "AI", position: null, config: { prompt: "About {{topic}} for {{input.who}}, see {{in.data}} and {{topic}}", system: "Tone: {{tone.style}}" } }],
+      edges: [{ id: "e", source: "in", source_port: "data", target: "ai", target_port: "var:extra" }],
+    };
+    expect(variableInputs(definition.nodes[1], definition)).toEqual(["topic", "tone", "extra"]);
+    expect(variableInputName("var:topic")).toBe("topic");
+    expect(variableInputName("prompt")).toBeNull();
+  });
+
+  it("lets anything connect to a {{name}} input, once", async () => {
+    const { checkConnection } = await import("@/lib/workflow/ports");
+    const { catalog: fixtures } = await import("./fixtures");
+    const definition: WorkflowDefinition = {
+      version: 1, settings: {},
+      nodes: [{ id: "in", type: "input", name: "Input", position: null, config: {} }, { id: "h", type: "http", name: "API", position: null, config: {} },
+        { id: "ai", type: "llm", name: "AI", position: null, config: {} }],
+      edges: [],
+    };
+    expect(checkConnection({ source: "h", sourcePort: "status_code", target: "ai", targetPort: "var:code" }, definition, fixtures)).toEqual({ ok: true });
+    expect(checkConnection({ source: "ai", sourcePort: "response", target: "in", targetPort: "var:x" }, definition, fixtures).ok).toBe(false);
+    expect(checkConnection({ source: "h", sourcePort: "response", target: "ai", targetPort: "var:input" }, definition, fixtures).ok).toBe(false);
+    definition.edges.push({ id: "e1", source: "in", source_port: "data", target: "ai", target_port: "var:code" });
+    expect(checkConnection({ source: "h", sourcePort: "status_code", target: "ai", targetPort: "var:code" }, definition, fixtures))
+      .toEqual({ ok: false, reason: 'Input "code" accepts one connection' });
+  });
+});
