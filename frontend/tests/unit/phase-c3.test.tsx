@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ConfigPanel } from "@/components/panels/ConfigPanel";
-import { NodePalette } from "@/components/panels/NodePalette";
+import { PaletteBar } from "@/components/panels/PaletteBar";
 import { ConnectedAccounts } from "@/components/settings/ConnectedAccounts";
 import type { ConnectedAccountsState } from "@/features/connected-accounts/useConnectedAccounts";
 import { actionName, groupByCategory, originLabel, searchNodes } from "@/features/nodes/catalog";
@@ -75,19 +75,24 @@ describe("Gmail in the catalog", () => {
     expect(searchNodes([...fullCatalog.values()], "google send").map((d) => d.type)).toEqual(["gmail.send"]);
   });
 
-  it("shows Google > Gmail > actions in the palette", () => {
+  it("shows Gmail as one app tile whose menu lists its actions", () => {
     useEditorStore.getState().load(sampleDefinition());
     const onAdd = vi.fn();
-    render(<Editor><NodePalette onAdd={onAdd} /></Editor>);
-    const heading = screen.getByRole("heading", { name: "Google" });
-    const section = heading.closest("section")!;
-    expect(within(section).getByRole("heading", { name: "Gmail" })).toBeTruthy();
-    expect([...section.querySelectorAll(".palette-name")].map((n) => n.textContent)).toEqual(
+    render(<Editor><PaletteBar onAdd={onAdd} /></Editor>);
+    fireEvent.click(screen.getByTestId("palette-tab-apps"));
+    expect(screen.queryByTestId("palette-gmail.search")).toBeNull();
+    fireEvent.click(screen.getByTestId("palette-app-gmail"));
+    const menu = screen.getByTestId("palette-menu-gmail");
+    expect(menu.textContent).toContain("What should Gmail do?");
+    expect([...menu.querySelectorAll(".palette-menu-name")].map((n) => n.textContent).sort()).toEqual(
       ["Create Draft", "Read Email", "Reply", "Search Emails", "Send Email"]);
-    fireEvent.doubleClick(within(section).getByTestId("palette-gmail.search"));
+    fireEvent.click(within(menu).getByTestId("palette-gmail.search"));
     expect(onAdd).toHaveBeenCalledWith(expect.objectContaining({ type: "gmail.search" }));
+    expect(screen.queryByTestId("palette-menu-gmail")).toBeNull();
+    // Apps that do not exist yet are shown, but cannot be added.
+    expect(screen.getByTestId("palette-soon-google_docs").textContent).toContain("Coming soon");
     fireEvent.change(screen.getByLabelText("Search nodes"), { target: { value: "send email" } });
-    expect(screen.getByTestId("palette-gmail.send").textContent).toContain("Google · Gmail");
+    expect(screen.getByTestId("palette-gmail.send").textContent).toContain("Gmail: Send Email");
   });
 });
 

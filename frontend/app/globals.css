@@ -138,22 +138,16 @@ kbd { display: inline-block; padding: 0 5px; border: 1px solid var(--border); bo
 }
 
 /* --- editor --------------------------------------------------------------- */
-.editor { display: grid; grid-template-rows: 52px 1fr; height: 100vh; }
+.editor { display: grid; grid-template-rows: 52px auto 1fr; grid-template-columns: minmax(0, 1fr); height: 100vh; }
 .editor-header { display: flex; align-items: center; gap: 8px; padding: 0 16px; background: var(--panel); border-bottom: 1px solid var(--border); }
 .editor-header h1 { font-size: 16px; margin-right: 4px; }
 .editor-header .dirty { color: var(--warn); font-size: 12px; font-weight: 600; }
-.editor-body { display: grid; grid-template-columns: 220px 1fr 320px; min-height: 0; }
+.editor-body { display: grid; grid-template-columns: 1fr 340px; min-height: 0; }
 .editor-center { display: grid; grid-template-rows: 1fr auto; min-height: 0; min-width: 0; }
+.config-panel { background: var(--panel); overflow-y: auto; }
 .canvas-wrap { position: relative; min-height: 0; }
 
-.palette, .config-panel { background: var(--panel); overflow-y: auto; }
-.palette { border-right: 1px solid var(--border); padding: 12px; }
-.palette-hint { color: var(--muted); font-size: 11px; margin: 6px 2px 0; }
 .config-panel { border-left: 1px solid var(--border); padding: 16px; }
-.palette h3 { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 14px 0 6px; }
-.palette-item { display: flex; align-items: center; gap: 8px; padding: 7px 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); margin-bottom: 6px; cursor: grab; background: #fff; user-select: none; transition: border-color .12s, background-color .12s; }
-.palette-item:hover { border-color: var(--accent); background: var(--accent-weak); }
-.palette-item:active { cursor: grabbing; }
 
 .node-icon { width: 22px; height: 22px; border-radius: 5px; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: #fff; flex: none; }
 .node-icon.large { width: 32px; height: 32px; border-radius: 7px; font-size: 13px; }
@@ -377,10 +371,6 @@ pre.json { background: var(--subtle); border: 1px solid var(--border); border-ra
 
 /* --- Phase B ----------------------------------------------------------------- */
 /* palette search */
-.palette-item.active { border-color: var(--accent); background: var(--accent-weak); box-shadow: 0 0 0 2px var(--accent-weak); }
-.palette-name { flex: 1; min-width: 0; }
-.palette-cat { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
-.palette-count { font-size: 11px; color: var(--muted); margin: 10px 2px 6px; }
 
 /* versions */
 .versions-anchor { position: relative; display: inline-flex; }
@@ -435,7 +425,6 @@ pre.json { background: var(--subtle); border: 1px solid var(--border); border-ra
 .account-status.off { color: var(--muted); }
 
 /* --- Gmail / integration groups in the palette (Phase C3) --- */
-.palette h4.palette-sub { margin: 6px 0 2px 4px; font-size: 11px; font-weight: 600; color: var(--muted); text-transform: none; }
 
 /* --- Account-backed pickers and name/value rows (Phase C8) --- */
 .dynamic-field .row { gap: 6px; align-items: center; }
@@ -472,3 +461,32 @@ pre.json { background: var(--subtle); border: 1px solid var(--border); border-ra
 .node-test-status.failed { color: var(--danger, #b91c1c); }
 .picker-example { color: var(--muted); font-size: 11px; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .test-summary { margin-bottom: 10px; }
+
+/* --- palette bar (Phase H1) ------------------------------------------------ */
+:root { --bar-from: #5868d8; --bar-to: #7d8bec; --tile: #ffffff; --tile-text: #1c2330; }
+.palette-bar { position: relative; min-width: 0; background: linear-gradient(90deg, var(--bar-from), var(--bar-to)); padding: 8px 16px 10px; border-bottom: 1px solid var(--border); }
+.palette-bar-top { display: flex; align-items: center; gap: 8px; }
+.palette-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+.palette-tab { background: rgba(255,255,255,.18); color: #fff; border: 1px solid rgba(255,255,255,.35); border-radius: 999px; padding: 4px 14px; font-weight: 600; font-size: 13px; box-shadow: none; }
+.palette-tab:hover { background: rgba(255,255,255,.3); }
+.palette-tab.selected { background: #fff; color: var(--accent); border-color: #fff; }
+.palette-search { width: 220px; border-radius: 999px; border: 1px solid rgba(255,255,255,.6); padding: 5px 12px; }
+.palette-row { display: flex; gap: 8px; margin-top: 8px; overflow-x: auto; padding-bottom: 2px; align-items: stretch; min-height: 70px; }
+.palette-tile { flex: 0 0 auto; width: 92px; min-height: 66px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px;
+  padding: 8px 6px; background: var(--tile); color: var(--tile-text); border: 1px solid transparent; border-radius: 10px; cursor: grab; box-shadow: var(--shadow-sm);
+  font-size: 12px; font-weight: 500; text-align: center; line-height: 1.2; transition: transform .1s, box-shadow .1s; }
+.palette-tile:hover:not(:disabled) { transform: translateY(-1px); box-shadow: var(--shadow-md); border-color: var(--accent); }
+.palette-tile.active { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(255,255,255,.6); }
+.palette-tile.soon { opacity: .55; cursor: default; box-shadow: none; }
+.palette-tile .tile-icon { display: flex; color: var(--accent); }
+.palette-tile .tile-label { white-space: normal; overflow-wrap: anywhere; }
+.palette-tile .tile-soon { font-size: 10px; color: var(--muted); }
+.palette-row .palette-count { color: #fff; align-self: center; margin: 0 6px 0 2px; font-size: 12px; }
+.palette-menu { position: fixed; z-index: 50; width: 300px; max-height: 60vh; overflow-y: auto; background: var(--panel); border: 1px solid var(--border);
+  border-radius: var(--radius); box-shadow: var(--shadow-lg); padding: 6px; overflow-x: hidden; }
+.palette-menu-title { font-size: 12px; font-weight: 600; color: var(--muted); padding: 4px 8px 6px; }
+.palette-menu-item { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; text-align: left; background: none; border: none;
+  box-shadow: none; padding: 7px 8px; border-radius: var(--radius-sm); cursor: grab; color: var(--text); white-space: normal; height: auto; }
+.palette-menu-item:hover { background: var(--accent-weak); }
+.palette-menu-name { font-weight: 600; font-size: 13px; }
+.palette-menu-desc { font-size: 12px; color: var(--muted); }

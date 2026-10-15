@@ -4,7 +4,7 @@ import { act, cleanup, fireEvent, render, screen, within } from "@testing-librar
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ConfigPanel } from "@/components/panels/ConfigPanel";
-import { NodePalette } from "@/components/panels/NodePalette";
+import { PaletteBar } from "@/components/panels/PaletteBar";
 import { NewWorkflow } from "@/components/workflow/NewWorkflow";
 import { VersionsPanel } from "@/components/workflow/VersionsPanel";
 import { EditorContext } from "@/features/workflows/EditorContext";
@@ -126,7 +126,7 @@ describe("palette search", () => {
 
   it("filters, moves with the arrow keys, adds with Enter and clears with Escape", () => {
     const onAdd = vi.fn();
-    render(<Editor><NodePalette onAdd={onAdd} /></Editor>);
+    render(<Editor><PaletteBar onAdd={onAdd} /></Editor>);
     const search = screen.getByLabelText("Search nodes");
     fireEvent.change(search, { target: { value: "status_code" } });
     expect(screen.getByTestId("palette-count").textContent).toBe("1 node");
@@ -139,8 +139,8 @@ describe("palette search", () => {
     expect(onAdd).toHaveBeenCalledWith(expect.objectContaining({ type: screen.getAllByRole("option")[1].dataset.testid!.replace("palette-", "") }));
     fireEvent.keyDown(search, { key: "Escape" });
     expect((search as HTMLInputElement).value).toBe("");
-    expect(screen.queryAllByRole("option")).toHaveLength(0); // back to categories
-    expect(screen.getByText("General")).toBeTruthy();
+    expect(screen.queryAllByRole("option")).toHaveLength(0); // back to the tabs
+    expect(screen.getByTestId("palette-tab-basics").getAttribute("aria-selected")).toBe("true");
   });
 });
 

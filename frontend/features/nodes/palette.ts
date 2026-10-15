@@ -1,0 +1,89 @@
+// The top palette bar's model (Phase H1): tabs of tiles built from the
+// backend node catalog. An app (integration) is one tile whose actions are
+// chosen from a menu; every other node is its own tile.
+
+import { actionName, searchNodes } from "@/features/nodes/catalog";
+import type { NodeDefinition } from "@/types/api";
+
+export type PaletteTab = "basics" | "ai" | "knowledge" | "apps" | "media" | "logic";
+
+export const PALETTE_TABS: { id: PaletteTab; label: string; hint: string }[] = [
+  { id: "basics", label: "Basics", hint: "Inputs, outputs and text" },
+  { id: "ai", label: "AI", hint: "Ask an AI to write, summarize or decide" },
+  { id: "knowledge", label: "Knowledge", hint: "Your documents and files" },
+  { id: "apps", label: "Apps", hint: "Gmail, Sheets, Notion, Discord and more" },
+  { id: "media", label: "Media", hint: "Recordings and other media" },
+  { id: "logic", label: "Logic", hint: "Branches, conditions and data shaping" },
+];
+
+/** Nodes that steer or reshape data rather than produce it. */
+const LOGIC_TYPES = new Set(["condition", "switch", "merge", "transform", "json"]);
+
+/** The tab a node belongs to. */
+export function tabOf(d: Pick<NodeDefinition, "type" | "category" | "integration">): PaletteTab {
+  if (d.integration || d.category === "integration") return "apps";
+  if (d.category === "ai" || d.category === "llm") return "ai";
+  if (d.category === "knowledge_base") return "knowledge";
+  if (d.category === "multimodal") return "media";
+  if (LOGIC_TYPES.has(d.type)) return "logic";
+  return "basics";
+}
+
+/** One tile: a single node, an app with its actions, or an app that is
+ * not available yet. */
+export type Tile =
+  | { kind: "node"; key: string; label: string; def: NodeDefinition }
+  | { kind: "app"; key: string; label: string; integrationId: string; actions: NodeDefinition[] }
+  | { kind: "soon"; key: string; label: string; integrationId: string };
+
+/** Apps shown as "Coming soon" until they exist in the catalog. */
+export const COMING_SOON: { id: string; name: string }[] = [
+  { id: "google_docs", name: "Google Docs" },
+  { id: "google_forms", name: "Google Forms" },
+  { id: "airtable", name: "Airtable" },
+  { id: "google_drive", name: "Google Drive" },
+  { id: "slack", name: "Slack" },
+  { id: "whatsapp", name: "WhatsApp" },
+  { id: "telegram", name: "Telegram" },
+];
+
+/** Friendlier tile names for built-in nodes (the catalog's names are kept
+ * everywhere else). */
+const TILE_NAMES: Record<string, string> = {
+  llm: "Ask AI", http: "Web request (API)", extract_text: "Read a file", knowledge_search: "Search knowledge",
+  knowledge_add: "Save to knowledge", transcribe_audio: "Transcribe audio", condition: "If / else",
+};
+
+export function tileName(d: Pick<NodeDefinition, "type" | "name" | "integration">): string {
+  return TILE_NAMES[d.type] ?? actionName(d);
+}
+
+/** The tiles of a tab, in catalog order: apps grouped by integration
+ * (alphabetically), then the "Coming soon" apps. */
+export function tilesFor(catalog: NodeDefinition[], tab: PaletteTab): Tile[] {
+  const tiles: Tile[] = [];
+  const apps = new Map<string, Extract<Tile, { kind: "app" }>>();
+  for (const d of catalog) {
+    if (tabOf(d) !== tab) continue;
+    if (d.integration) {
+      let app = apps.get(d.integration.id);
+      if (!app) {
+        app = { kind: "app", key: `app-${d.integration.id}`, label: d.integration.name, integrationId: d.integration.id, actions: [] };
+        apps.set(d.integration.id, app);
+      }
+      app.actions.push(d);
+    } else {
+      tiles.push({ kind: "node", key: d.type, label: tileName(d), def: d });
+    }
+  }
+  if (tab !== "apps") return tiles;
+  const appTiles = [...apps.values()].sort((a, b) => a.label.localeCompare(b.label));
+  const soon: Tile[] = COMING_SOON.filter((c) => !apps.has(c.id)).map((c) => ({ kind: "soon", key: `soon-${c.id}`, label: c.name, integrationId: c.id }));
+  return [...appTiles, ...tiles, ...soon];
+}
+
+/** Search results: matching nodes as single tiles (an app action is named
+ * "Gmail: Send Email"). */
+export function searchTiles(catalog: NodeDefinition[], query: string): Tile[] {
+  return searchNodes(catalog, query).map((d) => ({ kind: "node", key: d.type, label: d.integration ? d.name : tileName(d), def: d }));
+}

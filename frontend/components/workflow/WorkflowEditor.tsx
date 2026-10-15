@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { GRID, WorkflowCanvas } from "@/components/canvas/WorkflowCanvas";
 import { BottomPanel, type BottomTab } from "@/components/panels/BottomPanel";
 import { ConfigPanel } from "@/components/panels/ConfigPanel";
-import { NodePalette } from "@/components/panels/NodePalette";
+import { PaletteBar } from "@/components/panels/PaletteBar";
 import { ErrorBanner } from "@/components/ui/ErrorBanner";
 import { EditorContext } from "@/features/workflows/EditorContext";
 import { useEditorSession } from "@/features/workflows/useEditorSession";
@@ -120,8 +120,8 @@ function EditorLayout({ workflowId }: { workflowId: string }) {
     <EditorContext.Provider value={session}>
       <div className="editor">
         <EditorHeader onExecute={() => setTab("run")} />
+        <PaletteBar onAdd={addAtCenter} />
         <div className="editor-body">
-          <NodePalette onAdd={addAtCenter} />
           <div className="editor-center" ref={centerRef}>
             <WorkflowCanvas onAdd={addAtCenter} />
             <BottomPanel tab={tab} onTab={setTab} workflowId={workflowId} />

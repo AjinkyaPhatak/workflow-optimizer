@@ -68,6 +68,7 @@ test("hover info, configuration, variable picker and validation focus in the edi
   // --- add nodes -----------------------------------------------------------------
   const canvas = page.getByTestId("canvas");
   const box = (await canvas.boundingBox())!;
+  await page.getByTestId("palette-tab-ai").click();
   await page.getByTestId("palette-prompt").dragTo(canvas, { targetPosition: { x: box.width * 0.5, y: 120 } });
   await page.getByTestId("palette-llm").dragTo(canvas, { targetPosition: { x: box.width * 0.8, y: 120 } });
   await expect(node(page, "prompt")).toHaveCount(1);

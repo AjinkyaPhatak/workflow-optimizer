@@ -12,7 +12,14 @@ const seed = (): Seed => JSON.parse(process.env.E2E_SEED ?? "null");
 const node = (page: Page, type: string) => page.locator(`[data-node-type="${type}"]`);
 const handle = (page: Page, type: string, port: string) => node(page, type).locator(`.react-flow__handle[data-handleid="${port}"]`);
 
+// The palette bar's tab of each built-in node used here (Phase H1).
+const TABS: Record<string, string> = { input: "basics", output: "basics", text: "basics", llm: "ai", prompt: "ai", http: "apps" };
+async function showTile(page: Page, type: string) {
+  await page.getByTestId(`palette-tab-${TABS[type] ?? "basics"}`).click();
+}
+
 async function dragPaletteItem(page: Page, type: string, x: number, y: number) {
+  await showTile(page, type);
   await page.getByTestId(`palette-${type}`).dragTo(page.getByTestId("canvas"), { targetPosition: { x, y } });
   await expect(node(page, type)).toHaveCount(1);
 }
@@ -54,7 +61,10 @@ test("build, validate, publish and execute a workflow in the visual editor", asy
   await expect(page.getByTestId("version-status")).toHaveText("No saved version");
 
   // The palette is the backend node registry.
-  for (const type of ["input", "llm", "output", "prompt", "http"]) await expect(page.getByTestId(`palette-${type}`)).toBeVisible();
+  for (const type of ["input", "llm", "output", "prompt", "http"]) {
+    await showTile(page, type);
+    await expect(page.getByTestId(`palette-${type}`)).toBeVisible();
+  }
 
   // --- build: Input -> LLM -> Output ----------------------------------------
   await dragPaletteItem(page, "input", 160, 220);
