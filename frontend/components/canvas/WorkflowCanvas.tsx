@@ -274,13 +274,13 @@ export function WorkflowCanvas({ onAdd }: { onAdd: (def: NodeDefinition) => void
           snapToGrid
           snapGrid={[GRID, GRID]}
           fitView={fitOnOpen}
-          fitViewOptions={{ maxZoom: 1.2, padding: 0.2 }}
+          fitViewOptions={{ maxZoom: 1, padding: 0.2 }}
           minZoom={0.2}
           maxZoom={2}
           proOptions={{ hideAttribution: true }}
         >
           <Background variant={BackgroundVariant.Dots} gap={GRID} size={1} color="#cfd4dc" />
-          <Controls showInteractive={false} />
+          <Controls showInteractive={false} fitViewOptions={{ maxZoom: 1, padding: 0.2 }} />
           <MiniMap
             pannable
             zoomable

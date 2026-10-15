@@ -4,6 +4,7 @@
 
 import { useTestRun } from "@/features/workflows/useTestRun";
 import { useNodeTestResult, useTestRunStore } from "@/stores/test-run/store";
+import { useShowDetails } from "@/stores/ui/details";
 
 const LABEL = { COMPLETED: "Ran", FAILED: "Failed", SKIPPED: "Skipped (branch not taken)" } as const;
 
@@ -12,6 +13,7 @@ export function NodeTest({ nodeId }: { nodeId: string }) {
   const until = useTestRunStore((s) => s.until);
   const result = useNodeTestResult(nodeId);
   const output = result?.output;
+  const details = useShowDetails();
   return (
     <div className="section" data-testid="node-test">
       <h3 className="section-title">Test</h3>
@@ -26,7 +28,7 @@ export function NodeTest({ nodeId }: { nodeId: string }) {
           <div className={`small node-test-status ${result.status.toLowerCase()}`}>
             {LABEL[result.status]}{result.duration_ms != null ? ` · ${result.duration_ms} ms` : ""}
           </div>
-          {result.error && <div className="field-error">{result.error.code}: {result.error.message}</div>}
+          {result.error && <div className="field-error">{details ? `${result.error.code}: ` : ""}{result.error.message}</div>}
           {output && Object.keys(output).length > 0 && (
             <pre className="json small" data-testid="node-test-output">{JSON.stringify(output, null, 2)}</pre>
           )}

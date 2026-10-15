@@ -9,9 +9,11 @@ import Link from "next/link";
 import { useMemo, useState, type KeyboardEvent } from "react";
 import { useEditorContext } from "@/features/workflows/EditorContext";
 import { useFocusIssue, useIssues } from "@/features/workflows/useIssues";
-import { categoryClass, iconText } from "@/features/nodes/catalog";
+import { categoryClass } from "@/features/nodes/catalog";
 import type { Issue } from "@/lib/workflow/issues";
-import { effectiveConfig, fieldControl, labelOf, optionsFor, typeLabel } from "@/lib/workflow/labels";
+import { effectiveConfig, fieldControl, friendlyNodeName, labelOf, optionsFor, providerName, typeLabel } from "@/lib/workflow/labels";
+import { NodeIcon } from "@/components/ui/NodeIcon";
+import { useShowDetails, useTechnicalDetails } from "@/stores/ui/details";
 import { availableVariables } from "@/lib/workflow/variables";
 import { useEditorStore } from "@/stores/workflow-editor/store";
 import { accountLabel, statusLabel } from "@/lib/connectedAccounts";
@@ -127,13 +129,13 @@ function CredentialSelect({ id, value, provider, credentials, onCommit, disabled
       >
         <option value="">{options.length ? "Select a credential…" : "No credential"}</option>
         {options.map((c) => (
-          <option key={c.id} value={c.id}>{c.name} ({c.provider})</option>
+          <option key={c.id} value={c.id}>{c.name} ({providerName(c.provider)})</option>
         ))}
         {value && !known && <option value={value}>Unknown credential ({value.slice(0, 8)}…)</option>}
       </select>
       <div className="hint">
-        {options.length === 0 ? `No ${provider ? `${provider} ` : ""}credentials in this workspace yet. ` : ""}
-        <Link href="/settings/credentials">Manage credentials</Link>
+        {options.length === 0 ? `No ${provider ? `${providerName(provider)} ` : ""}key added yet${provider === "gemini" ? " (it is free)" : ""}. ` : ""}
+        <Link href="/settings/credentials">{options.length === 0 ? "Add a key" : "Manage keys"}</Link>
       </div>
     </>
   );
@@ -249,6 +251,7 @@ export function FieldEditor({ node, field, issues, idPrefix = "cfg", compact = f
   const invalid = issues.length > 0;
   const describedBy = [!compact && (field.description || control === "credential") ? helpId : "", invalid ? errorId : ""].filter(Boolean).join(" ") || undefined;
   const testNodes = useTestRunStore((s) => s.result?.nodes);
+  const details = useShowDetails();
   const groups = useMemo(() => availableVariables(definition, catalog, node.id,
     new Map((testNodes ?? []).map((n) => [n.node_id, n.output]))), [definition, catalog, node.id, testNodes]);
   // Phase C8: choices (or key names) listed through the node's account.
@@ -310,7 +313,7 @@ export function FieldEditor({ node, field, issues, idPrefix = "cfg", compact = f
         {/* Same rule as the backend: a required field with a declared default
             may be left empty. */}
         {field.required && (field.default === null || field.default === undefined) && <span className="req" title="Required"> *</span>}
-        {control === "json" && <span className="field-type">{typeLabel(field.type)}</span>}
+        {control === "json" && details && <span className="field-type">{typeLabel(field.type)}</span>}
       </label>
       {help && !compact && <div className="field-help" id={helpId}>{help}</div>}
       {input}
@@ -366,6 +369,17 @@ function Shortcuts() {
   );
 }
 
+/** The "Show technical details" switch (Phase H5). */
+function DetailsSwitch() {
+  const { show, setShow } = useTechnicalDetails();
+  return (
+    <label className="switch-row" htmlFor="show-details">
+      <input id="show-details" type="checkbox" role="switch" className="switch" checked={show} onChange={(e) => setShow(e.target.checked)} />
+      <span className="small">Show technical details (error codes, data types, step IDs)</span>
+    </label>
+  );
+}
+
 export function ConfigPanel() {
   const { catalog } = useEditorContext();
   const issues = useIssues();
@@ -377,6 +391,7 @@ export function ConfigPanel() {
   const setConfig = useEditorStore((s) => s.setConfigValue);
   const removeNodes = useEditorStore((s) => s.removeNodes);
   const removeEdges = useEditorStore((s) => s.removeEdges);
+  const details = useShowDetails();
 
   const node = selectedNodeIds.length === 1 ? definition.nodes.find((n) => n.id === selectedNodeIds[0]) : undefined;
   const edge = !node && selectedEdgeIds.length === 1 ? definition.edges.find((e) => e.id === selectedEdgeIds[0]) : undefined;
@@ -390,9 +405,9 @@ export function ConfigPanel() {
     return (
       <aside className="config-panel" aria-label="Node configuration" data-testid="config-panel">
         <div className="panel-header">
-          <span className={`node-icon large ${categoryClass(def?.category ?? "")}`}>{iconText(def ?? { name: node.type })}</span>
+          <span className={`node-icon large ${categoryClass(def?.category ?? "")}`}><NodeIcon def={def ?? { type: node.type, category: "" }} size={22} /></span>
           <div>
-            <h2>{def?.name ?? node.type}</h2>
+            <h2>{def ? friendlyNodeName(def) : node.type}</h2>
             <div className="panel-sub">{node.name}</div>
           </div>
         </div>
@@ -403,9 +418,11 @@ export function ConfigPanel() {
           <div className="field">
             <label htmlFor="cfg-node-name">Name</label>
             <CommitInput id="cfg-node-name" value={node.name} disabled={readonly} onCommit={(v) => v.trim() && rename(node.id, v.trim())} />
-            <div className="hint">
-              Other nodes reference this one as <code>{`{{${node.id}.…}}`}</code>
-            </div>
+            {details && (
+              <div className="hint">
+                Other nodes reference this one as <code>{`{{${node.id}.…}}`}</code>
+              </div>
+            )}
           </div>
         </div>
         {def && def.config.length > 0 && (
@@ -484,13 +501,13 @@ export function ConfigPanel() {
       <div className="panel-header">
         <div>
           <h2>Workflow</h2>
-          <div className="panel-sub">{definition.nodes.length} nodes · {definition.edges.length} connections</div>
+          <div className="panel-sub">{definition.nodes.length} step{definition.nodes.length === 1 ? "" : "s"} · {definition.edges.length} connection{definition.edges.length === 1 ? "" : "s"}</div>
         </div>
       </div>
       <p className="panel-desc">
         {selectedNodeIds.length > 1
-          ? `${selectedNodeIds.length} nodes selected. Press Delete to remove them.`
-          : "Select a node to configure it. Drag from an output port to an input port to connect nodes."}
+          ? `${selectedNodeIds.length} steps selected. Press Delete to remove them.`
+          : "Click a step to see all its settings. To connect steps, drag from a dot on one card to a dot on another."}
       </p>
       {errorCount > 0 && <p className="small" style={{ color: "var(--danger)" }}>{errorCount} validation problem{errorCount === 1 ? "" : "s"}: see the Validation panel.</p>}
       <div className="section">
@@ -500,6 +517,10 @@ export function ConfigPanel() {
       <div className="section">
         <h3 className="section-title">Keyboard</h3>
         <Shortcuts />
+      </div>
+      <div className="section">
+        <h3 className="section-title">Display</h3>
+        <DetailsSwitch />
       </div>
     </aside>
   );

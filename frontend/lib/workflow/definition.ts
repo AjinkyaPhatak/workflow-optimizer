@@ -1,6 +1,7 @@
 // Helpers over the backend workflow definition (the source of truth). Pure
 // functions only: no React, no canvas types.
 
+import { friendlyNodeName } from "@/lib/workflow/labels";
 import type { NodeDefinition, Position, WorkflowDefinition, WorkflowEdge, WorkflowNode } from "@/types/api";
 
 export const DEFINITION_SCHEMA_VERSION = 1;
@@ -59,9 +60,9 @@ export function newEdgeId(existing: Iterable<string>): string {
 
 /** "LLM", then "LLM 2", "LLM 3", ... */
 /** A new node's name: its app ("Gmail", Phase H2: the card shows the
- * action) or its type's name, numbered when taken. */
+ * action) or its plain name ("Ask AI"), numbered when taken. */
 export function defaultNodeName(def: NodeDefinition, nodes: WorkflowNode[]): string {
-  const base = def.integration?.name ?? def.name;
+  const base = def.integration?.name ?? friendlyNodeName(def);
   const names = new Set(nodes.map((n) => n.name));
   if (!names.has(base)) return base;
   for (let i = 2; ; i++) if (!names.has(`${base} ${i}`)) return `${base} ${i}`;

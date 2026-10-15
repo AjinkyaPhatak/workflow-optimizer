@@ -3,6 +3,7 @@
 // chosen from a menu; every other node is its own tile.
 
 import { actionName, searchNodes } from "@/features/nodes/catalog";
+import { friendlyNodeName } from "@/lib/workflow/labels";
 import type { NodeDefinition } from "@/types/api";
 
 export type PaletteTab = "basics" | "ai" | "knowledge" | "apps" | "media" | "logic";
@@ -47,15 +48,10 @@ export const COMING_SOON: { id: string; name: string }[] = [
   { id: "telegram", name: "Telegram" },
 ];
 
-/** Friendlier tile names for built-in nodes (the catalog's names are kept
- * everywhere else). */
-const TILE_NAMES: Record<string, string> = {
-  llm: "Ask AI", http: "Web request (API)", extract_text: "Read a file", knowledge_search: "Search knowledge",
-  knowledge_add: "Save to knowledge", transcribe_audio: "Transcribe audio", condition: "If / else",
-};
-
+/** A tile's name: an app action's name ("Send Email"), else the step's
+ * plain name ("Ask AI"). */
 export function tileName(d: Pick<NodeDefinition, "type" | "name" | "integration">): string {
-  return TILE_NAMES[d.type] ?? actionName(d);
+  return d.integration ? actionName(d) : friendlyNodeName(d);
 }
 
 /** The tiles of a tab, in catalog order: apps grouped by integration

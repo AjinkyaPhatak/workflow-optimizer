@@ -88,7 +88,9 @@ describe("test runs", () => {
       { node_id: "llm_1", node_type: "llm", status: "FAILED", error: { code: "RATE_LIMITED", message: "slow down" } },
     ] });
     render(<Editor><NodeTest nodeId="llm_1" /></Editor>);
-    expect(screen.getByTestId("node-test-result").textContent).toContain("RATE_LIMITED: slow down");
+    expect(screen.getByTestId("node-test-result").textContent).toContain("slow down");
+    // The code shows only with technical details on (Phase H5).
+    expect(screen.getByTestId("node-test-result").textContent).not.toContain("RATE_LIMITED");
   });
 
   it("offers example values from the last test in the variable picker", () => {

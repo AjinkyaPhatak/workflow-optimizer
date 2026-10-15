@@ -108,13 +108,13 @@ describe("configuration panel", () => {
     ] });
     render(<Editor><ConfigPanel /></Editor>);
     const panel = screen.getByTestId("config-panel");
-    expect(within(panel).getByRole("heading", { name: "LLM" })).toBeTruthy();
+    expect(within(panel).getByRole("heading", { name: "Ask AI" })).toBeTruthy();
     expect(screen.getByLabelText(/^Max tokens/).getAttribute("type")).toBe("number");
     expect(screen.getByTestId("field-error-model").textContent).toContain("Model is required.");
     expect(screen.getByLabelText(/^Model/).getAttribute("aria-invalid")).toBe("true");
     // Credentials: metadata only, filtered by the node's provider.
     const credential = screen.getByLabelText(/^Credential/) as HTMLSelectElement;
-    expect([...credential.options].map((o) => o.textContent)).toEqual(["Select a credential…", "Work OpenAI (openai)"]);
+    expect([...credential.options].map((o) => o.textContent)).toEqual(["Select a credential…", "Work OpenAI (OpenAI)"]);
     expect(credential.value).toBe("c-1");
     expect(panel.textContent).toContain("Which credential should this node use?");
   });

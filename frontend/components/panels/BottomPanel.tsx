@@ -11,6 +11,7 @@ import { useTestRun } from "@/features/workflows/useTestRun";
 import { initialRows, inputOf } from "@/lib/workflow/runInput";
 import { useTestRunStore } from "@/stores/test-run/store";
 import type { TestRunResult } from "@/types/api";
+import { useShowDetails } from "@/stores/ui/details";
 
 export type BottomTab = "validation" | "run";
 
@@ -29,6 +30,7 @@ function groupIssues(issues: Issue[]): { key: string; title: string; items: Issu
 
 function ValidationTab() {
   const { validate, busy } = useEditorContext();
+  const details = useShowDetails();
   const validation = useEditorStore((s) => s.validation);
   const dirty = useIsDirty();
   const issues = useIssues();
@@ -76,7 +78,7 @@ function ValidationTab() {
                   <span>{i.message}</span>
                   {i.hint && <span className="issue-hint">{i.hint}</span>}
                 </span>
-                <span className="code">{i.code}</span>
+                {details && <span className="code">{i.code}</span>}
               </button>
             ))}
           </li>
@@ -88,6 +90,7 @@ function ValidationTab() {
 
 /** The last test run, in one line per node (Phase E3). */
 function TestSummary({ result, until }: { result: TestRunResult; until: string | null }) {
+  const details = useShowDetails();
   const name = (id: string) => useEditorStore.getState().definition.nodes.find((n) => n.id === id)?.name ?? id;
   return (
     <div className="test-summary" data-testid="test-summary">
@@ -96,7 +99,7 @@ function TestSummary({ result, until }: { result: TestRunResult; until: string |
         <span className={`badge ${result.status === "COMPLETED" ? "published" : "failed"}`}>{result.status}</span>
         <span className="muted small">Select a node to see its output.</span>
       </div>
-      {result.error && <div className="error-banner" style={{ marginTop: 6 }}>{result.error.code}: {result.error.message}</div>}
+      {result.error && <div className="error-banner" style={{ marginTop: 6 }}>{details ? `${result.error.code}: ` : ""}{result.error.message}</div>}
       <div className="small muted" style={{ marginTop: 6 }}>
         {result.nodes.map((n) => `${name(n.node_id)}: ${n.status.toLowerCase()}${n.duration_ms != null ? ` (${n.duration_ms} ms)` : ""}`).join(" · ")}
       </div>

@@ -631,3 +631,10 @@ reads inside it). In the definition such an edge targets the port
 them, one connection each, of any type; they are not node ports. Without a
 connection `{{topic}}` reads the run input, as before. Names follow variable
 rules and cannot be `input`.
+
+**Plain language** (H5): error codes, data types and step IDs are hidden
+unless "Show technical details" (workflow panel → Display; remembered per
+browser) is on. Built-in steps have plain names ("Ask AI", "Read a file",
+"If / else"); key pickers name the service ("Google Gemini") and link to
+adding a key. Zoom-to-fit never zooms past 100%. An empty workflow shows the
+three steps: add, fill in, connect.

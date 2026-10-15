@@ -20,14 +20,18 @@ export function EmptyCanvas({ onAdd, readonly }: { onAdd: (def: NodeDefinition) 
         <h2>{readonly ? "This workflow is empty" : "Build your workflow"}</h2>
         {!readonly && (
           <>
-            <p className="muted">Drag a node from the palette onto the canvas, or start with an input.</p>
+            <ol className="empty-steps">
+              <li><b>Add steps</b> from the bar above: an Input, an AI step, an app like Gmail.</li>
+              <li><b>Fill in</b> each step right on its card. Type <code>{"{{name}}"}</code> to leave a blank another step fills in.</li>
+              <li><b>Connect</b> the steps by dragging from a dot on one card to a dot on the next, then run it.</li>
+            </ol>
             <div className="row center">
               {entries.map((d) => (
                 <button key={d.type} className="primary" onClick={() => onAdd(d)}>
-                  + Add {d.name} node
+                  + Start with an {d.name}
                 </button>
               ))}
-              <button onClick={() => document.querySelector<HTMLInputElement>("[data-palette-search]")?.focus()}>Browse nodes</button>
+              <button onClick={() => document.querySelector<HTMLInputElement>("[data-palette-search]")?.focus()}>Search for a step</button>
             </div>
           </>
         )}

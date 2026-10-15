@@ -90,3 +90,22 @@ export function sideEffectsNote(side: string): string | null {
   if (side === "idempotent") return "Changes external systems; retries are deduplicated.";
   return null;
 }
+
+/** Plain names for built-in steps (Phase H5); the catalog's names are used
+ * for everything else. */
+const FRIENDLY_NAMES: Record<string, string> = {
+  llm: "Ask AI", http: "Web request (API)", extract_text: "Read a file", knowledge_search: "Search knowledge",
+  knowledge_add: "Save to knowledge", transcribe_audio: "Transcribe audio", condition: "If / else",
+};
+
+/** A step's plain name: "Ask AI" for the LLM node. */
+export function friendlyNodeName(def: Pick<NodeDefinition, "type" | "name">): string {
+  return FRIENDLY_NAMES[def.type] ?? def.name;
+}
+
+/** Plain names of the AI services keys are for. */
+const PROVIDER_NAMES: Record<string, string> = { gemini: "Google Gemini", groq: "Groq", openai: "OpenAI", http: "web requests" };
+
+export function providerName(provider: string): string {
+  return PROVIDER_NAMES[provider] ?? provider;
+}

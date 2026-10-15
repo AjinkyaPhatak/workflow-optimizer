@@ -13,14 +13,14 @@ describe("editor store", () => {
     const node = store().definition.nodes[0];
     expect(id).toMatch(/^llm_[0-9a-f]{4}$/);
     expect(node).toEqual({
-      id, type: "llm", name: "LLM", position: { x: 400, y: 251 },
+      id, type: "llm", name: "Ask AI", position: { x: 400, y: 251 },
       // Declared defaults only; empty/null defaults are left to the backend.
       config: { provider: "openai", model: "gpt-5", temperature: 0.2 },
     });
     expect(store().selectedNodeIds).toEqual([id]);
     const second = store().addNode(def("llm"), { x: 0, y: 0 })!;
     expect(second).not.toBe(id);
-    expect(store().definition.nodes[1].name).toBe("LLM 2");
+    expect(store().definition.nodes[1].name).toBe("Ask AI 2");
     expect(isDirty(store())).toBe(true);
   });
 

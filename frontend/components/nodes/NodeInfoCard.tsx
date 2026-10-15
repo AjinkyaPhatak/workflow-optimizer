@@ -4,8 +4,10 @@ import { categoryClass, iconText, originLabel } from "@/features/nodes/catalog";
 import type { Issue } from "@/lib/workflow/issues";
 import { authNote, sideEffectsNote, usesCredential } from "@/lib/workflow/labels";
 import type { NodeDefinition, PortDefinition } from "@/types/api";
+import { useShowDetails } from "@/stores/ui/details";
 
 function Ports({ title, ports }: { title: string; ports: PortDefinition[] }) {
+  const details = useShowDetails();
   if (ports.length === 0) return null;
   return (
     <div className="info-section">
@@ -14,7 +16,7 @@ function Ports({ title, ports }: { title: string; ports: PortDefinition[] }) {
         {ports.map((p) => (
           <li key={p.name}>
             <span className="info-port-name">{p.name}</span>
-            <span className="info-port-type">{p.type}</span>
+            {details && <span className="info-port-type">{p.type}</span>}
             {p.required && <span className="info-port-req">required</span>}
             {p.multiple && <span className="info-port-req">multiple</span>}
             {p.description && <div className="info-port-desc">{p.description}</div>}

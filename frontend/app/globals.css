@@ -511,3 +511,6 @@ pre.json { background: var(--subtle); border: 1px solid var(--border); border-ra
 .wf-node-body .field.compact .hint { font-size: 11px; }
 .wf-node-more { font-size: 12px; margin: 0 0 6px; padding: 0; background: none; border: none; box-shadow: none; color: var(--accent); cursor: pointer; }
 .wf-port .var-brace { color: var(--muted); font-family: var(--mono); font-size: 10px; }
+.empty-steps { text-align: left; margin: 8px 0 14px; padding-left: 20px; color: var(--muted); font-size: 13px; line-height: 1.5; }
+.empty-steps li { margin-bottom: 4px; }
+.empty-steps b { color: var(--text); }

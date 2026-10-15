@@ -91,7 +91,7 @@ test("template, variables, prompt template, LLM, structured output, search and v
 
   // --- LLM: model from the provider's options, credential, system prompt -----
   await selectNode(page, "llm");
-  await expect(panel.getByRole("heading", { name: "LLM" })).toBeVisible();
+  await expect(panel.getByRole("heading", { name: "Ask AI" })).toBeVisible();
   // Gemini (free) is the default since Phase G; this stack mocks OpenAI.
   await panel.locator("#cfg-provider").selectOption("openai");
   await expect(panel.locator("#cfg-model option", { hasText: "GPT-5 mini" })).toHaveCount(1);

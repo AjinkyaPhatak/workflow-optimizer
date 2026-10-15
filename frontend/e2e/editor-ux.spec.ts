@@ -114,7 +114,7 @@ test("hover info, configuration, variable picker and validation focus in the edi
 
   // --- configure the LLM: definition-driven fields -----------------------------
   await node(page, "llm").locator(".wf-node-header").click();
-  await expect(panel.getByRole("heading", { name: "LLM" })).toBeVisible();
+  await expect(panel.getByRole("heading", { name: "Ask AI" })).toBeVisible();
   await expect(panel.getByText("Which credential should this node use?")).toBeVisible();
   await expect(panel.getByLabel("Max tokens")).toHaveAttribute("type", "number");
   await panel.locator("#cfg-provider").selectOption("openai"); // Gemini is the default (Phase G)
@@ -139,7 +139,7 @@ test("hover info, configuration, variable picker and validation focus in the edi
   await page.locator(".react-flow__pane").click({ position: { x: 10, y: 10 } });
   await expect(panel).toHaveCount(0);
   await list.locator("li").filter({ has: page.locator(".issue-title", { hasText: /^LLM$/ }) }).getByRole("button", { name: /not reachable/ }).click();
-  await expect(panel.getByRole("heading", { name: "LLM" })).toBeVisible();
+  await expect(panel.getByRole("heading", { name: "Ask AI" })).toBeVisible();
   await expect(node(page, "llm")).toHaveClass(/selected/);
   await expect(node(page, "llm")).toBeInViewport();
   await expect(panel.getByTestId("panel-issues")).toContainText(unreachable);
