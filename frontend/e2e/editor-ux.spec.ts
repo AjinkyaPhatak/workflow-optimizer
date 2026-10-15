@@ -117,6 +117,7 @@ test("hover info, configuration, variable picker and validation focus in the edi
   await expect(panel.getByRole("heading", { name: "LLM" })).toBeVisible();
   await expect(panel.getByText("Which credential should this node use?")).toBeVisible();
   await expect(panel.getByLabel("Max tokens")).toHaveAttribute("type", "number");
+  await panel.locator("#cfg-provider").selectOption("openai"); // Gemini is the default (Phase G)
   await panel.locator("#cfg-model").selectOption("gpt-5-mini");
   await expect(panel.locator("#cfg-model")).toHaveValue("gpt-5-mini");
 

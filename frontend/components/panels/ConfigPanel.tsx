@@ -227,14 +227,19 @@ function BooleanField({ id, value, def, onCommit, disabled }: { id: string; valu
   );
 }
 
-function FieldEditor({ node, field, issues }: { node: WorkflowNode; field: ConfigField; issues: Issue[] }) {
+/** One setting's editor. The settings panel shows it in full; node cards
+ * (Phase H3) show it compact, with the help text as a tooltip and IDs
+ * prefixed per node (several cards are on screen at once). */
+export function FieldEditor({ node, field, issues, idPrefix = "cfg", compact = false }: {
+  node: WorkflowNode; field: ConfigField; issues: Issue[]; idPrefix?: string; compact?: boolean;
+}) {
   const { credentials, connectedAccounts, catalog, workspaceId } = useEditorContext();
   const definition = useEditorStore((s) => s.definition);
   const readonly = useEditorStore((s) => s.mode === "readonly");
   const setConfig = useEditorStore((s) => s.setConfigValue);
   const value = node.config[field.name];
   const def = catalog.get(node.type);
-  const id = `cfg-${field.name}`;
+  const id = `${idPrefix}-${field.name}`;
   const helpId = `${id}-help`;
   const errorId = `${id}-error`;
   const control = fieldControl(field);
@@ -242,7 +247,7 @@ function FieldEditor({ node, field, issues }: { node: WorkflowNode; field: Confi
   const placeholder = hasDefault && typeof field.default !== "object" ? `Default: ${String(field.default)}` : undefined;
   const commit = (v: unknown) => setConfig(node.id, field.name, v);
   const invalid = issues.length > 0;
-  const describedBy = [field.description || control === "credential" ? helpId : "", invalid ? errorId : ""].filter(Boolean).join(" ") || undefined;
+  const describedBy = [!compact && (field.description || control === "credential") ? helpId : "", invalid ? errorId : ""].filter(Boolean).join(" ") || undefined;
   const testNodes = useTestRunStore((s) => s.result?.nodes);
   const groups = useMemo(() => availableVariables(definition, catalog, node.id,
     new Map((testNodes ?? []).map((n) => [n.node_id, n.output]))), [definition, catalog, node.id, testNodes]);
@@ -299,15 +304,15 @@ function FieldEditor({ node, field, issues }: { node: WorkflowNode; field: Confi
 
   const help = control === "credential" ? "Which credential should this node use?" : field.description;
   return (
-    <div className={`field ${invalid ? "has-error" : ""}`} data-field={field.name}>
-      <label htmlFor={id}>
+    <div className={`field ${invalid ? "has-error" : ""} ${compact ? "compact" : ""}`} data-field={field.name}>
+      <label htmlFor={id} title={compact ? help : undefined}>
         {labelOf(field)}
         {/* Same rule as the backend: a required field with a declared default
             may be left empty. */}
         {field.required && (field.default === null || field.default === undefined) && <span className="req" title="Required"> *</span>}
         {control === "json" && <span className="field-type">{typeLabel(field.type)}</span>}
       </label>
-      {help && <div className="field-help" id={helpId}>{help}</div>}
+      {help && !compact && <div className="field-help" id={helpId}>{help}</div>}
       {input}
       {invalid && (
         <div className="field-error" id={errorId} data-testid={`field-error-${field.name}`}>

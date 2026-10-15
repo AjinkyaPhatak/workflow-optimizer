@@ -154,7 +154,7 @@ kbd { display: inline-block; padding: 0 5px; border: 1px solid var(--border); bo
 .cat-general { background: #495057; } .cat-ai { background: #7048e8; } .cat-llm { background: #7048e8; } .cat-integration { background: #1c7ed6; } .cat-other { background: #868e96; }
 
 /* workflow node */
-.wf-node { min-width: 200px; max-width: 280px; background: #fff; border: 1.5px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-sm); font-size: 12px; transition: border-color .12s, box-shadow .12s; }
+.wf-node { width: 280px; background: #fff; border: 1.5px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-sm); font-size: 12px; transition: border-color .12s, box-shadow .12s; }
 .react-flow__node:hover .wf-node:not(.selected):not(.invalid):not(.warning) { border-color: var(--border-strong); box-shadow: var(--shadow-md); }
 .wf-node.selected { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-weak), var(--shadow-md); }
 .wf-node.invalid { border-color: var(--danger); }
@@ -171,7 +171,6 @@ kbd { display: inline-block; padding: 0 5px; border: 1px solid var(--border); bo
 .wf-ports { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; }
 .wf-port { position: relative; padding: 3px 12px; white-space: nowrap; border-radius: 4px; transition: opacity .12s, background-color .12s; }
 .wf-port.out { text-align: right; }
-.wf-port .ptype { color: var(--muted); margin-left: 4px; font-size: 10px; }
 .wf-port.required .pname::after { content: " *"; color: var(--danger); }
 .wf-port.port-error .pname { color: var(--danger); font-weight: 600; }
 .wf-port.port-compatible { background: var(--ok-weak); }
@@ -490,3 +489,24 @@ pre.json { background: var(--subtle); border: 1px solid var(--border); border-ra
 .palette-menu-item:hover { background: var(--accent-weak); }
 .palette-menu-name { font-weight: 600; font-size: 13px; }
 .palette-menu-desc { font-size: 12px; color: var(--muted); }
+
+/* --- node cards (Phase H2/H3) ---------------------------------------------- */
+:root { --kind-basics: #4c6ef5; --kind-ai: #f59f00; --kind-knowledge: #e8590c; --kind-apps: #e03131; --kind-media: #0ca678; --kind-logic: #7048e8; }
+.wf-node { border-top-width: 4px; }
+.wf-node.kind-basics { border-top-color: var(--kind-basics); }
+.wf-node.kind-ai { border-top-color: var(--kind-ai); }
+.wf-node.kind-knowledge { border-top-color: var(--kind-knowledge); }
+.wf-node.kind-apps { border-top-color: var(--kind-apps); }
+.wf-node.kind-media { border-top-color: var(--kind-media); }
+.wf-node.kind-logic { border-top-color: var(--kind-logic); }
+.wf-node .node-icon { display: inline-flex; align-items: center; justify-content: center; }
+.wf-node .node-icon:has(.brand-icon) { background: none; }
+.wf-port.out.required .pname::after { content: none; }
+.wf-node-action { margin-top: 3px; width: 100%; font-size: 12px; padding: 2px 6px; height: auto; font-weight: 600; color: var(--accent); cursor: pointer; }
+.wf-node-body { padding: 8px 10px 4px; border-bottom: 1px solid var(--border); cursor: default; }
+.wf-node-body .field.compact { margin-bottom: 8px; }
+.wf-node-body .field.compact > label { font-size: 11px; font-weight: 600; color: var(--muted); margin-bottom: 3px; }
+.wf-node-body .field.compact input, .wf-node-body .field.compact select, .wf-node-body .field.compact textarea { font-size: 12px; }
+.wf-node-body .field.compact textarea { min-height: 52px; max-height: 140px; }
+.wf-node-body .field.compact .hint { font-size: 11px; }
+.wf-node-more { font-size: 12px; margin: 0 0 6px; padding: 0; background: none; border: none; box-shadow: none; color: var(--accent); cursor: pointer; }

@@ -58,10 +58,13 @@ export function newEdgeId(existing: Iterable<string>): string {
 }
 
 /** "LLM", then "LLM 2", "LLM 3", ... */
+/** A new node's name: its app ("Gmail", Phase H2: the card shows the
+ * action) or its type's name, numbered when taken. */
 export function defaultNodeName(def: NodeDefinition, nodes: WorkflowNode[]): string {
+  const base = def.integration?.name ?? def.name;
   const names = new Set(nodes.map((n) => n.name));
-  if (!names.has(def.name)) return def.name;
-  for (let i = 2; ; i++) if (!names.has(`${def.name} ${i}`)) return `${def.name} ${i}`;
+  if (!names.has(base)) return base;
+  for (let i = 2; ; i++) if (!names.has(`${base} ${i}`)) return `${base} ${i}`;
 }
 
 /** The config fields' declared defaults (empty defaults are left out so the

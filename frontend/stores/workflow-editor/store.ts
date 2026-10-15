@@ -6,7 +6,7 @@
 import { applyEdgeChanges, applyNodeChanges, type EdgeChange, type NodeChange } from "@xyflow/react";
 import { create } from "zustand";
 import type { NodeDefinition, NodeSettings, Position, ValidationResult, WorkflowDefinition, WorkflowEdge, WorkflowVariable } from "@/types/api";
-import { createNode, emptyDefinition, newEdgeId, normalizeDefinition, stableStringify } from "@/lib/workflow/definition";
+import { createNode, defaultConfig, defaultNodeName, emptyDefinition, newEdgeId, normalizeDefinition, stableStringify } from "@/lib/workflow/definition";
 import { fromCanvas, toCanvas, type CanvasNode } from "@/lib/workflow/mapping";
 import { pasteFragment, type Fragment } from "@/lib/workflow/clipboard";
 import { checkConnection, type ConnectionAttempt, type ConnectionCheck } from "@/lib/workflow/ports";
@@ -37,6 +37,10 @@ export interface WorkflowEditorState {
   removeNodes: (ids: string[]) => void;
   moveNode: (id: string, position: Position) => void;
   renameNode: (id: string, name: string) => void;
+  /** Phase H2: switches a node to another action of the same app (Gmail
+   * Search -> Send). Settings both actions have are kept, connections to
+   * ports the new action lacks are removed; one undoable step. */
+  changeNodeType: (id: string, from: NodeDefinition | undefined, to: NodeDefinition) => void;
   setConfigValue: (id: string, key: string, value: unknown) => void;
   /** Phase E2: merges execution settings (undefined values remove a key). */
   setNodeSettings: (id: string, patch: Partial<NodeSettings>) => void;
@@ -132,6 +136,32 @@ export const useEditorStore = create<WorkflowEditorState>((set, get) => {
       const node = definition.nodes.find((n) => n.id === id);
       if (!node || node.name === name) return;
       commit({ ...definition, nodes: definition.nodes.map((n) => (n.id === id ? { ...n, name } : n)) });
+    },
+
+    changeNodeType: (id, from, to) => {
+      if (!editable()) return;
+      const { definition } = get();
+      const node = definition.nodes.find((n) => n.id === id);
+      if (!node || node.type === to.type) return;
+      const fields = new Map(to.config.map((f) => [f.name, f]));
+      const config = defaultConfig(to);
+      for (const [k, v] of Object.entries(node.config)) {
+        const f = fields.get(k);
+        const was = from?.config.find((x) => x.name === k);
+        // A value is carried over when the new action has the same field and
+        // it is not just the old action's default.
+        if (f && (!was || f.type === was.type) && !(was && stableStringify(was.default) === stableStringify(v))) config[k] = v;
+      }
+      const inputs = new Set(to.inputs.map((p) => p.name));
+      const outputs = new Set(to.outputs.map((p) => p.name));
+      if (node.settings?.on_error === "error_output") outputs.add("error");
+      const edges = definition.edges.filter((e) => (e.target !== id || inputs.has(e.target_port)) && (e.source !== id || outputs.has(e.source_port)));
+      const others = definition.nodes.filter((n) => n.id !== id);
+      // A default name follows the action; a name the user chose is kept.
+      const defaults = from ? [from.name, from.integration?.name].filter((n): n is string => !!n) : [];
+      const renamed = !from || defaults.some((d) => node.name === d || (node.name.startsWith(`${d} `) && /^\d+$/.test(node.name.slice(d.length + 1))));
+      const name = renamed ? defaultNodeName(to, others) : node.name;
+      commit({ ...definition, nodes: definition.nodes.map((n) => (n.id === id ? { ...n, type: to.type, name, config } : n)), edges });
     },
 
     setConfigValue: (id, key, value) => {
