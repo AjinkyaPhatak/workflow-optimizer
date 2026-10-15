@@ -198,6 +198,7 @@ describe("account selection on OAuth nodes", () => {
     renderPanel([]);
     const select = screen.getByLabelText(/^Account/) as HTMLSelectElement;
     expect([...select.options].map((o) => o.textContent)).toEqual(["No account connected"]);
-    expect(screen.getByText(/No account of this provider is connected/)).toBeTruthy();
+    // Phase I3: a button to connect one.
+    expect(screen.getByTestId("connect-account").getAttribute("href")).toBe("/settings/connected-accounts");
   });
 });

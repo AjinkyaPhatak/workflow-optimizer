@@ -10,9 +10,26 @@ import { ErrorBanner } from "@/components/ui/ErrorBanner";
 import { EditorContext } from "@/features/workflows/EditorContext";
 import { useEditorSession } from "@/features/workflows/useEditorSession";
 import { copyFragment, type Fragment } from "@/lib/workflow/clipboard";
-import { isDirty, useEditorStore } from "@/stores/workflow-editor/store";
+import { isDirty, useEditorStore, useIsDirty } from "@/stores/workflow-editor/store";
 import type { NodeDefinition } from "@/types/api";
 import { EditorHeader } from "./EditorHeader";
+import { RunDialog } from "@/components/run/RunDialog";
+import { useShowDetails } from "@/stores/ui/details";
+
+/** Saves the working copy into its draft shortly after each change (Phase
+ * I1). A save the backend rejects waits for the next change. */
+function useAutosave(save: () => Promise<unknown>, busy: boolean) {
+  const definition = useEditorStore((s) => s.definition);
+  const dirty = useIsDirty();
+  const editing = useEditorStore((s) => s.mode === "editing");
+  useEffect(() => {
+    if (!dirty || !editing || busy) return;
+    const t = setTimeout(() => void save(), AUTOSAVE_MS);
+    return () => clearTimeout(t);
+  }, [definition, dirty, editing, busy, save]);
+}
+
+const AUTOSAVE_MS = 1500;
 
 function isTyping(target: EventTarget | null): boolean {
   const el = target as HTMLElement | null;
@@ -24,6 +41,9 @@ function EditorLayout({ workflowId }: { workflowId: string }) {
   const flow = useReactFlow();
   const centerRef = useRef<HTMLDivElement>(null);
   const [tab, setTab] = useState<BottomTab>("validation");
+  const [running, setRunning] = useState(false);
+  const details = useShowDetails();
+  useAutosave(session.save, session.busy !== null);
   const validation = useEditorStore((s) => s.validation);
 
   // Show validation findings as soon as they arrive.
@@ -119,15 +139,16 @@ function EditorLayout({ workflowId }: { workflowId: string }) {
   return (
     <EditorContext.Provider value={session}>
       <div className="editor">
-        <EditorHeader onExecute={() => setTab("run")} />
+        <EditorHeader onRun={() => setRunning(true)} />
         <PaletteBar onAdd={addAtCenter} />
         <div className="editor-body">
           <div className="editor-center" ref={centerRef}>
             <WorkflowCanvas onAdd={addAtCenter} />
-            <BottomPanel tab={tab} onTab={setTab} workflowId={workflowId} />
+            {details && <BottomPanel tab={tab} onTab={setTab} workflowId={workflowId} />}
           </div>
           <ConfigPanel />
         </div>
+        <RunDialog open={running} onClose={() => setRunning(false)} workflowId={workflowId} />
       </div>
     </EditorContext.Provider>
   );

@@ -638,3 +638,41 @@ browser) is on. Built-in steps have plain names ("Ask AI", "Read a file",
 "If / else"); key pickers name the service ("Google Gemini") and link to
 adding a key. Zoom-to-fit never zooms past 100%. An empty workflow shows the
 three steps: add, fill in, connect.
+
+## Running, for people (Phase I)
+
+**Saving is automatic** (I1): a moment after each change the editor saves
+into the workflow's current DRAFT version (`PUT
+/api/v1/workflows/{id}/versions/{versionID}`, draft validation as on create;
+`409 VERSION_NOT_DRAFT` once the version is published or has run, and the
+editor then starts a new draft). The header shows "All changes saved"; Save,
+Validate, Publish and versions are under "Show technical details".
+
+**Run** opens the Run window: one question per Input card with a **Field
+name** (Text, or a File from the Files page; the Input then passes on just
+that value: `field`, `field_type` settings), per declared variable, and per
+run-input name the settings use (`{{input.topic}}`, or a bare `{{topic}}`
+nothing connects to). Run saves, publishes when what is on screen is not
+the running version yet (owners and admins), executes on the worker and
+shows the result readably (text with Copy, lists of records as a table,
+records as labelled lines; JSON only with technical details). Problems that
+block running are listed with "Show me". "Test up to this step" uses the
+same answers.
+
+**History** (I2): `/workflows/{id}/executions` lists runs as sentences
+("Worked", "Did not work: the service asked us to slow down"), when, how
+long, and a preview; opening one shows the full result and the answers given.
+
+**Plain errors** (I3): failure codes map to a title, what to do, and a fix
+(`lib/workflow/friendlyErrors.ts`): "Show me" selects the step, account
+problems link to Connected accounts, busy services offer "Try again". A card
+whose account is not connected shows a "Connect Google" button.
+
+**Repeat for each item** (I4): a step's `settings.repeat_over` names an input
+(a port, or `var:<name>` for a `{{name}}`); the step then runs once per item
+of the list arriving there (at most `MaxRepeatItems` = 100; nothing is no
+items, a single value one), with `{{name}}` / that input set to the item and
+the idempotency key `<key>#<index>`. Its outputs are lists, item by item, and
+typed `array` for connections. A retry after an item failed continues with
+that item: finished items never run again. Publishing requires the list to
+be connected; entry and exit steps cannot repeat.

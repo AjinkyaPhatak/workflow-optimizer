@@ -223,14 +223,32 @@ func (e *GraphExecutor) ExecuteWithOptions(ctx context.Context, definition workf
 
 		stage := StageResolveConfig
 		vars, err := resolveVariableInputs(id, &plan, state, bound)
+		configWith := func(vars map[string]any) (map[string]any, error) {
+			return resolveConfig(b.spec.Config, variableScope{nodeID: id, plan: &plan, results: state.Results, skipped: state.Skipped, input: input, vars: vars})
+		}
 		var cfg map[string]any
 		if err == nil {
-			cfg, err = resolveConfig(b.spec.Config, variableScope{nodeID: id, plan: &plan, results: state.Results, skipped: state.Skipped, input: input, vars: vars})
+			baseVars := vars
+			if name, isVar := workflow.VariableInput(b.spec.Repeats()); isVar {
+				// Repeating over {{name}} (Phase I4): each item resolves the
+				// settings again; here {{name}} is nothing.
+				baseVars = make(map[string]any, len(vars))
+				for k, v := range vars {
+					baseVars[k] = v
+				}
+				baseVars[name] = nil
+			}
+			cfg, err = configWith(baseVars)
 		}
 		var ports map[string]node.Value
 		if err == nil {
 			stage = StageResolveInputs
 			ports, err = resolveInputs(id, b.def, &plan, state, bound)
+		}
+		var repeat *repeatRun
+		if err == nil && b.spec.Repeats() != "" {
+			stage = StageResolveInputs
+			repeat, err = newRepeatRun(b.spec.Repeats(), b.def, ports, vars, configWith)
 		}
 		if err != nil {
 			if b.spec.OnErrorMode() != workflow.OnErrorStop && ctx.Err() == nil {
@@ -262,7 +280,13 @@ func (e *GraphExecutor) ExecuteWithOptions(ctx context.Context, definition workf
 					return fail(StageObserve, err)
 				}
 			}
-			out, err := invokeNodeWithTimeout(ctx, b.impl, nodeInput, opts.NodeTimeout)
+			var out node.NodeOutput
+			var err error
+			if repeat != nil {
+				out, err = repeat.run(ctx, b.impl, nodeInput, opts.NodeTimeout)
+			} else {
+				out, err = invokeNodeWithTimeout(ctx, b.impl, nodeInput, opts.NodeTimeout)
+			}
 			if observer != nil {
 				if obsErr := observer.NodeFinished(ctx, id, out, err); obsErr != nil {
 					if err != nil {

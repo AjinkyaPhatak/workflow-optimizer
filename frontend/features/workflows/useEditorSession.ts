@@ -36,7 +36,7 @@ export interface EditorSession {
   notice: { kind: "ok" | "error"; text: string } | null;
   save: () => Promise<VersionSummary | null>;
   validate: () => Promise<ValidationResult | null>;
-  publish: () => Promise<boolean>;
+  publish: () => Promise<VersionSummary | null>;
   canPublish: boolean;
   /** Version history, newest first (loaded on demand). */
   versions: VersionSummary[] | null;
@@ -116,11 +116,29 @@ export function useEditorSession(workflowId: string): EditorSession {
     }
   }, []);
 
+  const versionRef = useRef<VersionSummary | null>(null);
+  useEffect(() => {
+    versionRef.current = version;
+  }, [version]);
+
   const saveInner = useCallback(async (): Promise<VersionSummary | null> => {
     const editor = useEditorStore.getState();
     const definition = editor.definition;
     try {
-      const v = await workflowApi.createVersion(workflowId, definition);
+      // Phase I: changes go into the current draft; a published (or run)
+      // version starts a new draft.
+      const current = versionRef.current;
+      let v;
+      if (current?.status === "DRAFT") {
+        try {
+          v = await workflowApi.updateDraft(workflowId, current.id, definition);
+        } catch (e) {
+          if (!(e instanceof ApiError && e.status === 409)) throw e;
+          v = await workflowApi.createVersion(workflowId, definition);
+        }
+      } else {
+        v = await workflowApi.createVersion(workflowId, definition);
+      }
       useEditorStore.getState().markSaved(definition);
       useEditorStore.getState().setValidation(null);
       const summary: VersionSummary = {
@@ -128,7 +146,8 @@ export function useEditorSession(workflowId: string): EditorSession {
         created_by: v.created_by, created_at: v.created_at, published_at: v.published_at,
       };
       setVersion(summary);
-      setNotice({ kind: "ok", text: `Saved as version ${v.version_number}` });
+      versionRef.current = summary;
+      setNotice({ kind: "ok", text: "Saved" });
       if (historyLoaded.current) void refreshVersionsRef.current();
       return summary;
     } catch (e) {
@@ -169,21 +188,22 @@ export function useEditorSession(workflowId: string): EditorSession {
     }
   }, [ensureSaved, workflowId, reportFailure]);
 
-  const publish = useCallback(async () => {
+  const publish = useCallback(async (): Promise<VersionSummary | null> => {
     setBusy("publishing");
     try {
       const v = await ensureSaved();
-      if (!v) return false;
+      if (!v) return null;
       const published = await workflowApi.publish(workflowId, v.id);
       setVersion(published);
       setWorkflow((wf) => (wf ? { ...wf, active_version_id: published.id } : wf));
       useEditorStore.getState().setValidation({ valid: true, errors: [], warnings: [] });
+      versionRef.current = published;
       setNotice({ kind: "ok", text: `Published version ${published.version_number}` });
       if (historyLoaded.current) void refreshVersionsRef.current();
-      return true;
+      return published;
     } catch (e) {
       reportFailure(e, "Publish failed");
-      return false;
+      return null;
     } finally {
       setBusy(null);
     }

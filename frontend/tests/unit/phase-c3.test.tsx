@@ -123,7 +123,7 @@ describe("Gmail node configuration", () => {
   it("explains when no Google account is connected", () => {
     renderNode("gmail.send", []);
     expect([...(screen.getByLabelText(/^Account/) as HTMLSelectElement).options].map((o) => o.textContent)).toEqual(["No account connected"]);
-    expect(screen.getByRole("link", { name: "Manage connected accounts" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Connect Google" })).toBeTruthy();
     expect(screen.getByLabelText(/^To/)).toBeTruthy();
     expect(screen.getByLabelText(/^Subject/)).toBeTruthy();
   });

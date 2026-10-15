@@ -9,6 +9,9 @@ interface TestRunState {
   /** Run input rows (null until the Run tab or a test first needs them). */
   rows: RunRow[] | null;
   setRows: (rows: RunRow[]) => void;
+  /** Phase I: the Run window's answers by question name (tests use them too). */
+  answers: Record<string, string>;
+  setAnswer: (name: string, value: string) => void;
   running: boolean;
   /** The node the last test ran up to (null: the whole workflow). */
   until: string | null;
@@ -22,13 +25,15 @@ interface TestRunState {
 export const useTestRunStore = create<TestRunState>((set) => ({
   rows: null,
   setRows: (rows) => set({ rows }),
+  answers: {},
+  setAnswer: (name, value) => set((s) => ({ answers: { ...s.answers, [name]: value } })),
   running: false,
   until: null,
   result: null,
   error: null,
   start: (until) => set({ running: true, until, error: null }),
   finish: (result, error = null) => set({ running: false, result, error }),
-  reset: () => set({ rows: null, running: false, until: null, result: null, error: null }),
+  reset: () => set({ rows: null, answers: {}, running: false, until: null, result: null, error: null }),
 }));
 
 /** The last test's result for one node. */

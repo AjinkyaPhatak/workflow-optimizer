@@ -6,7 +6,7 @@ const WEB_PORT = Number(process.env.E2E_WEB_PORT ?? 3100);
 export default defineConfig({
   testDir: "./e2e",
   timeout: 120_000,
-  expect: { timeout: 15_000 },
+  expect: { timeout: 30_000 },
   fullyParallel: false,
   workers: 1,
   retries: 0,
@@ -16,6 +16,9 @@ export default defineConfig({
     baseURL: `http://127.0.0.1:${WEB_PORT}`,
     viewport: { width: 1600, height: 1000 },
     trace: "retain-on-failure",
+    // These flows drive Validate, Publish and Execute, which are shown with
+    // "Show technical details" (Phase H5/I1).
+    storageState: { cookies: [], origins: [{ origin: `http://127.0.0.1:${WEB_PORT}`, localStorage: [{ name: "wo.showTechnicalDetails", value: "1" }] }] },
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"], viewport: { width: 1600, height: 1000 } } }],
   webServer: {

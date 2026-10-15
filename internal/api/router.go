@@ -53,6 +53,7 @@ func NewRouter(h *handlers.Handlers, tokens auth.TokenService, logger *slog.Logg
 	private("POST "+Prefix+"/workflows/{workflowID}/versions", h.CreateVersion)
 	private("GET "+Prefix+"/workflows/{workflowID}/versions", h.ListVersions)
 	private("GET "+Prefix+"/workflows/{workflowID}/versions/{versionID}", h.GetVersion)
+	private("PUT "+Prefix+"/workflows/{workflowID}/versions/{versionID}", h.UpdateDraft)
 	private("POST "+Prefix+"/workflows/{workflowID}/versions/{versionID}/validate", h.ValidateVersion)
 	private("POST "+Prefix+"/workflows/{workflowID}/versions/{versionID}/publish", h.PublishVersion)
 

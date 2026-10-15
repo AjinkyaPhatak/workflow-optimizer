@@ -3,10 +3,9 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import { StatusBadge } from "@/components/executions/ExecutionSummary";
+import { RunHistory } from "@/components/run/RunHistory";
 import { ErrorBanner } from "@/components/ui/ErrorBanner";
 import { TopBar } from "@/components/ui/TopBar";
-import { formatDuration } from "@/features/executions/timeline";
 import { executionApi, workflowApi } from "@/lib/api";
 import { RequireAuth } from "@/lib/auth/RequireAuth";
 import type { Execution, Page, Workflow } from "@/types/api";
@@ -31,30 +30,16 @@ function Executions({ workflowId }: { workflowId: string }) {
       <main className="dashboard stack">
         <div className="row">
           <Link href={`/workflows/${workflowId}/editor`}>← Editor</Link>
-          <h1>{workflow?.name ?? "Workflow"} · Executions</h1>
+          <h1>{workflow?.name ?? "Workflow"} · History</h1>
         </div>
         <ErrorBanner error={error} />
         <section className="card">
           {!data ? (
             <div className="empty">Loading…</div>
           ) : data.items.length === 0 ? (
-            <div className="empty">No executions yet. Run the workflow from the editor.</div>
+            <div className="empty">No runs yet. Press Run in the editor.</div>
           ) : (
-            <ul className="workflow-list" data-testid="execution-list">
-              {data.items.map((e) => (
-                <li key={e.id}>
-                  <Link href={`/executions/${e.id}`}>#{e.id.slice(0, 8)}</Link>
-                  <StatusBadge status={e.status} />
-                  <span className="muted small">attempt {e.attempt}</span>
-                  {e.error && <span className="small" style={{ color: "var(--danger)" }}>{e.error.code}</span>}
-                  <span className="spacer" />
-                  <span className="muted small">
-                    {e.started_at && e.completed_at ? formatDuration(Date.parse(e.completed_at) - Date.parse(e.started_at)) : ""}
-                  </span>
-                  <span className="muted small">{new Date(e.created_at).toLocaleString()}</span>
-                </li>
-              ))}
-            </ul>
+            <RunHistory runs={data.items} />
           )}
         </section>
         {pages > 1 && (

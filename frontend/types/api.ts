@@ -97,6 +97,9 @@ export interface NodeSettings {
   retry_attempts?: number;
   /** Pause between attempts, 0 to 30000 ms. */
   retry_delay_ms?: number;
+  /** Phase I4: run once for each item of the list on this input (a port
+   * name, or "var:<name>"). */
+  repeat_over?: string;
 }
 
 export interface WorkflowEdge {

@@ -30,6 +30,7 @@ type WorkflowStore interface {
 	DeleteWorkflow(ctx context.Context, id uuid.UUID) error
 
 	CreateVersion(ctx context.Context, workflowID uuid.UUID, definition json.RawMessage, createdBy uuid.UUID) (workflow.Version, error)
+	UpdateDraft(ctx context.Context, workflowID, versionID uuid.UUID, definition json.RawMessage) (workflow.Version, error)
 	FindVersion(ctx context.Context, workflowID, versionID uuid.UUID) (workflow.Version, error)
 	ListVersions(ctx context.Context, workflowID uuid.UUID, limit, offset int) ([]workflow.Version, int, error)
 	PublishVersion(ctx context.Context, workflowID, versionID uuid.UUID, check func(workflow.Version) error) (workflow.Version, error)
@@ -293,6 +294,41 @@ func (s *WorkflowService) CreateVersion(ctx context.Context, user, workflowID uu
 	v, err := s.store.CreateVersion(ctx, workflowID, canonical, user)
 	if errors.Is(err, workflow.ErrWorkflowNotFound) {
 		return workflow.Version{}, notFound("workflow")
+	}
+	return v, err
+}
+
+// UpdateDraft replaces a draft version's definition (Phase I autosave), with
+// the same draft validation and credential checks as CreateVersion. A
+// version that is no longer an editable draft is a conflict
+// (VERSION_NOT_DRAFT): save a new version instead.
+func (s *WorkflowService) UpdateDraft(ctx context.Context, user, workflowID, versionID uuid.UUID, raw json.RawMessage) (workflow.Version, error) {
+	_, workspaceID, err := s.workflow(ctx, user, workflowID, workspace.ActionWrite)
+	if err != nil {
+		return workflow.Version{}, err
+	}
+	def, err := DecodeDefinition(raw)
+	if err != nil {
+		return workflow.Version{}, err
+	}
+	if res := s.validate(def, workflow.ValidationDraft); !res.Valid {
+		return workflow.Version{}, &ValidationFailedError{Errors: res.Errors}
+	}
+	if err := s.checkCredentials(ctx, workspaceID, def); err != nil {
+		return workflow.Version{}, err
+	}
+	canonical, err := json.Marshal(def)
+	if err != nil {
+		return workflow.Version{}, err
+	}
+	v, err := s.store.UpdateDraft(ctx, workflowID, versionID, canonical)
+	switch {
+	case errors.Is(err, workflow.ErrWorkflowNotFound):
+		return workflow.Version{}, notFound("workflow")
+	case errors.Is(err, workflow.ErrVersionNotFound):
+		return workflow.Version{}, notFound("workflow version")
+	case errors.Is(err, workflow.ErrVersionNotDraft):
+		return workflow.Version{}, &ConflictError{Code: "VERSION_NOT_DRAFT", Message: "This version is published or has run, so it cannot change: save a new version"}
 	}
 	return v, err
 }

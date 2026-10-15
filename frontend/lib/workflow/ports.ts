@@ -14,7 +14,8 @@ export const ERROR_PORT: PortDefinition = {
 /** A node's outputs: its type's, plus the error output when its settings
  * route failures there (same rule as workflow.OutputPort). */
 export function nodeOutputs(def: NodeDefinition | undefined, node: Pick<WorkflowNode, "settings">): PortDefinition[] {
-  const outs = def?.outputs ?? [];
+  // A step repeating for each item (Phase I4) outputs lists.
+  const outs = node.settings?.repeat_over ? (def?.outputs ?? []).map((p) => ({ ...p, type: "array" as const })) : def?.outputs ?? [];
   if (node.settings?.on_error === "error_output" && !outs.some((p) => p.name === ERROR_PORT.name)) return [...outs, ERROR_PORT];
   return outs;
 }

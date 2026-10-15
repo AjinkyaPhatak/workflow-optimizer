@@ -26,6 +26,9 @@ const (
 	MaxRetryDelayMS  = 30000
 )
 
+// MaxRepeatItems bounds a "repeat for each item" node's list (Phase I4).
+const MaxRepeatItems = 100
+
 // NodeSettings are execution settings of one node, outside its type's
 // configuration. Every field is optional.
 type NodeSettings struct {
@@ -37,6 +40,18 @@ type NodeSettings struct {
 	// RetryDelayMS is the pause between attempts (a server's Retry-After
 	// wins when longer).
 	RetryDelayMS *int `json:"retry_delay_ms,omitempty"`
+	// RepeatOver (Phase I4) makes the node run once for each item of the
+	// list arriving on this input: a declared input port, or a variable
+	// input "var:<name>". Each output then holds a list, one entry per item.
+	RepeatOver string `json:"repeat_over,omitempty"`
+}
+
+// Repeats reports the input a node repeats over ("" when it runs once).
+func (n Node) Repeats() string {
+	if n.Settings == nil {
+		return ""
+	}
+	return n.Settings.RepeatOver
 }
 
 // OnErrorMode is the node's error handling (OnErrorStop when unset).
@@ -54,8 +69,14 @@ var errorPortDefinition = nodepkg.NewPortDefinition(ErrorPort, nodepkg.ValueType
 // OutputPort is a node's output port: one its type declares, or the
 // ErrorPort of a node set to OnErrorOutput (a declared port of the same
 // name wins).
+//
+// A node that repeats for each item (Phase I4) outputs lists: its declared
+// ports are typed array.
 func OutputPort(def nodepkg.NodeDefinition, n Node, name string) (nodepkg.PortDefinition, bool) {
 	if p, ok := def.GetOutputPort(name); ok {
+		if n.Repeats() != "" {
+			p.Type = nodepkg.ValueTypeArray
+		}
 		return p, true
 	}
 	if name == ErrorPort && n.OnErrorMode() == OnErrorOutput {

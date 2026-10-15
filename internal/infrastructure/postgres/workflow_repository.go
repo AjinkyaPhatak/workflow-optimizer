@@ -193,6 +193,41 @@ RETURNING `+versionColumns, uuid.New(), workflowID, []byte(definition), createdB
 	return v, nil
 }
 
+// UpdateDraft replaces the definition of a DRAFT version that no execution
+// references (Phase I: the editor saves automatically into its draft).
+// Anything else is workflow.ErrVersionNotDraft; the database trigger
+// enforces the same rule.
+func (r *WorkflowRepository) UpdateDraft(ctx context.Context, workflowID, versionID uuid.UUID, definition json.RawMessage) (workflow.Version, error) {
+	var v workflow.Version
+	err := pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
+		if err := lockLiveWorkflow(ctx, tx, workflowID); err != nil {
+			return err
+		}
+		var err error
+		v, err = scanVersion(tx.QueryRow(ctx, `
+UPDATE workflow_versions SET definition = $3
+ WHERE id = $1 AND workflow_id = $2 AND status = 'DRAFT'
+   AND NOT EXISTS (SELECT 1 FROM executions WHERE workflow_version_id = $1)
+RETURNING `+versionColumns, versionID, workflowID, []byte(definition)))
+		if errors.Is(err, ErrWorkflowVersionNotFound) {
+			var one int
+			if tx.QueryRow(ctx, `SELECT 1 FROM workflow_versions WHERE id = $1 AND workflow_id = $2`, versionID, workflowID).Scan(&one) == nil {
+				return workflow.ErrVersionNotDraft
+			}
+			return workflow.ErrVersionNotFound
+		}
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.ConstraintName == "lifecycle_version_immutable" {
+			return workflow.ErrVersionNotDraft
+		}
+		return err
+	})
+	if err != nil {
+		return workflow.Version{}, err
+	}
+	return v, nil
+}
+
 // FindVersion loads a version of the workflow (with its definition).
 func (r *WorkflowRepository) FindVersion(ctx context.Context, workflowID, versionID uuid.UUID) (workflow.Version, error) {
 	v, err := scanVersion(r.pool.QueryRow(ctx, `SELECT `+versionColumns+` FROM workflow_versions WHERE id = $1 AND workflow_id = $2`, versionID, workflowID))

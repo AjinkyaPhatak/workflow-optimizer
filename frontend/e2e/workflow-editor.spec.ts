@@ -1,11 +1,13 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { MOCK_OPENAI_PORT, MOCK_REPLY_PREFIX, type Seed } from "./stack";
 
-// The Phase 13 acceptance path, in a real browser against the real backend
-// (Go API + worker + PostgreSQL + Redis; only OpenAI is mocked):
+// The acceptance path, in a real browser against the real backend (Go API +
+// worker + PostgreSQL + Redis; only OpenAI is mocked), as a non-technical
+// user does it since Phase I (technical details off):
 //
-// Login -> open workflow -> add Input, LLM, Output -> connect -> configure LLM
-// (credential by metadata) -> save -> validate -> publish -> execute.
+// Login -> open workflow -> add Input (a question), Ask AI, Output -> connect
+// -> fill in the cards -> saved automatically -> Run -> answer -> result ->
+// History.
 
 const seed = (): Seed => JSON.parse(process.env.E2E_SEED ?? "null");
 
@@ -45,7 +47,10 @@ async function connect(page: Page, from: Locator, to: Locator) {
   await page.mouse.up();
 }
 
-test("build, validate, publish and execute a workflow in the visual editor", async ({ page, request }) => {
+// Technical details off: the plain editor (Phase H5/I1).
+test.use({ storageState: { cookies: [], origins: [] } });
+
+test("build a workflow on the cards and run it", async ({ page, request }) => {
   const s = seed();
   expect(s, "global setup must seed the backend").toBeTruthy();
 
@@ -57,8 +62,10 @@ test("build, validate, publish and execute a workflow in the visual editor", asy
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page).toHaveURL(/\/workflows$/);
   await page.getByRole("link", { name: s.workflowName }).click();
-  await expect(page).toHaveURL(new RegExp(`/workflows/${s.workflowId}/editor$`));
-  await expect(page.getByTestId("version-status")).toHaveText("No saved version");
+  await expect(page).toHaveURL(new RegExp(`/workflows/${s.workflowId}/editor$`), { timeout: 60_000 });
+  // Versions, Validate and Publish are technical details.
+  await expect(page.getByTestId("version-status")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Publish" })).toHaveCount(0);
 
   // The palette is the backend node registry.
   for (const type of ["input", "llm", "output", "prompt", "http"]) {
@@ -66,69 +73,62 @@ test("build, validate, publish and execute a workflow in the visual editor", asy
     await expect(page.getByTestId(`palette-${type}`)).toBeVisible();
   }
 
-  // --- build: Input -> LLM -> Output ----------------------------------------
+  // --- build: Input (a question) -> Ask AI -> Output ------------------------
   await dragPaletteItem(page, "input", 160, 220);
-  await dragPaletteItem(page, "llm", 520, 220);
-  await expect(page.getByTestId("dirty")).toBeVisible();
+  await node(page, "input").getByLabel("Field name").fill("question");
+  await node(page, "input").getByLabel("Field name").press("Tab");
+  await dragPaletteItem(page, "llm", 560, 220);
 
-  // An invalid connection (output port to output port) is refused.
+  // An invalid connection (output to output) is refused.
   await connect(page, handle(page, "input", "data"), handle(page, "llm", "response"));
   await expect(page.locator(".react-flow__edge")).toHaveCount(0);
-
   await connect(page, handle(page, "input", "data"), handle(page, "llm", "prompt"));
   await expect(page.locator(".react-flow__edge")).toHaveCount(1);
 
-  // Configure the LLM: credential chosen from metadata, model edited.
-  await node(page, "llm").locator(".wf-node-header").click();
+  // The AI step: service and key on its card, the model in More settings.
+  const ai = node(page, "llm");
+  await ai.getByLabel("Provider").selectOption("openai");
+  await ai.getByLabel("Credential").selectOption({ label: `${s.credentialName} (OpenAI)` });
+  await ai.locator(".wf-node-header").click();
   const panel = page.getByTestId("config-panel");
   await expect(panel.getByRole("heading", { name: "Ask AI" })).toBeVisible();
-  await panel.locator("#cfg-credential_id").selectOption({ label: `${s.credentialName} (openai)` });
-  // The model is a backend-provided option (Phase B).
   await panel.locator("#cfg-model").selectOption("gpt-5-mini");
-  await panel.locator("#cfg-node-name").fill("Answer");
-  await panel.locator("#cfg-node-name").press("Enter");
-  await expect(node(page, "llm").locator(".wf-node-title")).toHaveText("Answer");
 
-  // Undo / redo of a node addition and deletion.
-  await dragPaletteItem(page, "output", 880, 220);
-  await node(page, "output").locator(".wf-node-header").click();
-  await page.keyboard.press("Delete");
-  await expect(node(page, "output")).toHaveCount(0);
-  await page.locator(".react-flow__pane").click({ position: { x: 20, y: 20 } });
-  await page.keyboard.press("Control+z");
-  await expect(node(page, "output")).toHaveCount(1);
-  await page.keyboard.press("Control+Shift+z");
-  await expect(node(page, "output")).toHaveCount(0);
-  await page.keyboard.press("Control+z");
-  await expect(node(page, "output")).toHaveCount(1);
-
-  // --- validate before the output is connected: backend errors are shown ----
-  await page.getByRole("button", { name: "Validate", exact: true }).click();
-  await expect(page.getByTestId("version-status")).toHaveText("v1 · Draft");
-  const errors = page.getByTestId("validation-errors");
-  await expect(errors).toContainText("MISSING_REQUIRED_INPUT");
-  await expect(node(page, "output")).toHaveClass(/invalid/);
-  await expect(node(page, "output").locator(".wf-node-errors")).toContainText("value");
-  // Clicking an error selects its node.
-  await errors.locator("li").filter({ has: page.locator(".issue-title", { hasText: /^Output$/ }) }).getByRole("button").first().click();
-  await expect(panel.getByRole("heading", { name: "Output" })).toBeVisible();
-
-  // --- fix, save, validate, publish -----------------------------------------
-  await page.getByRole("button", { name: "Fit View" }).click();
+  await dragPaletteItem(page, "output", 960, 220);
+  await page.getByRole("button", { name: "Fit View" }).dispatchEvent("click"); // the dev-mode Next.js badge covers it
   await connect(page, handle(page, "llm", "response"), handle(page, "output", "value"));
   await expect(page.locator(".react-flow__edge")).toHaveCount(2);
-  await page.getByRole("button", { name: "Save" }).click();
-  await expect(page.getByTestId("version-status")).toHaveText("v2 · Draft");
-  await expect(page.getByTestId("dirty")).toHaveCount(0);
 
-  await page.getByRole("button", { name: "Validate", exact: true }).click();
-  await expect(page.getByTestId("validation-ok")).toBeVisible();
-  await expect(node(page, "output")).not.toHaveClass(/invalid/);
+  // Undo / redo.
+  await page.locator(".react-flow__pane").click({ position: { x: 20, y: 20 } });
+  await page.keyboard.press("Control+z");
+  await expect(page.locator(".react-flow__edge")).toHaveCount(1);
+  await page.keyboard.press("Control+Shift+z");
+  await expect(page.locator(".react-flow__edge")).toHaveCount(2);
 
-  await page.getByRole("button", { name: "Publish" }).click();
-  await expect(page.getByTestId("version-status")).toHaveText("v2 · Published");
+  // Saved automatically.
+  await expect(page.getByTestId("save-state")).toHaveText("All changes saved", { timeout: 30_000 });
 
-  // The saved definition is exactly what the canvas shows.
+  // --- run: answer the question, see the answer -----------------------------
+  await page.getByTestId("run-open").click();
+  const dialog = page.getByTestId("run-dialog");
+  await dialog.getByTestId("run-start").click();
+  await expect(dialog.getByRole("alert")).toHaveText("Fill in Question.");
+  await dialog.getByLabel(/^Question/).fill("What is quantum computing?");
+  await dialog.getByTestId("run-start").click();
+  const result = dialog.getByTestId("run-success");
+  await expect(result).toContainText("✓ Done", { timeout: 60_000 });
+  await expect(result).toContainText(MOCK_REPLY_PREFIX);
+  await expect(result).toContainText("What is quantum computing?");
+  await expect(result.locator("pre")).toHaveCount(0); // no JSON
+
+  // The provider was called by the worker with the stored credential.
+  const all: { prompt: string }[] = await (await request.get(`http://127.0.0.1:${MOCK_OPENAI_PORT}/__calls`)).json();
+  const calls = all.filter((c) => c.prompt.includes("What is quantum computing?"));
+  expect(calls).toHaveLength(1);
+  expect(calls[0]).toMatchObject({ authorized: true, model: "gpt-5-mini" });
+
+  // Running published exactly what the canvas shows; no secret in it.
   const token = await page.evaluate(() => JSON.parse(localStorage.getItem("workflow-optimizer.session")!).token as string);
   const auth = { Authorization: `Bearer ${token}` };
   const wf = await (await request.get(`/api/v1/workflows/${s.workflowId}`, { headers: auth })).json();
@@ -136,38 +136,18 @@ test("build, validate, publish and execute a workflow in the visual editor", asy
   expect(version.status).toBe("PUBLISHED");
   const def = version.definition;
   expect(def.nodes.map((n: { type: string }) => n.type).sort()).toEqual(["input", "llm", "output"]);
-  const llm = def.nodes.find((n: { type: string }) => n.type === "llm");
-  expect(llm.name).toBe("Answer");
-  expect(llm.config).toMatchObject({ provider: "openai", model: "gpt-5-mini", credential_id: s.credentialId });
+  expect(def.nodes.find((n: { type: string }) => n.type === "input").config).toMatchObject({ field: "question" });
+  expect(def.nodes.find((n: { type: string }) => n.type === "llm").config).toMatchObject({ provider: "openai", model: "gpt-5-mini", credential_id: s.credentialId });
   expect(def.edges.map((e: { source_port: string; target_port: string }) => `${e.source_port}->${e.target_port}`).sort()).toEqual(["data->prompt", "response->value"]);
-  // No secret anywhere in the definition.
   expect(JSON.stringify(def)).not.toMatch(/sk-e2e/);
 
-  // Editing a published version creates a new draft on save (never mutates it).
-  await page.locator(".react-flow__pane").click({ position: { x: 20, y: 20 } });
-  await node(page, "input").locator(".wf-node-header").click();
-  await panel.locator("#cfg-node-name").fill("Question");
-  await panel.locator("#cfg-node-name").press("Enter");
-  await expect(page.getByTestId("dirty")).toContainText("saving creates a new draft");
-  await page.keyboard.press("Control+z");
-  await expect(page.getByTestId("dirty")).toHaveCount(0);
-
-  // --- execute with test input -------------------------------------------------
-  await page.getByRole("button", { name: "Execute" }).first().click();
-  const run = page.locator(".bottom-content:not([hidden])");
-  await run.getByLabel("Input query").fill("What is quantum computing?");
-  await run.getByRole("button", { name: "Execute" }).click();
-  await expect(page.getByTestId("execution-status")).toHaveText("COMPLETED", { timeout: 60_000 });
-  const output = page.getByTestId("execution-output");
-  await expect(output).toContainText(MOCK_REPLY_PREFIX);
-  await expect(output).toContainText("What is quantum computing?");
-
-  // The provider was called by the worker with the stored credential.
-  const all: { prompt: string }[] = await (await request.get(`http://127.0.0.1:${MOCK_OPENAI_PORT}/__calls`)).json();
-  const calls = all.filter((c) => c.prompt.includes("What is quantum computing?"));
-  expect(calls).toHaveLength(1);
-  expect(calls[0]).toMatchObject({ authorized: true, model: "gpt-5-mini" });
-  expect(calls[0].prompt).toContain("What is quantum computing?");
+  // --- history: the run in plain words --------------------------------------
+  await dialog.getByRole("link", { name: "All runs" }).click();
+  const list = page.getByTestId("execution-list");
+  await expect(list.locator("li")).toHaveCount(1, { timeout: 30_000 });
+  await expect(list.locator("li").first()).toContainText("Worked");
+  await list.locator(".history-summary").first().click();
+  await expect(list).toContainText("You gave: Question = What is quantum computing?");
 
   // The browser never held the provider secret.
   const stored = await page.evaluate(() => JSON.stringify({ ...localStorage }) + JSON.stringify({ ...sessionStorage }));

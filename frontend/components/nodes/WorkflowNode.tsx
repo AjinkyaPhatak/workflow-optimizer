@@ -6,6 +6,7 @@ import { Handle, Position, useUpdateNodeInternals, type NodeProps } from "@xyflo
 import { memo, useEffect } from "react";
 import { useCanvasState } from "@/components/canvas/CanvasContext";
 import { FieldEditor } from "@/components/panels/ConfigPanel";
+import { repeatLabel } from "@/components/panels/RepeatSettings";
 import { NodeIcon } from "@/components/ui/NodeIcon";
 import { useEditorContext } from "@/features/workflows/EditorContext";
 import { actionName, categoryClass } from "@/features/nodes/catalog";
@@ -129,6 +130,9 @@ function WorkflowNodeView({ id, data, selected, dragging }: NodeProps<CanvasNode
           </span>
         )}
       </div>
+      {data.node.settings?.repeat_over && (
+        <div className="wf-node-repeat" data-testid={`node-repeat-${id}`}>↻ For each item in {repeatLabel(data.node.settings.repeat_over)}</div>
+      )}
       {def && (account || fields.length > 0) && (
         <div className="wf-node-body nodrag nowheel" data-testid={`node-fields-${id}`}>
           {account && <FieldEditor node={fieldNode} field={account} issues={fieldIssues(account.name)} idPrefix={`card-${id}`} compact />}

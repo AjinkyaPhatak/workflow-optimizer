@@ -42,6 +42,30 @@ func (h *Handlers) CreateVersion(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusCreated, responses.NewVersion(v))
 }
 
+// UpdateDraft handles PUT /api/v1/workflows/{workflowID}/versions/{versionID}
+// (Phase I): replaces a draft's definition.
+func (h *Handlers) UpdateDraft(w http.ResponseWriter, r *http.Request) {
+	wf, v, ok := h.versionPath(w, r)
+	if !ok {
+		return
+	}
+	var req requests.CreateVersion
+	if !h.decode(w, r, &req) {
+		return
+	}
+	def, err := req.Validate()
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	updated, err := h.Workflows.UpdateDraft(r.Context(), user(r), wf, v, def)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, responses.NewVersion(updated))
+}
+
 // ListVersions handles GET /api/v1/workflows/{workflowID}/versions.
 func (h *Handlers) ListVersions(w http.ResponseWriter, r *http.Request) {
 	id, ok := h.pathID(w, r, "workflowID")

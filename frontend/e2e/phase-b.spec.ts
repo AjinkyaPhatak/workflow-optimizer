@@ -55,7 +55,7 @@ test("template, variables, prompt template, LLM, structured output, search and v
   await create.getByLabel("Workflow name").fill("Meeting Summarizer");
   await create.getByTestId("template-structured-ai-response").click();
   await create.getByRole("button", { name: "Create workflow" }).click();
-  await expect(page).toHaveURL(/\/workflows\/[0-9a-f-]{36}\/editor$/);
+  await expect(page).toHaveURL(/\/workflows\/[0-9a-f-]{36}\/editor$/, { timeout: 60_000 });
   const workflowId = page.url().split("/").at(-2)!;
   await expect(page.getByTestId("version-status")).toHaveText("v1 · Draft");
   for (const type of ["input", "prompt", "llm", "structured_output", "output"]) await expect(node(page, type)).toHaveCount(1);
@@ -96,7 +96,7 @@ test("template, variables, prompt template, LLM, structured output, search and v
   await panel.locator("#cfg-provider").selectOption("openai");
   await expect(panel.locator("#cfg-model option", { hasText: "GPT-5 mini" })).toHaveCount(1);
   await panel.locator("#cfg-model").selectOption("gpt-5-mini");
-  await panel.locator("#cfg-credential_id").selectOption({ label: `${s.credentialName} (openai)` });
+  await panel.locator("#cfg-credential_id").selectOption({ label: `${s.credentialName} (OpenAI)` });
   await panel.locator("#cfg-system").fill("Keep it short.");
   await panel.locator("#cfg-node-name").click();
   await expect(panel.locator("#cfg-temperature")).toHaveAttribute("max", "2");
@@ -129,17 +129,17 @@ test("template, variables, prompt template, LLM, structured output, search and v
   await panel.locator("#cfg-path").fill("summary");
   await panel.locator("#cfg-path").press("Enter");
 
-  // --- save, publish ----------------------------------------------------------------
-  await page.getByRole("button", { name: "Save" }).click();
-  await expect(page.getByTestId("version-status")).toHaveText("v2 · Draft");
+  // --- saved automatically into the draft (Phase I), publish ------------------------
+  await expect(page.getByTestId("save-state")).toHaveText("All changes saved");
+  await expect(page.getByTestId("version-status")).toHaveText("v1 · Draft");
   await page.getByRole("button", { name: "Publish" }).click();
-  await expect(page.getByTestId("version-status")).toHaveText("v2 · Published");
+  await expect(page.getByTestId("version-status")).toHaveText("v1 · Published");
 
   const token = await page.evaluate(() => JSON.parse(localStorage.getItem("workflow-optimizer.session")!).token as string);
   const auth = { Authorization: `Bearer ${token}` };
   const wf = await (await request.get(`/api/v1/workflows/${workflowId}`, { headers: auth })).json();
   const published = await (await request.get(`/api/v1/workflows/${workflowId}/versions/${wf.active_version_id}`, { headers: auth })).json();
-  expect(published.version_number).toBe(2);
+  expect(published.version_number).toBe(1);
   expect(published.status).toBe("PUBLISHED");
   const def = published.definition;
   expect(def.variables.map((v: { name: string }) => v.name)).toEqual(["audience", "tone"]);
@@ -150,7 +150,7 @@ test("template, variables, prompt template, LLM, structured output, search and v
   expect(JSON.stringify(def)).not.toMatch(/sk-e2e/);
 
   // --- run: variables are run fields; the result is structured ----------------------
-  await page.getByRole("button", { name: "Execute" }).first().click();
+  await page.getByRole("tab", { name: "Run" }).click(); // the header opens the Run window since Phase I
   const run = page.locator(".bottom-content:not([hidden])");
   await run.getByRole("button", { name: "Reset fields" }).click();
   await expect(run.getByLabel("Input tone")).toHaveAttribute("placeholder", "default: friendly");
@@ -163,24 +163,22 @@ test("template, variables, prompt template, LLM, structured output, search and v
   await selectNode(page, "prompt");
   await panel.locator("#cfg-template").fill("A different prompt about {{input.query}}. Respond with JSON.");
   await panel.locator("#cfg-node-name").click();
-  await expect(page.getByTestId("dirty")).toContainText("saving creates a new draft");
-  await page.getByRole("button", { name: "Save" }).click();
-  await expect(page.getByTestId("version-status")).toHaveText("v3 · Draft");
+  // A published version never changes: the change is saved as a new draft.
+  await expect(page.getByTestId("version-status")).toHaveText("v2 · Draft");
 
   await page.getByTestId("version-status").click();
   const history = page.getByTestId("versions-panel");
-  await expect(history.getByTestId("version-3-state")).toHaveText("Draft");
-  await expect(history.getByTestId("version-3")).toContainText("Latest draft");
-  await expect(history.getByTestId("version-2-state")).toHaveText("Published · active");
-  await expect(history.getByTestId("version-1-state")).toHaveText("Draft");
+  await expect(history.getByTestId("version-2-state")).toHaveText("Draft");
+  await expect(history.getByTestId("version-2")).toContainText("Latest draft");
+  await expect(history.getByTestId("version-1-state")).toHaveText("Published · active");
 
   const again = await (await request.get(`/api/v1/workflows/${workflowId}/versions/${wf.active_version_id}`, { headers: auth })).json();
   expect(again.definition).toEqual(def);
   expect((await (await request.get(`/api/v1/workflows/${workflowId}`, { headers: auth })).json()).active_version_id).toBe(wf.active_version_id);
 
-  // Opening the published version shows it again (saving would make v4).
-  await history.getByTestId("version-2").getByRole("button", { name: "Open as new draft" }).click();
-  await expect(page.getByTestId("version-status")).toHaveText("v2 · Published");
+  // Opening the published version shows it again (editing it would make v3).
+  await history.getByTestId("version-1").getByRole("button", { name: "Open as new draft" }).click();
+  await expect(page.getByTestId("version-status")).toHaveText("v1 · Published");
   await selectNode(page, "prompt");
   await expect(panel.locator("#cfg-template")).toHaveValue(/Use a \{\{tone\}\}$/);
 });

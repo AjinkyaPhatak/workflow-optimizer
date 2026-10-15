@@ -1,6 +1,7 @@
 "use client";
 
 import { FailureSettings } from "@/components/panels/FailureSettings";
+import { RepeatSettings } from "@/components/panels/RepeatSettings";
 import { NodeTest } from "@/components/panels/NodeTest";
 import { useTestRunStore } from "@/stores/test-run/store";
 import { DynamicSelect, KeyValueField } from "@/components/panels/SettingFields";
@@ -141,6 +142,9 @@ function CredentialSelect({ id, value, provider, credentials, onCommit, disabled
   );
 }
 
+/** Plain names of the services accounts are connected for. */
+const ACCOUNT_NAMES: Record<string, string> = { google: "Google", notion: "Notion", discord: "Discord" };
+
 /** The account picker of nodes that use connected accounts (OAuth). The
  * node stores the account's credential_id; the account itself (and its
  * tokens) is managed on the Connected accounts page. */
@@ -167,10 +171,13 @@ function AccountSelect({ id, value, provider, accounts, onCommit, disabled, inva
       {selected && selected.status !== "ACTIVE" && (
         <div className="field-error" role="alert">This account is {statusLabel(selected.status).toLowerCase()}. Reconnect it to run this node.</div>
       )}
-      <div className="hint">
-        {options.length === 0 ? "No account of this provider is connected. " : ""}
-        <Link href="/settings/connected-accounts">Manage connected accounts</Link>
-      </div>
+      {options.length === 0 ? (
+        <Link className="button primary connect-button" href="/settings/connected-accounts" target="_blank" data-testid="connect-account">
+          Connect {ACCOUNT_NAMES[provider] ?? provider}
+        </Link>
+      ) : (
+        <div className="hint"><Link href="/settings/connected-accounts">Manage connected accounts</Link></div>
+      )}
     </>
   );
 }
@@ -450,6 +457,7 @@ export function ConfigPanel() {
           </div>
         )}
         {def && <NodeTest nodeId={node.id} />}
+        {def && def.role !== "entry" && def.role !== "exit" && <RepeatSettings node={node} def={def} readonly={readonly} />}
         {def && def.role !== "entry" && def.role !== "exit" && <FailureSettings node={node} def={def} readonly={readonly} />}
         {!readonly && (
           <div className="section">

@@ -21,9 +21,13 @@ export const workflowApi = {
   listVersions: (id: string, page = 1, pageSize = 20) =>
     request<Page<VersionSummary>>("GET", `/workflows/${id}/versions`, { query: { page, page_size: pageSize } }),
   getVersion: (id: string, versionId: string) => request<Version>("GET", `/workflows/${id}/versions/${versionId}`),
-  /** Stores the definition as a new immutable DRAFT version (the API has no version update). */
+  /** Stores the definition as a new DRAFT version. */
   createVersion: (id: string, definition: WorkflowDefinition) =>
     request<Version>("POST", `/workflows/${id}/versions`, { body: { definition } }),
+  /** Phase I: replaces a DRAFT's definition (409 VERSION_NOT_DRAFT once it
+   * is published or has run). */
+  updateDraft: (id: string, versionId: string, definition: WorkflowDefinition) =>
+    request<Version>("PUT", `/workflows/${id}/versions/${versionId}`, { body: { definition } }),
   validate: (id: string, versionId: string) =>
     request<ValidationResult>("POST", `/workflows/${id}/versions/${versionId}/validate`),
   publish: (id: string, versionId: string) =>

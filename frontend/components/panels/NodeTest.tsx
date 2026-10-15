@@ -21,7 +21,7 @@ export function NodeTest({ nodeId }: { nodeId: string }) {
         <button type="button" disabled={running} onClick={() => void run(nodeId)}>
           {running && until === nodeId ? "Testing…" : "Test up to this node"}
         </button>
-        <span className="muted small">Runs this node and what it depends on, with the Run tab input. Nothing is saved.</span>
+        <span className="muted small">Tries this step and the steps before it, with your answers from the Run window. Nothing is saved.</span>
       </div>
       {result && (
         <div className="node-test-result" data-testid="node-test-result">

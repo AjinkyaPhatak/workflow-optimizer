@@ -40,7 +40,7 @@ async function publishLLMWorkflow(request: APIRequestContext, s: Seed): Promise<
 
 async function runFromEditor(page: Page, workflowId: string, query: string) {
   await page.goto(`/workflows/${workflowId}/editor`);
-  await page.getByRole("button", { name: "Execute" }).first().click();
+  await page.getByRole("tab", { name: "Run" }).click(); // the header opens the Run window since Phase I
   const run = page.locator(".bottom-content:not([hidden])");
   await run.getByLabel("Input query").fill(query);
   await run.getByRole("button", { name: "Execute" }).click();

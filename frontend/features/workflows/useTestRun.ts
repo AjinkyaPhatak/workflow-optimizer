@@ -7,7 +7,8 @@
 import { useCallback } from "react";
 import { useEditorContext } from "@/features/workflows/EditorContext";
 import { workflowApi } from "@/lib/api";
-import { initialRows, inputOf } from "@/lib/workflow/runInput";
+import { inputOf } from "@/lib/workflow/runInput";
+import { runFields, runInput } from "@/lib/workflow/runFields";
 import { useEditorStore } from "@/stores/workflow-editor/store";
 import { useTestRunStore } from "@/stores/test-run/store";
 import type { NodeDefinition, WorkflowDefinition } from "@/types/api";
@@ -45,10 +46,11 @@ export function useTestRun(confirm: (message: string) => boolean = (m) => window
       return;
     }
     const store = useTestRunStore.getState();
-    const rows = store.rows ?? initialRows(definition.variables ?? []);
+    // The Run window's answers, plus the old Run tab's rows when used.
+    const input = { ...(store.rows ? inputOf(store.rows) : {}), ...runInput(runFields(definition), store.answers).input };
     start(until);
     try {
-      const result = await workflowApi.test(workflow.id, { definition, input: inputOf(rows), ...(until ? { until_node_id: until } : {}) });
+      const result = await workflowApi.test(workflow.id, { definition, input, ...(until ? { until_node_id: until } : {}) });
       finish(result);
     } catch (e) {
       finish(null, e);

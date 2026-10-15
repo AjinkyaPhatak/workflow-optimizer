@@ -61,7 +61,7 @@ test("hover info, configuration, variable picker and validation focus in the edi
   await page.goto(`/workflows/${wf.id}/editor`);
   const empty = page.getByTestId("canvas-empty");
   await expect(empty).toContainText("Build your workflow");
-  await empty.getByRole("button", { name: "+ Add Input node" }).click();
+  await empty.getByRole("button", { name: "+ Start with an Input" }).click();
   await expect(node(page, "input")).toHaveCount(1);
   await expect(empty).toHaveCount(0);
 
@@ -73,9 +73,11 @@ test("hover info, configuration, variable picker and validation focus in the edi
   await page.getByTestId("palette-llm").dragTo(canvas, { targetPosition: { x: box.width * 0.8, y: 120 } });
   await expect(node(page, "prompt")).toHaveCount(1);
   await expect(node(page, "llm")).toHaveCount(1);
-  await page.getByRole("button", { name: "Fit View" }).click();
+  await page.getByRole("button", { name: "Fit View" }).dispatchEvent("click"); // the dev-mode Next.js badge covers it
 
   // --- hover a node: what it does, from the backend definition ----------------
+  // Start from outside the cards: the pointer may still be over one after the drop.
+  await page.mouse.move(box.x + 10, box.y + box.height - 10);
   const llmHeader = node(page, "llm").locator(".wf-node-header");
   const hb = await settledBox(llmHeader);
   await page.mouse.move(hb.x + hb.width / 2, hb.y + hb.height / 2);
@@ -138,7 +140,7 @@ test("hover info, configuration, variable picker and validation focus in the edi
   // Clicking a problem selects its node and brings it into view.
   await page.locator(".react-flow__pane").click({ position: { x: 10, y: 10 } });
   await expect(panel).toHaveCount(0);
-  await list.locator("li").filter({ has: page.locator(".issue-title", { hasText: /^LLM$/ }) }).getByRole("button", { name: /not reachable/ }).click();
+  await list.locator("li").filter({ has: page.locator(".issue-title", { hasText: /^Ask AI$/ }) }).getByRole("button", { name: /not reachable/ }).click();
   await expect(panel.getByRole("heading", { name: "Ask AI" })).toBeVisible();
   await expect(node(page, "llm")).toHaveClass(/selected/);
   await expect(node(page, "llm")).toBeInViewport();

@@ -16,6 +16,9 @@ var (
 	ErrVersionNotFound  = errors.New("workflow: workflow version not found")
 	// ErrVersionArchived rejects publishing an archived version.
 	ErrVersionArchived = errors.New("workflow: workflow version is archived")
+	// ErrVersionNotDraft rejects editing a version that is no longer a
+	// draft (published, archived, or already executed).
+	ErrVersionNotDraft = errors.New("workflow: workflow version is not an editable draft")
 )
 
 // VersionStatus is a workflow-version lifecycle label.

@@ -113,6 +113,7 @@ func (v *GraphValidator) ValidateWithOptions(d Definition, options ValidationOpt
 		}
 		v.config(n, def, add)
 		nodeSettings(n, add)
+		repeatSetting(n, def, add)
 	}
 	v.variables(d, ns, add)
 	in := map[string]map[string]int{}
@@ -212,6 +213,14 @@ func (v *GraphValidator) ValidateWithOptions(d Definition, options ValidationOpt
 		for _, p := range def.Inputs {
 			if c := in[id][p.Name]; !p.Multiple && c > 1 {
 				add(ErrMultipleConnections, "input accepts one connection", id, "", p.Name, nil)
+			}
+		}
+	}
+	// A node repeating for each item needs its list connected to publish.
+	if strict {
+		for _, n := range d.Nodes {
+			if over := n.Repeats(); over != "" && in[n.ID][over] == 0 {
+				add(ErrInvalidNodeSettings, "connect the list this step repeats over", n.ID, "", "repeat_over", nil)
 			}
 		}
 	}
@@ -461,5 +470,27 @@ func nodeSettings(n Node, add func(ValidationErrorCode, string, string, string, 
 	}
 	if st.RetryDelayMS != nil && (*st.RetryDelayMS < 0 || *st.RetryDelayMS > MaxRetryDelayMS) {
 		add(ErrInvalidNodeSettings, "retry delay must be from 0 to 30000 ms", n.ID, "", "retry_delay_ms", nil)
+	}
+}
+
+// repeatSetting checks a node's "repeat for each item" input (Phase I4): a
+// declared input or a valid variable input, not on an entry or exit node.
+func repeatSetting(n Node, def nodepkg.NodeDefinition, add func(ValidationErrorCode, string, string, string, string, map[string]any)) {
+	over := n.Repeats()
+	if over == "" {
+		return
+	}
+	if def.Role == nodepkg.SemanticRoleEntry || def.Role == nodepkg.SemanticRoleExit {
+		add(ErrInvalidNodeSettings, "this step cannot repeat for each item", n.ID, "", "repeat_over", nil)
+		return
+	}
+	if name, isVar := VariableInput(over); isVar {
+		if !ValidVariableInputName(name) {
+			add(ErrInvalidNodeSettings, "repeat over a {{name}} input with a valid name", n.ID, "", "repeat_over", nil)
+		}
+		return
+	}
+	if _, ok := def.GetInputPort(over); !ok {
+		add(ErrInvalidNodeSettings, "repeat over one of this step's inputs", n.ID, "", "repeat_over", nil)
 	}
 }

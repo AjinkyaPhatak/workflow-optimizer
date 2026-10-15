@@ -117,17 +117,21 @@ function VariableFieldDraft({ id, value, onCommit, groups, multiline, placeholde
     onClick: (e: { currentTarget: { value: string; selectionStart: number | null } }) => {
       if (picker) track(e.currentTarget.value, e.currentTarget.selectionStart ?? 0);
     },
-    onBlur: (e: { relatedTarget: EventTarget | null }) => {
-      if (wrapRef.current?.contains(e.relatedTarget as Node | null)) return;
-      setPicker(null);
-      commit();
-    },
   };
 
   // Index of each group's first option in the flat (keyboard) order.
   const offsets = shown.map((_, gi) => shown.slice(0, gi).reduce((n, g) => n + g.options.length, 0));
   return (
-    <div className="variable-field" ref={wrapRef}>
+    <div
+      className="variable-field" ref={wrapRef}
+      // Commit when focus leaves the whole field (the text box, its { }
+      // button or the picker), not when it moves between them.
+      onBlur={(e) => {
+        if (wrapRef.current?.contains(e.relatedTarget as Node | null)) return;
+        setPicker(null);
+        commit();
+      }}
+    >
       <div className="variable-input">
         {multiline ? <textarea rows={4} {...common} /> : <input type="text" autoComplete="off" {...common} />}
         {!disabled && (
