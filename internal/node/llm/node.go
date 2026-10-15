@@ -18,6 +18,12 @@ import (
 // NodeType is the stable identifier for LLM nodes.
 const NodeType = "llm"
 
+// DefaultProvider and DefaultModel are the free Gemini tier (Phase G).
+const (
+	DefaultProvider = "gemini"
+	DefaultModel    = "gemini-2.5-flash"
+)
+
 // Error codes reported by the LLM node for credential problems (never
 // retryable) and configuration problems.
 const (
@@ -39,8 +45,9 @@ func Definition() node.NodeDefinition {
 // application's provider registry). The node itself stays provider-neutral:
 // options are metadata; the provider registry decides at run time.
 func DefinitionFor(providers []providerllm.Info) node.NodeDefinition {
-	providerField := node.NewConfigField("provider", node.ValueTypeString, true, "openai", "Which AI provider runs the model.").WithLabel("Provider")
-	modelField := node.NewConfigField("model", node.ValueTypeString, true, "gpt-5", "The model to use. Pick one or enter another model ID.").WithLabel("Model")
+	// Phase G: the free Gemini tier is the default.
+	providerField := node.NewConfigField("provider", node.ValueTypeString, true, DefaultProvider, "Which AI service runs the model. Gemini and Groq have free tiers.").WithLabel("Provider")
+	modelField := node.NewConfigField("model", node.ValueTypeString, true, DefaultModel, "The model to use. Pick one or enter another model ID.").WithLabel("Model")
 	if len(providers) > 0 {
 		var provOpts, modelOpts []node.ConfigOption
 		for _, p := range providers {
@@ -74,7 +81,7 @@ func DefinitionFor(providers []providerllm.Info) node.NodeDefinition {
 			node.NewConfigField("credential_id", node.ValueTypeString, false, "", "Workspace credential identifier").WithLabel("Credential"),
 			node.NewConfigField("system", node.ValueTypeString, false, "", "Instructions that shape how the model answers. Used when the system input is not connected; {{variables}} are filled in.").WithLabel("System prompt").WithMultiline(),
 			node.NewConfigField("prompt", node.ValueTypeString, false, "", "What to ask the model. Used when the prompt input is not connected; {{variables}} are filled in.").WithLabel("User prompt").WithMultiline(),
-			node.NewConfigField("image_file", node.ValueTypeString, false, "", "An uploaded image (Files page) for the model to look at. Needs a model that accepts images, e.g. GPT-4o or GPT-5.").
+			node.NewConfigField("image_file", node.ValueTypeString, false, "", "An uploaded image (Files page) for the model to look at. Needs a model that accepts images, e.g. Gemini Flash, GPT-4o or Llama 4 Scout.").
 				WithLabel("Image").WithOptionsSource("image_files"),
 			node.NewConfigField("image_urls", node.ValueTypeString, false, "", "Images on the web: one https:// URL per line. {{variables}} are filled in.").
 				WithLabel("Image URLs").WithMultiline(),
@@ -204,6 +211,13 @@ func (n *Node) Execute(ctx context.Context, in node.NodeInput) (node.NodeOutput,
 }
 
 func (n *Node) resolveCredential(ctx context.Context, in node.NodeInput, providerName string) (credential.ResolvedCredential, error) {
+	return ResolveCredential(ctx, n.deps.Credentials, in, providerName)
+}
+
+// ResolveCredential resolves a node's credential_id setting for a provider,
+// with the LLM node's error classification (Phase G: shared with the
+// Transcribe Audio node).
+func ResolveCredential(ctx context.Context, creds credential.Resolver, in node.NodeInput, providerName string) (credential.ResolvedCredential, error) {
 	raw, _ := in.GetStringConfig("credential_id")
 	if strings.TrimSpace(raw) == "" {
 		return credential.ResolvedCredential{}, node.NewNodeError(ErrCodeCredentialInvalid, "credential_id is required", false)
@@ -212,10 +226,10 @@ func (n *Node) resolveCredential(ctx context.Context, in node.NodeInput, provide
 	if err != nil {
 		return credential.ResolvedCredential{}, node.NewNodeError(ErrCodeCredentialInvalid, "credential_id is not a valid identifier", false)
 	}
-	if n.deps.Credentials == nil {
+	if creds == nil {
 		return credential.ResolvedCredential{}, node.NewNodeError(ErrCodeCredentialInvalid, "credential resolution is not configured", false)
 	}
-	resolved, err := n.deps.Credentials.Resolve(ctx, in.Scope.WorkspaceID, id, providerName)
+	resolved, err := creds.Resolve(ctx, in.Scope.WorkspaceID, id, providerName)
 	if err != nil {
 		return credential.ResolvedCredential{}, classifyCredentialError(err)
 	}

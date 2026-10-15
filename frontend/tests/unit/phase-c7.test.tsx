@@ -38,6 +38,7 @@ describe("Credentials page", () => {
   it("creates an HTTP bearer credential with its hosts and clears the secret", async () => {
     const s = state();
     render(<Credentials state={s} />);
+    fireEvent.change(screen.getByLabelText(/^For/), { target: { value: "http" } });
     const save = screen.getByRole("button", { name: "Save credential" }) as HTMLButtonElement;
     type(/^Name/, "Stripe test");
     type(/^Token/, "sk_test_123");
@@ -53,6 +54,7 @@ describe("Credentials page", () => {
   it("creates basic auth from a username and password, and OpenAI keys without hosts", () => {
     const s = state();
     render(<Credentials state={s} />);
+    fireEvent.change(screen.getByLabelText(/^For/), { target: { value: "http" } });
     type(/^Name/, "Jira");
     fireEvent.change(screen.getByLabelText(/^Sent as/), { target: { value: "basic_auth" } });
     type(/^Allowed hosts/, "acme.atlassian.net");
@@ -66,6 +68,21 @@ describe("Credentials page", () => {
     type(/^API key/, "sk-openai");
     fireEvent.click(screen.getByRole("button", { name: "Save credential" }));
     expect(s.create).toHaveBeenLastCalledWith({ name: "Jira", provider: "openai", credential_type: "api_key", secret: "sk-openai" });
+  });
+
+  it("offers the free Gemini key first, with where to get it", () => {
+    const s = state();
+    render(<Credentials state={s} />);
+    expect((screen.getByLabelText(/^For/) as HTMLSelectElement).value).toBe("gemini");
+    const help = screen.getByTestId("key-help");
+    expect(help.textContent).toContain("Free, no card needed");
+    expect(help.querySelector("a")!.getAttribute("href")).toBe("https://aistudio.google.com/apikey");
+    type(/^Name/, "My Gemini key");
+    type(/^API key/, "AIza-test");
+    fireEvent.click(screen.getByRole("button", { name: "Save credential" }));
+    expect(s.create).toHaveBeenLastCalledWith({ name: "My Gemini key", provider: "gemini", credential_type: "api_key", secret: "AIza-test" });
+    fireEvent.change(screen.getByLabelText(/^For/), { target: { value: "groq" } });
+    expect(screen.getByTestId("key-help").querySelector("a")!.getAttribute("href")).toBe("https://console.groq.com/keys");
   });
 
   it("only lets owners and admins manage credentials", () => {

@@ -72,6 +72,8 @@ var extensionTypes = map[string]string{
 	".txt": "text/plain", ".md": "text/markdown", ".markdown": "text/markdown", ".csv": "text/csv", ".tsv": "text/tab-separated-values",
 	".json": "application/json", ".html": "text/html", ".htm": "text/html", ".xml": "application/xml",
 	".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp",
+	".mp3": "audio/mpeg", ".mpga": "audio/mpeg", ".m4a": "audio/mp4", ".wav": "audio/wav", ".ogg": "audio/ogg", ".oga": "audio/ogg",
+	".opus": "audio/ogg", ".webm": "audio/webm", ".flac": "audio/flac", ".mp4": "video/mp4", ".mpeg": "video/mpeg",
 }
 
 // ContentType decides a file's type from its extension, else its bytes.
@@ -139,6 +141,16 @@ func (s *Service) Upload(ctx context.Context, workspaceID, user uuid.UUID, name 
 }
 
 // IsImage reports whether a content type is an image the LLM node accepts.
+// IsAudio reports whether a file is a recording speech-to-text accepts
+// (Phase G; MP4 and MPEG videos count: their sound is transcribed).
+func IsAudio(contentType string) bool {
+	switch contentType {
+	case "audio/mpeg", "audio/mp4", "audio/wav", "audio/x-wav", "audio/wave", "audio/ogg", "audio/webm", "audio/flac", "video/mp4", "video/mpeg", "video/webm":
+		return true
+	}
+	return false
+}
+
 func IsImage(contentType string) bool {
 	switch contentType {
 	case "image/png", "image/jpeg", "image/gif", "image/webp":

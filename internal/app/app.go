@@ -31,6 +31,7 @@ import (
 	"workflow-optimizer/internal/node/structured_output"
 	"workflow-optimizer/internal/node/switchnode"
 	"workflow-optimizer/internal/node/text"
+	"workflow-optimizer/internal/node/transcribe"
 	"workflow-optimizer/internal/node/transform"
 	providerllm "workflow-optimizer/internal/provider/llm"
 	"workflow-optimizer/internal/provider/llm/openai"
@@ -102,18 +103,31 @@ func Bootstrap(cfg config.Config) (*Application, error) {
 // The executor sees only the node registry; it knows nothing about providers.
 func BootstrapWith(cfg config.Config, deps Dependencies) (*Application, error) {
 	// 1. Construct Provider Registry
+	// OpenAI, and the free Gemini and Groq APIs (Phase G) through their
+	// OpenAI-compatible endpoints.
 	providerReg := providerllm.NewRegistry()
-	openAI, err := openai.New(openai.Options{BaseURL: cfg.OpenAIBaseURL, HTTPClient: deps.HTTPClient})
-	if err != nil {
-		return nil, fmt.Errorf("bootstrap openai provider: %w", err)
-	}
-	if err := providerReg.Register(openai.Name, openAI); err != nil {
-		return nil, fmt.Errorf("bootstrap register provider %q: %w", openai.Name, err)
+	embedders := map[string]providerllm.Embedder{}
+	var transcribers []transcribe.Provider
+	for _, p := range []struct {
+		spec openai.Spec
+		base string
+	}{{openai.OpenAI, cfg.OpenAIBaseURL}, {openai.Gemini, cfg.GeminiBaseURL}, {openai.Groq, cfg.GroqBaseURL}} {
+		provider, err := openai.NewCompatible(p.spec, openai.Options{BaseURL: p.base, HTTPClient: deps.HTTPClient})
+		if err != nil {
+			return nil, fmt.Errorf("bootstrap %s provider: %w", p.spec.Name, err)
+		}
+		if err := providerReg.Register(p.spec.Name, provider); err != nil {
+			return nil, fmt.Errorf("bootstrap register provider %q: %w", p.spec.Name, err)
+		}
+		embedders[p.spec.Name] = provider
+		if len(provider.TranscriptionModels()) > 0 {
+			transcribers = append(transcribers, transcribe.Provider{Name: p.spec.Name, Label: p.spec.Label, Transcriber: provider})
+		}
 	}
 	providerReg.Freeze()
 	var knowledgeSvc *knowledge.Service
 	if deps.KnowledgeRepository != nil {
-		knowledgeSvc = knowledge.NewService(deps.KnowledgeRepository, deps.Files, deps.Credentials, openAI)
+		knowledgeSvc = knowledge.NewService(deps.KnowledgeRepository, deps.Files, deps.Credentials, embedders)
 	}
 	llmDeps := llm.Dependencies{}
 	if deps.Credentials != nil {
@@ -143,6 +157,7 @@ func BootstrapWith(cfg config.Config, deps Dependencies) (*Application, error) {
 		// AI category
 		{node: prompt.New(), def: prompt.Definition()},
 		{node: llm.New(llmDeps), def: llm.DefinitionFor(providerllm.Describe(providerReg))},
+		{node: transcribe.New(transcribe.Dependencies{Providers: transcribers, Credentials: deps.Credentials, Files: deps.Files}), def: transcribe.Definition(transcribers)},
 		{node: structured_output.New(nil), def: structured_output.Definition()},
 
 		// Knowledge category (Phase D)

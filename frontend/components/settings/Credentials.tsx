@@ -5,13 +5,22 @@ import { ErrorBanner } from "@/components/ui/ErrorBanner";
 import type { CredentialsState } from "@/features/credentials/useCredentials";
 import type { CreateCredentialBody } from "@/types/api";
 
-type Kind = "http" | "openai";
+type Kind = "http" | "openai" | "gemini" | "groq";
 type HttpAuth = "bearer_token" | "api_key" | "basic_auth";
 
 const TYPE_LABELS: Record<string, string> = {
   api_key: "API key", bearer_token: "Bearer token", basic_auth: "Basic auth", oauth2: "Connected account",
 };
-const KIND_LABELS: Record<string, string> = { http: "HTTP API", openai: "OpenAI" };
+const KIND_LABELS: Record<string, string> = { http: "HTTP API", openai: "OpenAI", gemini: "Google Gemini", groq: "Groq" };
+
+/** Where to get each AI key, in plain words (Phase G: Gemini and Groq are
+ * free, no card needed). */
+const KEY_HELP: Partial<Record<Kind, { text: string; url: string; label: string }>> = {
+  gemini: { text: "Free, no card needed. Sign in with Google, click Create API key, and paste it here.", url: "https://aistudio.google.com/apikey", label: "Get a free Gemini key" },
+  groq: { text: "Free, no card needed. Sign up, open API Keys, click Create API Key, and paste it here.", url: "https://console.groq.com/keys", label: "Get a free Groq key" },
+  openai: { text: "Paid: OpenAI charges for every use.", url: "https://platform.openai.com/api-keys", label: "OpenAI API keys" },
+};
+const KIND_NAMES: Partial<Record<Kind, string>> = { gemini: "e.g. My Gemini key", groq: "e.g. My Groq key", openai: "e.g. OpenAI" };
 
 /** Splits the allowed-hosts box: one host per line (commas also work). */
 export function parseHosts(text: string): string[] {
@@ -21,7 +30,7 @@ export function parseHosts(text: string): string[] {
 /** The add form. Its secret fields are cleared after every save attempt
  * that succeeds; nothing secret is kept anywhere else. */
 function AddCredential({ busy, onCreate }: { busy: boolean; onCreate: CredentialsState["create"] }) {
-  const [kind, setKind] = useState<Kind>("http");
+  const [kind, setKind] = useState<Kind>("gemini");
   const [auth, setAuth] = useState<HttpAuth>("bearer_token");
   const [name, setName] = useState("");
   const [hosts, setHosts] = useState("");
@@ -51,13 +60,21 @@ function AddCredential({ busy, onCreate }: { busy: boolean; onCreate: Credential
       <div className="field">
         <label htmlFor="cred-kind">For</label>
         <select id="cred-kind" value={kind} onChange={(e) => setKind(e.target.value as Kind)}>
-          <option value="http">HTTP Request nodes (any API)</option>
-          <option value="openai">OpenAI (LLM nodes)</option>
+          <option value="gemini">Google Gemini: AI, free</option>
+          <option value="groq">Groq: AI and audio transcription, free</option>
+          <option value="openai">OpenAI: AI, paid</option>
+          <option value="http">Any other service (HTTP Request)</option>
         </select>
+        {KEY_HELP[kind] && (
+          <div className="field-help" data-testid="key-help">
+            {KEY_HELP[kind]!.text}{" "}
+            <a href={KEY_HELP[kind]!.url} target="_blank" rel="noreferrer">{KEY_HELP[kind]!.label} ↗</a>
+          </div>
+        )}
       </div>
       <div className="field">
         <label htmlFor="cred-name">Name</label>
-        <input id="cred-name" value={name} placeholder={kind === "http" ? "e.g. Stripe test key" : "e.g. OpenAI"} onChange={(e) => setName(e.target.value)} />
+        <input id="cred-name" value={name} placeholder={KIND_NAMES[kind] ?? "e.g. Stripe test key"} onChange={(e) => setName(e.target.value)} />
       </div>
       {kind === "http" && (
         <>

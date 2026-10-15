@@ -71,7 +71,9 @@ export function useKnowledge(): KnowledgeState {
       .then(([b, c, f]) => {
         if (cancelled) return;
         setBases(b.items);
-        setCredentials(c.items.filter((x) => x.provider === "openai" && x.credential_type === "api_key"));
+        // Keys that can embed (Phase G): Gemini (free) first, then OpenAI.
+        const embeds = (x: Credential) => (x.provider === "gemini" || x.provider === "openai") && x.credential_type === "api_key";
+        setCredentials(c.items.filter(embeds).sort((a, b) => Number(a.provider !== "gemini") - Number(b.provider !== "gemini")));
         setFiles(f.items);
       })
       .catch((e) => !cancelled && setError(e))

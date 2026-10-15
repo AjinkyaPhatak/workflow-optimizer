@@ -142,6 +142,7 @@ func newEnv(t *testing.T) *env {
 		WorkerCount: 2, WorkerShutdownTimeout: 5 * time.Second, Reliability: rel,
 		CredentialEncryptionKey: base64.StdEncoding.EncodeToString(key),
 		OpenAIBaseURL:           m.srv.URL + "/v1",
+		GeminiBaseURL:           m.srv.URL + "/v1", // Phase G: templates use Gemini
 		APIAddr:                 "127.0.0.1:0",
 		AuthTokenSecret:         base64.StdEncoding.EncodeToString(secret),
 		AuthTokenTTL:            time.Hour,
@@ -245,8 +246,8 @@ func TestTemplateVariablesStructuredOutputAndVersions(t *testing.T) {
 		"email": "b-" + uuid.NewString()[:8] + "@example.test", "name": "B", "password": "password-b"}), 201)
 	tok := reg["access_token"].(string)
 	ws := reg["workspace"].(map[string]any)["id"].(string)
-	cred := e.must(e.call(tok, "POST", "/api/v1/credentials", map[string]any{"workspace_id": ws, "name": "OpenAI",
-		"provider": "openai", "credential_type": "api_key", "secret": "sk-phaseb-secret"}), 201)["id"].(string)
+	cred := e.must(e.call(tok, "POST", "/api/v1/credentials", map[string]any{"workspace_id": ws, "name": "Gemini",
+		"provider": "gemini", "credential_type": "api_key", "secret": "sk-phaseb-secret"}), 201)["id"].(string)
 	project := e.must(e.call(tok, "POST", "/api/v1/projects", map[string]any{"workspace_id": ws, "name": "P"}), 201)["id"].(string)
 
 	// --- the node catalog carries options metadata -------------------------

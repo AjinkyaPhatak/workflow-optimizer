@@ -21,16 +21,18 @@ const embedBatch = 96
 
 // Service indexes and searches knowledge bases.
 type Service struct {
-	repo     Repository
-	files    files.Reader
-	creds    credential.Resolver
-	embedder llm.Embedder
-	now      func() time.Time
+	repo  Repository
+	files files.Reader
+	creds credential.Resolver
+	// embedders by provider name ("gemini", "openai").
+	embedders map[string]llm.Embedder
+	now       func() time.Time
 }
 
-// NewService wires the service. files may be nil (no file documents).
-func NewService(repo Repository, filesReader files.Reader, creds credential.Resolver, embedder llm.Embedder) *Service {
-	return &Service{repo: repo, files: filesReader, creds: creds, embedder: embedder, now: time.Now}
+// NewService wires the service. files may be nil (no file documents);
+// embedders maps provider names to their embedding clients.
+func NewService(repo Repository, filesReader files.Reader, creds credential.Resolver, embedders map[string]llm.Embedder) *Service {
+	return &Service{repo: repo, files: filesReader, creds: creds, embedders: embedders, now: time.Now}
 }
 
 // Repository is the underlying store.
@@ -40,8 +42,9 @@ func invalid(format string, args ...any) error {
 	return fmt.Errorf("%w: %s", ErrInvalid, fmt.Sprintf(format, args...))
 }
 
-// CreateBase validates and stores a base. The credential must be an OpenAI
-// API key of the workspace (it is resolved once to check, then dropped).
+// CreateBase validates and stores a base. The credential must be a Gemini
+// or OpenAI API key of the workspace (it is resolved once to check, then
+// dropped); its provider decides the embedding model.
 func (s *Service) CreateBase(ctx context.Context, workspaceID uuid.UUID, name, description string, credentialID uuid.UUID) (Base, error) {
 	name, description = strings.TrimSpace(name), strings.TrimSpace(description)
 	if name == "" || utf8.RuneCountInString(name) > MaxNameLength {
@@ -50,43 +53,66 @@ func (s *Service) CreateBase(ctx context.Context, workspaceID uuid.UUID, name, d
 	if utf8.RuneCountInString(description) > 1000 {
 		return Base{}, invalid("the description is too long")
 	}
-	if _, err := s.credential(ctx, workspaceID, credentialID); err != nil {
-		return Base{}, err
+	var (
+		spec    EmbeddingSpec
+		lastErr error
+	)
+	for _, candidate := range EmbeddingSpecs {
+		if s.embedders[candidate.Provider] == nil {
+			continue
+		}
+		_, err := s.credential(ctx, workspaceID, credentialID, candidate)
+		if err == nil {
+			spec, lastErr = candidate, nil
+			break
+		}
+		lastErr = err
+		if !errors.Is(err, credential.ErrProviderMismatch) {
+			break
+		}
+	}
+	if spec.Model == "" {
+		if lastErr == nil {
+			return Base{}, invalid("embeddings are not available")
+		}
+		return Base{}, lastErr
 	}
 	return s.repo.CreateBase(ctx, Base{ID: uuid.New(), WorkspaceID: workspaceID, Name: name, Description: description,
-		CredentialID: credentialID, Model: DefaultModel, Dimensions: DefaultDimensions})
+		CredentialID: credentialID, Model: spec.Model, Dimensions: spec.Dimensions})
 }
 
-func (s *Service) credential(ctx context.Context, workspaceID, id uuid.UUID) (credential.ResolvedCredential, error) {
+func (s *Service) credential(ctx context.Context, workspaceID, id uuid.UUID, spec EmbeddingSpec) (credential.ResolvedCredential, error) {
 	if s.creds == nil {
 		return credential.ResolvedCredential{}, invalid("credentials are not available")
 	}
-	c, err := s.creds.Resolve(ctx, workspaceID, id, EmbeddingProvider)
+	c, err := s.creds.Resolve(ctx, workspaceID, id, spec.Provider)
 	if err != nil {
 		if credential.IsCredentialError(err) {
-			return credential.ResolvedCredential{}, fmt.Errorf("%w: choose an OpenAI API key credential of this workspace (%w)", ErrInvalid, err)
+			return credential.ResolvedCredential{}, fmt.Errorf("%w: choose a Gemini or OpenAI API key of this workspace (%w)", ErrInvalid, err)
 		}
 		return credential.ResolvedCredential{}, err
 	}
 	if c.Type != credential.TypeAPIKey {
-		return credential.ResolvedCredential{}, invalid("the credential must be an OpenAI API key")
+		return credential.ResolvedCredential{}, invalid("the credential must be a Gemini or OpenAI API key")
 	}
 	return c, nil
 }
 
 // embed turns texts into unit vectors with the base's credential.
 func (s *Service) embed(ctx context.Context, b Base, texts []string) ([][]float32, error) {
-	if s.embedder == nil {
+	spec, ok := SpecForModel(b.Model)
+	embedder := s.embedders[spec.Provider]
+	if !ok || embedder == nil {
 		return nil, invalid("embeddings are not available")
 	}
-	cred, err := s.credential(ctx, b.WorkspaceID, b.CredentialID)
+	cred, err := s.credential(ctx, b.WorkspaceID, b.CredentialID, spec)
 	if err != nil {
 		return nil, err
 	}
 	out := make([][]float32, 0, len(texts))
 	for start := 0; start < len(texts); start += embedBatch {
 		end := min(start+embedBatch, len(texts))
-		resp, err := s.embedder.Embed(ctx, llm.EmbedRequest{Model: b.Model, Dimensions: b.Dimensions, Inputs: texts[start:end], Credential: cred})
+		resp, err := embedder.Embed(ctx, llm.EmbedRequest{Model: b.Model, Dimensions: b.Dimensions, Inputs: texts[start:end], Credential: cred})
 		if err != nil {
 			return nil, err
 		}

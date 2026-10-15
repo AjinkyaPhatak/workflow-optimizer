@@ -21,7 +21,10 @@ export function kindOf(contentType: string): string {
 }
 
 export const MAX_UPLOAD = 20 * 1024 * 1024;
+/** Documents (text can be read from them). */
 export const ACCEPT = ".pdf,.docx,.txt,.md,.csv,.tsv,.json,.html,.htm,.xml,.png,.jpg,.jpeg,.gif,.webp";
+/** Everything the Files page takes: documents, images and recordings (Phase G). */
+export const FILES_ACCEPT = `${ACCEPT},.mp3,.m4a,.wav,.ogg,.oga,.opus,.webm,.flac,.mp4,.mpeg,.mpga`;
 
 /** Files: documents and images workflows read by reference (Extract Text,
  * knowledge bases, images for the LLM node). */
@@ -51,7 +54,7 @@ export function Files({ state, confirm = (m) => window.confirm(m) }: { state: Fi
         )}
       </div>
       <p className="muted">
-        Documents and images your workflows can read: Extract Text, knowledge bases, and images for the LLM node. Up to 20 MB each.
+        Documents, images and recordings your workflows can use: read a document, search your knowledge, show a picture to the AI, or turn a recording into text. Up to 20 MB each.
       </p>
       <ErrorBanner error={s.error} />
       {tooLarge.length > 0 && <div className="notice error" role="alert">Larger than 20 MB, not uploaded: {tooLarge.join(", ")}</div>}
@@ -71,8 +74,8 @@ export function Files({ state, confirm = (m) => window.confirm(m) }: { state: Fi
           <button type="button" className="primary" disabled={s.busy === "upload"} onClick={() => input.current?.click()}>
             {s.busy === "upload" ? "Uploading…" : "Choose files"}
           </button>
-          <input ref={input} type="file" multiple hidden accept={ACCEPT} aria-label="Upload files" onChange={(e) => pick(e.target.files)} />
-          <div className="muted small">PDF, Word, text, Markdown, CSV, JSON, HTML and images (PNG, JPEG, GIF, WebP)</div>
+          <input ref={input} type="file" multiple hidden accept={FILES_ACCEPT} aria-label="Upload files" onChange={(e) => pick(e.target.files)} />
+          <div className="muted small">PDF, Word, text, CSV, images (PNG, JPEG, GIF, WebP) and recordings (MP3, M4A, WAV, OGG, WebM, FLAC, MP4)</div>
         </section>
       )}
       {s.loading ? (

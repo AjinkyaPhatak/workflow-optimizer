@@ -500,6 +500,40 @@ non-https URL fails with `INVALID_INPUT` before any provider call.
 Provider-neutral: `llm.Message.Images`; the OpenAI provider sends text and
 `image_url` content parts.
 
+## Free AI: Gemini and Groq (Phase G)
+
+Nothing has to cost money: two free AI services join OpenAI. Both speak
+the OpenAI format, so one client (`internal/provider/llm/openai`, an
+`openai.Spec` per service) serves all three:
+
+| Provider | Free? | Used for | Key from |
+|---|---|---|---|
+| `gemini` | yes (free tier, rate limited) | LLM node (default: `gemini-2.5-flash`), images, knowledge base embeddings | https://aistudio.google.com/apikey |
+| `groq` | yes (free plan, rate limited) | LLM node (`openai/gpt-oss-120b`...), Transcribe Audio (Whisper) | https://console.groq.com/keys |
+| `openai` | no | LLM node, embeddings, Transcribe Audio | https://platform.openai.com/api-keys |
+
+Keys are workspace credentials (Credentials page; the provider is the
+service name). The LLM node and the templates default to Gemini.
+On the free tiers Google and Groq may use what is sent to improve their
+services, and the limits are a few requests per minute: fine for personal
+workflows, not for private data or heavy use.
+
+**Knowledge bases** embed with the provider of the chosen key: a Gemini key
+uses `gemini-embedding-001` (its 3072 values cut to 768 by the client; the
+model is trained to be shortened, and the dimensions are not sent), an
+OpenAI key `text-embedding-3-small` at 512. A base keeps its model; Groq
+keys cannot embed (400).
+
+**Transcribe Audio** (`transcribe_audio`, multimodal): the text of an
+uploaded recording (MP3, M4A, WAV, OGG, WebM, FLAC, MP4; the Files page now
+takes them, 20 MB each), with Service (Groq, free, or OpenAI), Model,
+Credential, Recording (picker of the workspace's audio files, or a
+connected file ID) and an optional Language hint. Outputs `text` and
+`name`. Use it for meeting recordings: Transcribe Audio, then an LLM to
+summarize.
+
+`GEMINI_BASE_URL` and `GROQ_BASE_URL` override the endpoints (tests).
+
 ## Branching (Phase E1)
 
 The engine runs a node only if at least one of its incoming connections is

@@ -265,3 +265,27 @@ type EmbedResponse struct {
 type Embedder interface {
 	Embed(ctx context.Context, req EmbedRequest) (EmbedResponse, error)
 }
+
+// TranscribeRequest asks for the text of one audio recording (Phase G).
+type TranscribeRequest struct {
+	Model    string
+	Audio    []byte
+	Filename string
+	// Language is an optional ISO-639-1 hint ("en"); empty: detected.
+	Language string
+	// Credential is the resolved credential (runtime only).
+	Credential credential.ResolvedCredential
+}
+
+// TranscribeResponse is the recording's text.
+type TranscribeResponse struct {
+	Text string
+}
+
+// Transcriber is implemented by providers that turn speech into text.
+type Transcriber interface {
+	Transcribe(ctx context.Context, req TranscribeRequest) (TranscribeResponse, error)
+	// TranscriptionModels lists the models offered (empty: the provider
+	// cannot transcribe).
+	TranscriptionModels() []Model
+}

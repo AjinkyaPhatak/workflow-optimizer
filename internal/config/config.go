@@ -62,6 +62,11 @@ type Config struct {
 	// OpenAIBaseURL overrides the OpenAI API endpoint (OPENAI_BASE_URL,
 	// default https://api.openai.com/v1).
 	OpenAIBaseURL string
+	// GeminiBaseURL and GroqBaseURL override the Gemini and Groq API
+	// endpoints (GEMINI_BASE_URL, GROQ_BASE_URL; tests). Their API keys are
+	// workspace credentials too.
+	GeminiBaseURL string
+	GroqBaseURL   string
 
 	// Google OAuth (Phase C3): the OAuth client used to connect Google
 	// accounts for Gmail. All three set, or none (Google is then not
@@ -171,6 +176,8 @@ func LoadFrom(getenv func(string) string) (Config, error) {
 		RedisURL:                getenv("REDIS_URL"),
 		CredentialEncryptionKey: getenv("CREDENTIAL_ENCRYPTION_KEY"),
 		OpenAIBaseURL:           getenv("OPENAI_BASE_URL"),
+		GeminiBaseURL:           getenv("GEMINI_BASE_URL"),
+		GroqBaseURL:             getenv("GROQ_BASE_URL"),
 		GoogleClientID:          strings.TrimSpace(getenv("GOOGLE_CLIENT_ID")),
 		GoogleClientSecret:      strings.TrimSpace(getenv("GOOGLE_CLIENT_SECRET")),
 		GoogleOAuthRedirectURI:  strings.TrimSpace(getenv("GOOGLE_OAUTH_REDIRECT_URI")),

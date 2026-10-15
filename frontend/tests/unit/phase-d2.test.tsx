@@ -27,9 +27,9 @@ function state(over: Partial<KnowledgeState> = {}): KnowledgeState {
 const detail = (items: KnowledgeDocument[]): KnowledgeBaseDetail => ({ ...base(), items });
 
 describe("Knowledge page", () => {
-  it("asks for an OpenAI credential before a base can be created", () => {
+  it("asks for a (free Gemini) key before a base can be created", () => {
     render(<Knowledge state={state()} />);
-    expect(screen.getByTestId("create-base").textContent).toContain("Add an OpenAI API key");
+    expect(screen.getByTestId("create-base").textContent).toContain("Add a free Google Gemini key");
     expect((screen.getByRole("button", { name: "Create" }) as HTMLButtonElement).disabled).toBe(true);
   });
 

@@ -1,6 +1,7 @@
 // Package knowledge is workspace knowledge bases (Phase D2): documents
-// split into chunks, embedded with an OpenAI credential of the workspace,
-// and searched by meaning (retrieval for LLM prompts).
+// split into chunks, embedded with an AI API key of the workspace
+// (Gemini, free, or OpenAI), and searched by meaning (retrieval for LLM
+// prompts).
 //
 //	add:    text (or a file's extracted text) -> chunks -> embeddings -> knowledge_chunks
 //	search: query -> embedding -> cosine similarity over the base's chunks -> top passages
@@ -18,14 +19,33 @@ import (
 	"github.com/google/uuid"
 )
 
-// Embedding defaults: OpenAI text-embedding-3-small shortened to 512
-// dimensions (a quarter of the storage, nearly the same quality).
-const (
-	DefaultModel      = "text-embedding-3-small"
-	DefaultDimensions = 512
-	// EmbeddingProvider is the provider of a knowledge base's credential.
-	EmbeddingProvider = "openai"
-)
+// EmbeddingSpec is how a base of one provider embeds: the model and the
+// stored vector length.
+type EmbeddingSpec struct {
+	Provider   string
+	Model      string
+	Dimensions int
+}
+
+// EmbeddingSpecs are the supported embedding setups, chosen by the
+// provider of the base's credential (Phase G added Gemini, whose free tier
+// covers embeddings). Both models may be shortened: Gemini's 3072-value
+// vectors to 768, OpenAI's to 512 (a fraction of the storage, nearly the
+// same quality). A base keeps the model it was created with.
+var EmbeddingSpecs = []EmbeddingSpec{
+	{Provider: "gemini", Model: "gemini-embedding-001", Dimensions: 768},
+	{Provider: "openai", Model: "text-embedding-3-small", Dimensions: 512},
+}
+
+// SpecForModel is the spec of a base's model.
+func SpecForModel(model string) (EmbeddingSpec, bool) {
+	for _, s := range EmbeddingSpecs {
+		if s.Model == model {
+			return s, true
+		}
+	}
+	return EmbeddingSpec{}, false
+}
 
 // Limits.
 const (

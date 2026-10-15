@@ -54,11 +54,18 @@ func fakeOpenAI(t *testing.T) (*httptest.Server, *atomic.Int64) {
 			Data []item `json:"data"`
 		}{}
 		for i, text := range req.Input {
-			v := make([]float32, req.Dimensions)
+			// Gemini (Phase G) is not sent dimensions and answers with its
+			// full length; the words land in the first 768 values, which
+			// the client keeps.
+			size, used := req.Dimensions, req.Dimensions
+			if size == 0 {
+				size, used = 3072, 768
+			}
+			v := make([]float32, size)
 			for _, word := range strings.FieldsFunc(strings.ToLower(text), func(r rune) bool { return !('a' <= r && r <= 'z') }) {
 				h := fnv.New32a()
 				_, _ = h.Write([]byte(word))
-				v[int(h.Sum32())%req.Dimensions]++
+				v[int(h.Sum32())%used]++
 			}
 			out.Data = append(out.Data, item{Index: i, Embedding: v})
 		}
@@ -66,6 +73,41 @@ func fakeOpenAI(t *testing.T) (*httptest.Server, *atomic.Int64) {
 	}))
 	t.Cleanup(srv.Close)
 	return srv, &calls
+}
+
+// Phase G: a base created with a Gemini key (free tier) embeds with
+// gemini-embedding-001, shortened to 768 values, and searches the same way.
+func TestGeminiKnowledgeBase(t *testing.T) {
+	gemini, _ := fakeOpenAI(t)
+	e := newEnvWith(t, func(c *config.Config) { c.GeminiBaseURL = gemini.URL + "/v1" })
+	ada := e.register("ada")
+	cred := e.must(e.call(ada.token, "POST", "/api/v1/credentials", map[string]any{"workspace_id": ada.workspace, "name": "Gemini",
+		"provider": "gemini", "credential_type": "api_key", "secret": goodKey}), 201)["id"].(string)
+	kb := e.must(e.call(ada.token, "POST", "/api/v1/knowledge-bases", map[string]any{"workspace_id": ada.workspace, "name": "Notes",
+		"credential_id": cred}), 201)
+	if kb["embedding_model"] != "gemini-embedding-001" {
+		t.Fatalf("created: %v", kb)
+	}
+	base := kb["id"].(string)
+	for _, text := range []string{"Refunds are processed within five business days.", "Orders ship from our warehouse in two days."} {
+		e.must(e.call(ada.token, "POST", "/api/v1/knowledge-bases/"+base+"/documents", map[string]any{"text": text}), 202)
+	}
+	for _, d := range e.waitReady(ada.token, base) {
+		if d.(map[string]any)["status"] != "READY" {
+			t.Fatalf("document: %v", d)
+		}
+	}
+	hits := e.must(e.call(ada.token, "POST", "/api/v1/knowledge-bases/"+base+"/search", map[string]any{"query": "when do refunds arrive", "top_k": 1}), 200)["items"].([]any)
+	if len(hits) != 1 || !strings.HasPrefix(hits[0].(map[string]any)["text"].(string), "Refunds") {
+		t.Fatalf("search: %v", hits)
+	}
+	// A Groq key cannot embed: refused with a clear reason.
+	groq := e.must(e.call(ada.token, "POST", "/api/v1/credentials", map[string]any{"workspace_id": ada.workspace, "name": "Groq",
+		"provider": "groq", "credential_type": "api_key", "secret": goodKey}), 201)["id"].(string)
+	if r := e.call(ada.token, "POST", "/api/v1/knowledge-bases", map[string]any{"workspace_id": ada.workspace, "name": "X", "credential_id": groq}); r.status != 400 ||
+		!strings.Contains(string(r.body), "Gemini or OpenAI") {
+		t.Fatalf("groq key: %d %s", r.status, r.body)
+	}
 }
 
 // waitReady polls a base until no document is INDEXING; returns the documents.

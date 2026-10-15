@@ -13,7 +13,7 @@
       { "id": "prompt", "type": "prompt", "name": "Prompt", "position": { "x": 320, "y": 80 },
         "config": { "template": "Summarize the text below for {{audience}}.\n\nText:\n{{input.query}}\n\nRespond with JSON only, in exactly this shape:\n{\"summary\": \"...\", \"sentiment\": \"positive | neutral | negative\", \"action_items\": [\"...\"]}" } },
       { "id": "llm", "type": "llm", "name": "LLM", "position": { "x": 640, "y": 80 },
-        "config": { "provider": "openai", "model": "gpt-5-mini", "temperature": 0 } },
+        "config": { "provider": "gemini", "model": "gemini-2.5-flash", "temperature": 0 } },
       { "id": "structured", "type": "structured_output", "name": "Structured Output", "position": { "x": 960, "y": 80 },
         "config": { "schema": { "summary": "string", "sentiment": "string", "action_items": ["string"] } } },
       { "id": "output", "type": "output", "name": "Output", "position": { "x": 1280, "y": 80 }, "config": {} }

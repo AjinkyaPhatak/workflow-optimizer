@@ -28,10 +28,10 @@ func TestBootstrapRegistersAllV1Nodes(t *testing.T) {
 	// Expect the 11 V1 nodes plus 5 Gmail actions (Phase C3), 3 Google
 	// Sheets and 2 Google Calendar actions (C4), 4 Notion actions (C5) and
 	// 2 Discord actions (C6), Extract Text (D1), the 2 knowledge nodes (D2)
-	// and Switch (E1), and Google Meet's Create Meeting
+	// and Switch (E1), Google Meet's Create Meeting, and Transcribe Audio (G)
 	got := len(a.NodeRegistry.List())
-	if got != 32 {
-		t.Fatalf("expected 32 nodes (11 V1 + 5 Gmail + 3 Sheets + 2 Calendar + 1 Meet + 4 Notion + 2 Discord + 3 knowledge + Switch), got %d", got)
+	if got != 33 {
+		t.Fatalf("expected 33 nodes (11 V1 + 5 Gmail + 3 Sheets + 2 Calendar + 1 Meet + 4 Notion + 2 Discord + 3 knowledge + Switch + Transcribe), got %d", got)
 	}
 	for _, typ := range []string{"gmail.search", "gmail.read", "gmail.create_draft", "gmail.send", "gmail.reply",
 		"google_sheets.read_rows", "google_sheets.append_row", "google_sheets.update_row",
@@ -99,14 +99,15 @@ func TestValidateWithRegistry_NilProvider(t *testing.T) {
 	}
 }
 
-// Phase 11: the provider registry holds OpenAI and is frozen at startup; the
+// Phase 11: the provider registry holds OpenAI (and since Phase G the free
+// Gemini and Groq APIs) and is frozen at startup; the
 // graph executor's package never imports a provider.
 func TestBootstrapProviderRegistry(t *testing.T) {
 	a, err := app.Bootstrap(config.Config{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := a.ProviderRegistry.List(); len(got) != 1 || got[0] != "openai" {
+	if got := a.ProviderRegistry.List(); strings.Join(got, ",") != "gemini,groq,openai" {
 		t.Fatalf("providers = %v", got)
 	}
 	openAI, _ := a.ProviderRegistry.Get("openai")

@@ -30,15 +30,15 @@ function CreateBase({ s }: { s: KnowledgeState }) {
         <input id="kb-desc" value={description} onChange={(e) => setDescription(e.target.value)} />
       </div>
       <div className="field">
-        <label htmlFor="kb-cred">OpenAI credential</label>
+        <label htmlFor="kb-cred">AI key</label>
         {s.credentials.length === 0 ? (
-          <div className="hint">Add an OpenAI API key on the <Link href="/settings/credentials">Credentials</Link> page first.</div>
+          <div className="hint">Add a free Google Gemini key on the <Link href="/settings/credentials">Credentials</Link> page first.</div>
         ) : (
           <select id="kb-cred" value={credential} onChange={(e) => setCredentialId(e.target.value)}>
-            {s.credentials.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            {s.credentials.map((c) => <option key={c.id} value={c.id}>{c.name} ({c.provider === "gemini" ? "Gemini, free" : "OpenAI, paid"})</option>)}
           </select>
         )}
-        <div className="field-help">Used to create the embeddings (OpenAI text-embedding-3-small).</div>
+        <div className="field-help">Used to understand your documents so they can be searched by meaning. A Gemini key is free.</div>
       </div>
       <div className="row">
         <span className="spacer" />

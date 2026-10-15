@@ -32,9 +32,73 @@ const DefaultTimeout = 5 * time.Minute
 // maxResponseBytes caps how much of a response body is read.
 const maxResponseBytes = 8 << 20
 
+// Spec describes one OpenAI-compatible API: OpenAI itself, or another
+// vendor's compatible endpoint (Gemini, Groq). The request and response
+// formats are OpenAI's; only these details differ.
+type Spec struct {
+	// Name is the registry name and the credentials.provider value of the
+	// API keys usable with it.
+	Name  string
+	Label string
+	// BaseURL is the API root (Options.BaseURL overrides it).
+	BaseURL string
+	Models  []llm.Model
+	// MaxTokensField is the request field for the response length limit:
+	// "max_completion_tokens" (OpenAI) or "max_tokens".
+	MaxTokensField string
+	// TruncateEmbeddings: the API does not shorten embeddings itself, so
+	// longer vectors are cut to the requested dimensions here (valid for
+	// models trained to be shortened, such as gemini-embedding-001).
+	TruncateEmbeddings bool
+	// TranscriptionModels are the speech-to-text models offered (none: the
+	// API has no transcription endpoint).
+	TranscriptionModels []llm.Model
+}
+
+// OpenAI is the OpenAI API.
+var OpenAI = Spec{
+	Name: Name, Label: "OpenAI", BaseURL: DefaultBaseURL, MaxTokensField: "max_completion_tokens",
+	Models: []llm.Model{
+		{ID: "gpt-5", Label: "GPT-5"},
+		{ID: "gpt-5-mini", Label: "GPT-5 mini"},
+		{ID: "gpt-5-nano", Label: "GPT-5 nano"},
+		{ID: "gpt-4.1", Label: "GPT-4.1"},
+		{ID: "gpt-4.1-mini", Label: "GPT-4.1 mini"},
+		{ID: "gpt-4o", Label: "GPT-4o"},
+		{ID: "gpt-4o-mini", Label: "GPT-4o mini"},
+	},
+	TranscriptionModels: []llm.Model{{ID: "whisper-1", Label: "Whisper"}, {ID: "gpt-4o-mini-transcribe", Label: "GPT-4o mini transcribe"}},
+}
+
+// Gemini is the Gemini API through its OpenAI-compatible endpoint. Its free
+// tier (an API key from Google AI Studio, no card) covers the Flash models,
+// with low rate limits.
+var Gemini = Spec{
+	Name: "gemini", Label: "Google Gemini (free)", BaseURL: "https://generativelanguage.googleapis.com/v1beta/openai",
+	MaxTokensField: "max_tokens", TruncateEmbeddings: true,
+	Models: []llm.Model{
+		{ID: "gemini-2.5-flash", Label: "Gemini 2.5 Flash (free)"},
+		{ID: "gemini-2.5-flash-lite", Label: "Gemini 2.5 Flash-Lite (free, fastest)"},
+		{ID: "gemini-3-flash-preview", Label: "Gemini 3 Flash preview (free)"},
+		{ID: "gemini-2.5-pro", Label: "Gemini 2.5 Pro (may need billing)"},
+	},
+}
+
+// Groq is the Groq OpenAI-compatible API (free plan with rate limits). It
+// also transcribes audio with Whisper.
+var Groq = Spec{
+	Name: "groq", Label: "Groq (free)", BaseURL: "https://api.groq.com/openai/v1", MaxTokensField: "max_completion_tokens",
+	Models: []llm.Model{
+		{ID: "openai/gpt-oss-120b", Label: "GPT-OSS 120B (free)"},
+		{ID: "openai/gpt-oss-20b", Label: "GPT-OSS 20B (free, fastest)"},
+		{ID: "meta-llama/llama-4-scout-17b-16e-instruct", Label: "Llama 4 Scout (free, reads images)"},
+	},
+	TranscriptionModels: []llm.Model{{ID: "whisper-large-v3-turbo", Label: "Whisper large v3 turbo (free)"}, {ID: "whisper-large-v3", Label: "Whisper large v3 (free)"}},
+}
+
 // Options configures the provider.
 type Options struct {
-	// BaseURL defaults to DefaultBaseURL (tests point it at a mock server).
+	// BaseURL defaults to the spec's (tests point it at a mock server).
 	BaseURL string
 	// HTTPClient is shared by every request; nil builds one with
 	// DefaultTimeout and the default (TLS-verifying) transport.
@@ -46,6 +110,8 @@ type Options struct {
 // reuses one http.Client, and is safe for concurrent use: it holds no
 // per-request state.
 type Provider struct {
+	spec    Spec
+	name    string
 	baseURL string
 	client  *http.Client
 }
@@ -58,31 +124,32 @@ var (
 // Describe implements llm.Describer: the models offered in configuration
 // UIs. Other model IDs can still be configured and are sent as given.
 func (p *Provider) Describe() llm.Info {
-	return llm.Info{Name: Name, Label: "OpenAI", Models: []llm.Model{
-		{ID: "gpt-5", Label: "GPT-5"},
-		{ID: "gpt-5-mini", Label: "GPT-5 mini"},
-		{ID: "gpt-5-nano", Label: "GPT-5 nano"},
-		{ID: "gpt-4.1", Label: "GPT-4.1"},
-		{ID: "gpt-4.1-mini", Label: "GPT-4.1 mini"},
-		{ID: "gpt-4o", Label: "GPT-4o"},
-		{ID: "gpt-4o-mini", Label: "GPT-4o mini"},
-	}}
+	return llm.Info{Name: p.name, Label: p.spec.Label, Models: append([]llm.Model(nil), p.spec.Models...)}
 }
 
-// New builds the provider.
-func New(opts Options) (*Provider, error) {
+// Name returns the provider's registry name.
+func (p *Provider) Name() string { return p.name }
+
+// New builds the OpenAI provider.
+func New(opts Options) (*Provider, error) { return NewCompatible(OpenAI, opts) }
+
+// NewCompatible builds a provider for an OpenAI-compatible API.
+func NewCompatible(spec Spec, opts Options) (*Provider, error) {
+	if spec.Name == "" {
+		return nil, fmt.Errorf("%w: an OpenAI-compatible provider needs a name", llm.ErrInvalidProvider)
+	}
 	base := strings.TrimRight(strings.TrimSpace(opts.BaseURL), "/")
 	if base == "" {
-		base = DefaultBaseURL
+		base = spec.BaseURL
 	}
 	if !strings.HasPrefix(base, "https://") && !strings.HasPrefix(base, "http://") {
-		return nil, fmt.Errorf("%w: openai base URL must be http(s), got %q", llm.ErrInvalidProvider, base)
+		return nil, fmt.Errorf("%w: %s base URL must be http(s), got %q", llm.ErrInvalidProvider, spec.Name, base)
 	}
 	client := opts.HTTPClient
 	if client == nil {
 		client = &http.Client{Timeout: DefaultTimeout}
 	}
-	return &Provider{baseURL: base, client: client}, nil
+	return &Provider{spec: spec, name: spec.Name, baseURL: base, client: client}, nil
 }
 
 // chatMessage content is text, or for messages with images a list of
@@ -124,6 +191,7 @@ type chatRequest struct {
 	Messages            []chatMessage `json:"messages"`
 	Temperature         *float64      `json:"temperature,omitempty"`
 	MaxCompletionTokens *int          `json:"max_completion_tokens,omitempty"`
+	MaxTokens           *int          `json:"max_tokens,omitempty"`
 }
 
 type chatResponse struct {
@@ -155,19 +223,19 @@ func (p *Provider) Generate(ctx context.Context, req llm.Request) (llm.Response,
 		return llm.Response{}, err
 	}
 	cred := req.Credential
-	if cred.Provider != Name || cred.Type != credential.TypeAPIKey || cred.Secret.Empty() {
-		return llm.Response{}, fmt.Errorf("%w: openai requires an %s credential for provider %q", credential.ErrInvalid, credential.TypeAPIKey, Name)
+	if err := p.checkCredential(cred); err != nil {
+		return llm.Response{}, err
 	}
 	if strings.TrimSpace(req.Model) == "" {
-		return llm.Response{}, &llm.Error{Provider: Name, Code: llm.CodeInvalidRequest, Message: "model is required"}
+		return llm.Response{}, &llm.Error{Provider: p.name, Code: llm.CodeInvalidRequest, Message: "model is required"}
 	}
-	body, err := json.Marshal(toChatRequest(req))
+	body, err := json.Marshal(p.toChatRequest(req))
 	if err != nil {
-		return llm.Response{}, &llm.Error{Provider: Name, Code: llm.CodeInvalidRequest, Message: "request could not be encoded"}
+		return llm.Response{}, &llm.Error{Provider: p.name, Code: llm.CodeInvalidRequest, Message: "request could not be encoded"}
 	}
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, p.baseURL+"/chat/completions", bytes.NewReader(body))
 	if err != nil {
-		return llm.Response{}, &llm.Error{Provider: Name, Code: llm.CodeInvalidRequest, Message: "request could not be built"}
+		return llm.Response{}, &llm.Error{Provider: p.name, Code: llm.CodeInvalidRequest, Message: "request could not be built"}
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Accept", "application/json")
@@ -175,19 +243,19 @@ func (p *Provider) Generate(ctx context.Context, req llm.Request) (llm.Response,
 
 	resp, err := p.client.Do(httpReq)
 	if err != nil {
-		return llm.Response{}, transportError(ctx, err)
+		return llm.Response{}, p.transportError(ctx, err)
 	}
 	defer resp.Body.Close()
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
 	if err != nil {
-		return llm.Response{}, transportError(ctx, err)
+		return llm.Response{}, p.transportError(ctx, err)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		return llm.Response{}, statusError(resp, raw)
+		return llm.Response{}, p.statusError(resp, raw)
 	}
 	var parsed chatResponse
 	if err := json.Unmarshal(raw, &parsed); err != nil || len(parsed.Choices) == 0 || parsed.Choices[0].Message.Content == nil {
-		return llm.Response{}, &llm.Error{Provider: Name, Code: llm.CodeInvalidResponse, StatusCode: resp.StatusCode,
+		return llm.Response{}, &llm.Error{Provider: p.name, Code: llm.CodeInvalidResponse, StatusCode: resp.StatusCode,
 			Retryable: true, Message: "response is not a chat completion with content"}
 	}
 	out := llm.Response{
@@ -204,7 +272,15 @@ func (p *Provider) Generate(ctx context.Context, req llm.Request) (llm.Response,
 	return out, nil
 }
 
-func toChatRequest(req llm.Request) chatRequest {
+// checkCredential accepts only an API key of this provider.
+func (p *Provider) checkCredential(cred credential.ResolvedCredential) error {
+	if cred.Provider != p.name || cred.Type != credential.TypeAPIKey || cred.Secret.Empty() {
+		return fmt.Errorf("%w: %s requires an %s credential for provider %q", credential.ErrInvalid, p.name, credential.TypeAPIKey, p.name)
+	}
+	return nil
+}
+
+func (p *Provider) toChatRequest(req llm.Request) chatRequest {
 	msgs := make([]chatMessage, 0, len(req.Messages)+1)
 	if req.System != "" {
 		msgs = append(msgs, chatMessage{Role: string(llm.RoleSystem), Content: req.System})
@@ -212,31 +288,37 @@ func toChatRequest(req llm.Request) chatRequest {
 	for _, m := range req.Messages {
 		msgs = append(msgs, chatMessage{Role: string(m.Role), Content: content(m)})
 	}
-	return chatRequest{Model: req.Model, Messages: msgs, Temperature: req.Temperature, MaxCompletionTokens: req.MaxTokens}
+	out := chatRequest{Model: req.Model, Messages: msgs, Temperature: req.Temperature}
+	if p.spec.MaxTokensField == "max_tokens" {
+		out.MaxTokens = req.MaxTokens
+	} else {
+		out.MaxCompletionTokens = req.MaxTokens
+	}
+	return out
 }
 
 // transportError classifies a failure to complete the exchange. The caller's
 // own cancellation or deadline is returned as is, so the engine sees it as
 // cancellation / the execution deadline / the node timeout, not as a
 // provider fault.
-func transportError(ctx context.Context, err error) error {
+func (p *Provider) transportError(ctx context.Context, err error) error {
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		return ctxErr
 	}
 	var netErr net.Error
 	if errors.As(err, &netErr) && netErr.Timeout() {
-		return &llm.Error{Provider: Name, Code: llm.CodeTimeout, Retryable: true, Message: "request timed out"}
+		return &llm.Error{Provider: p.name, Code: llm.CodeTimeout, Retryable: true, Message: "request timed out"}
 	}
 	// Network failures (connection refused, reset, DNS). The *url.Error
 	// carries only the URL, never headers.
-	return &llm.Error{Provider: Name, Code: llm.CodeUnavailable, Retryable: true, Message: "provider could not be reached", Err: err}
+	return &llm.Error{Provider: p.name, Code: llm.CodeUnavailable, Retryable: true, Message: "provider could not be reached", Err: err}
 }
 
 // statusError maps an unsuccessful HTTP response to a platform error. Only
 // OpenAI's machine-readable error type/code are kept: the human-readable
 // message can echo request data (an invalid key is partially echoed), so it
 // is never read into the error.
-func statusError(resp *http.Response, raw []byte) error {
+func (p *Provider) statusError(resp *http.Response, raw []byte) error {
 	var eb errorBody
 	_ = json.Unmarshal(raw, &eb)
 	code := sanitize(fmt.Sprint(eb.Error.Code))
@@ -246,7 +328,7 @@ func statusError(resp *http.Response, raw []byte) error {
 	kind := sanitize(eb.Error.Type)
 	detail := strings.Trim(strings.Join([]string{kind, code}, " "), " ")
 
-	e := &llm.Error{Provider: Name, StatusCode: resp.StatusCode, Message: detail}
+	e := &llm.Error{Provider: p.name, StatusCode: resp.StatusCode, Message: detail}
 	status := resp.StatusCode
 	modelProblem := code == "model_not_found" || code == "unsupported_model" || eb.Error.Param == "model"
 	switch {
