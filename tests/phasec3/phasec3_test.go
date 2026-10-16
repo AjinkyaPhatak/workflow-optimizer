@@ -286,7 +286,8 @@ func TestGoogleIsOfferedOnlyWhenConfigured(t *testing.T) {
 		q.Get("access_type") != "offline" || q.Get("code_challenge_method") != "S256" ||
 		q.Get("scope") != "openid email https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.compose "+
 			"https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/calendar.events "+
-			"https://www.googleapis.com/auth/meetings.space.created" { // C4 added spreadsheets and calendar.events, Meet the last
+			"https://www.googleapis.com/auth/meetings.space.created https://www.googleapis.com/auth/documents "+
+			"https://www.googleapis.com/auth/forms.body.readonly https://www.googleapis.com/auth/forms.responses.readonly" { // C4 added spreadsheets and calendar.events, then Meet, Docs and Forms
 		t.Fatalf("authorization URL: %s", authURL)
 	}
 	on.mu.Lock()

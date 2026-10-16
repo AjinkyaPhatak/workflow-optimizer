@@ -86,6 +86,14 @@ type Config struct {
 	// and registered exactly so in the Notion integration (NOTION_OAUTH_REDIRECT_URI).
 	NotionOAuthRedirectURI string
 
+	// Airtable OAuth (Phase J): the OAuth integration used to connect
+	// Airtable accounts. All three set, or none (Airtable is then not offered).
+	AirtableClientID     string // AIRTABLE_CLIENT_ID
+	AirtableClientSecret string // AIRTABLE_CLIENT_SECRET
+	// AirtableOAuthRedirectURI must be <frontend origin>/api/v1/oauth/callback/airtable
+	// (AIRTABLE_OAUTH_REDIRECT_URI).
+	AirtableOAuthRedirectURI string
+
 	// Discord (Phase C6): the application whose bot users add to their
 	// servers. All four set, or none (Discord is then not offered). The bot
 	// token authenticates every Discord call; it is never sent to clients.
@@ -172,31 +180,34 @@ func Load() (Config, error) {
 // LoadFrom reads configuration through getenv (used by Load and by tests).
 func LoadFrom(getenv func(string) string) (Config, error) {
 	cfg := Config{
-		DatabaseURL:             getenv("DATABASE_URL"),
-		RedisURL:                getenv("REDIS_URL"),
-		CredentialEncryptionKey: getenv("CREDENTIAL_ENCRYPTION_KEY"),
-		OpenAIBaseURL:           getenv("OPENAI_BASE_URL"),
-		GeminiBaseURL:           getenv("GEMINI_BASE_URL"),
-		GroqBaseURL:             getenv("GROQ_BASE_URL"),
-		GoogleClientID:          strings.TrimSpace(getenv("GOOGLE_CLIENT_ID")),
-		GoogleClientSecret:      strings.TrimSpace(getenv("GOOGLE_CLIENT_SECRET")),
-		GoogleOAuthRedirectURI:  strings.TrimSpace(getenv("GOOGLE_OAUTH_REDIRECT_URI")),
-		NotionClientID:          strings.TrimSpace(getenv("NOTION_CLIENT_ID")),
-		NotionClientSecret:      strings.TrimSpace(getenv("NOTION_CLIENT_SECRET")),
-		NotionOAuthRedirectURI:  strings.TrimSpace(getenv("NOTION_OAUTH_REDIRECT_URI")),
-		DiscordClientID:         strings.TrimSpace(getenv("DISCORD_CLIENT_ID")),
-		DiscordClientSecret:     strings.TrimSpace(getenv("DISCORD_CLIENT_SECRET")),
-		DiscordOAuthRedirectURI: strings.TrimSpace(getenv("DISCORD_OAUTH_REDIRECT_URI")),
-		DiscordBotToken:         strings.TrimSpace(getenv("DISCORD_BOT_TOKEN")),
-		RedisQueueName:          DefaultRedisQueueName,
-		WorkerCount:             DefaultWorkerCount,
-		WorkerShutdownTimeout:   DefaultWorkerShutdownTimeout,
-		Reliability:             DefaultReliability(),
-		APIAddr:                 DefaultAPIAddr,
-		AuthTokenSecret:         getenv("AUTH_TOKEN_SECRET"),
-		AuthTokenTTL:            DefaultAuthTokenTTL,
-		ModelPricing:            getenv("MODEL_PRICING"),
-		ExposeNodeData:          true,
+		DatabaseURL:              getenv("DATABASE_URL"),
+		RedisURL:                 getenv("REDIS_URL"),
+		CredentialEncryptionKey:  getenv("CREDENTIAL_ENCRYPTION_KEY"),
+		OpenAIBaseURL:            getenv("OPENAI_BASE_URL"),
+		GeminiBaseURL:            getenv("GEMINI_BASE_URL"),
+		GroqBaseURL:              getenv("GROQ_BASE_URL"),
+		GoogleClientID:           strings.TrimSpace(getenv("GOOGLE_CLIENT_ID")),
+		GoogleClientSecret:       strings.TrimSpace(getenv("GOOGLE_CLIENT_SECRET")),
+		GoogleOAuthRedirectURI:   strings.TrimSpace(getenv("GOOGLE_OAUTH_REDIRECT_URI")),
+		NotionClientID:           strings.TrimSpace(getenv("NOTION_CLIENT_ID")),
+		NotionClientSecret:       strings.TrimSpace(getenv("NOTION_CLIENT_SECRET")),
+		NotionOAuthRedirectURI:   strings.TrimSpace(getenv("NOTION_OAUTH_REDIRECT_URI")),
+		AirtableClientID:         strings.TrimSpace(getenv("AIRTABLE_CLIENT_ID")),
+		AirtableClientSecret:     strings.TrimSpace(getenv("AIRTABLE_CLIENT_SECRET")),
+		AirtableOAuthRedirectURI: strings.TrimSpace(getenv("AIRTABLE_OAUTH_REDIRECT_URI")),
+		DiscordClientID:          strings.TrimSpace(getenv("DISCORD_CLIENT_ID")),
+		DiscordClientSecret:      strings.TrimSpace(getenv("DISCORD_CLIENT_SECRET")),
+		DiscordOAuthRedirectURI:  strings.TrimSpace(getenv("DISCORD_OAUTH_REDIRECT_URI")),
+		DiscordBotToken:          strings.TrimSpace(getenv("DISCORD_BOT_TOKEN")),
+		RedisQueueName:           DefaultRedisQueueName,
+		WorkerCount:              DefaultWorkerCount,
+		WorkerShutdownTimeout:    DefaultWorkerShutdownTimeout,
+		Reliability:              DefaultReliability(),
+		APIAddr:                  DefaultAPIAddr,
+		AuthTokenSecret:          getenv("AUTH_TOKEN_SECRET"),
+		AuthTokenTTL:             DefaultAuthTokenTTL,
+		ModelPricing:             getenv("MODEL_PRICING"),
+		ExposeNodeData:           true,
 	}
 	var problems []string
 	readInt := func(key string, dst *int) {
@@ -300,6 +311,13 @@ func (c Config) NotionOAuthConfigured() bool {
 	return c.NotionClientID != "" && c.NotionClientSecret != "" && c.NotionOAuthRedirectURI != ""
 }
 
+// AirtableOAuthConfigured reports whether the Airtable OAuth client is
+// configured (all of AIRTABLE_CLIENT_ID, AIRTABLE_CLIENT_SECRET and
+// AIRTABLE_OAUTH_REDIRECT_URI).
+func (c Config) AirtableOAuthConfigured() bool {
+	return c.AirtableClientID != "" && c.AirtableClientSecret != "" && c.AirtableOAuthRedirectURI != ""
+}
+
 // DiscordConfigured reports whether Discord is configured (all of
 // DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET, DISCORD_OAUTH_REDIRECT_URI and
 // DISCORD_BOT_TOKEN).
@@ -342,6 +360,7 @@ func oauthClientProblems(prefix, provider, id, secret, redirect string) []string
 func (c Config) oauthProblems() []string {
 	p := append(oauthClientProblems("GOOGLE", "google", c.GoogleClientID, c.GoogleClientSecret, c.GoogleOAuthRedirectURI),
 		oauthClientProblems("NOTION", "notion", c.NotionClientID, c.NotionClientSecret, c.NotionOAuthRedirectURI)...)
+	p = append(p, oauthClientProblems("AIRTABLE", "airtable", c.AirtableClientID, c.AirtableClientSecret, c.AirtableOAuthRedirectURI)...)
 	return append(p, c.discordProblems()...)
 }
 

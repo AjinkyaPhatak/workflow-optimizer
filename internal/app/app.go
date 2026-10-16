@@ -10,8 +10,11 @@ import (
 	"workflow-optimizer/internal/credential"
 	"workflow-optimizer/internal/files"
 	"workflow-optimizer/internal/integration"
+	"workflow-optimizer/internal/integration/airtable"
 	"workflow-optimizer/internal/integration/calendar"
 	"workflow-optimizer/internal/integration/discord"
+	"workflow-optimizer/internal/integration/docs"
+	"workflow-optimizer/internal/integration/forms"
 	"workflow-optimizer/internal/integration/gmail"
 	"workflow-optimizer/internal/integration/meet"
 	"workflow-optimizer/internal/integration/notion"
@@ -71,6 +74,9 @@ type Dependencies struct {
 	Sheets   sheets.Options
 	Calendar calendar.Options
 	Meet     meet.Options
+	Docs     docs.Options
+	Forms    forms.Options
+	Airtable airtable.Options
 	// HTTPTransport replaces the HTTP request node's transport (tests; nil:
 	// the private-network-blocking default).
 	HTTPTransport http.RoundTripper
@@ -177,9 +183,9 @@ func BootstrapWith(cfg config.Config, deps Dependencies) (*Application, error) {
 	}
 
 	// 5. Install integrations: their actions are ordinary nodes. Gmail
-	// (Phase C3), Google Sheets and Google Calendar (C4) and Google Meet are part of the
+	// (Phase C3), Google Sheets and Google Calendar (C4), Google Meet, Google Docs and Google Forms (J) are part of the
 	// production catalog; they use Google connected accounts, offered only
-	// when Google OAuth is configured. Notion (C5) and Discord (C6) likewise
+	// when Google OAuth is configured. Notion (C5), Discord (C6) and Airtable (J) likewise
 	// use their connected accounts.
 	integrationReg := integration.NewRegistry()
 	gmailModule, err := gmail.Module(deps.Credentials, deps.Gmail)
@@ -198,6 +204,18 @@ func BootstrapWith(cfg config.Config, deps Dependencies) (*Application, error) {
 	if err != nil {
 		return nil, fmt.Errorf("bootstrap google meet: %w", err)
 	}
+	docsModule, err := docs.Module(deps.Credentials, deps.Docs)
+	if err != nil {
+		return nil, fmt.Errorf("bootstrap google docs: %w", err)
+	}
+	formsModule, err := forms.Module(deps.Credentials, deps.Forms)
+	if err != nil {
+		return nil, fmt.Errorf("bootstrap google forms: %w", err)
+	}
+	airtableModule, err := airtable.Module(deps.Credentials, deps.Airtable)
+	if err != nil {
+		return nil, fmt.Errorf("bootstrap airtable: %w", err)
+	}
 	notionModule, err := notion.Module(deps.Credentials, deps.Notion)
 	if err != nil {
 		return nil, fmt.Errorf("bootstrap notion: %w", err)
@@ -209,7 +227,7 @@ func BootstrapWith(cfg config.Config, deps Dependencies) (*Application, error) {
 	if err != nil {
 		return nil, fmt.Errorf("bootstrap discord: %w", err)
 	}
-	for _, m := range append([]integration.Module{gmailModule, sheetsModule, calendarModule, meetModule, notionModule, discordModule}, deps.Integrations...) {
+	for _, m := range append([]integration.Module{gmailModule, sheetsModule, calendarModule, meetModule, docsModule, formsModule, airtableModule, notionModule, discordModule}, deps.Integrations...) {
 		if err := integration.Install(integrationReg, nodeReg, m); err != nil {
 			return nil, fmt.Errorf("bootstrap install integration %q: %w", m.Integration.ID, err)
 		}

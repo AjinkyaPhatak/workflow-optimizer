@@ -92,7 +92,8 @@ func TestAuthorizationURLRequestsMinimalScopesAndOfflineAccess(t *testing.T) {
 		"client_id": "id.apps.googleusercontent.com", "redirect_uri": redirect, "response_type": "code", "state": "st",
 		"code_challenge": "ch", "code_challenge_method": "S256", "access_type": "offline", "prompt": "consent",
 		"scope": "openid email https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.compose " +
-			"https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/meetings.space.created",
+			"https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/meetings.space.created " +
+			"https://www.googleapis.com/auth/documents https://www.googleapis.com/auth/forms.body.readonly https://www.googleapis.com/auth/forms.responses.readonly",
 	}
 	for k, v := range want {
 		if q.Get(k) != v {
@@ -122,7 +123,7 @@ func TestExchangeIdentifiesTheAccountBySub(t *testing.T) {
 		t.Fatalf("identity: %+v", id)
 	}
 	if !s.ValidAccessToken(tok.AccessToken.Reveal()) || !strings.HasPrefix(tok.RefreshToken.Reveal(), gmailtest.RefreshPrefix) ||
-		tok.TokenType != "Bearer" || time.Until(tok.Expiry) < 59*time.Minute || len(tok.Scopes) != 7 {
+		tok.TokenType != "Bearer" || time.Until(tok.Expiry) < 59*time.Minute || len(tok.Scopes) != len(google.Scopes) {
 		t.Fatalf("token: %+v", tok)
 	}
 	if s.Count("token:authorization_code") != 1 || s.Count("userinfo") != 1 {
@@ -173,7 +174,8 @@ func TestExchangeFailures(t *testing.T) {
 		s.GrantedScopes = []string{"openid", "https://www.googleapis.com/auth/userinfo.email",
 			"https://www.googleapis.com/auth/gmail.readonly", "https://www.googleapis.com/auth/gmail.compose",
 			"https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/calendar.events",
-			"https://www.googleapis.com/auth/meetings.space.created"}
+			"https://www.googleapis.com/auth/meetings.space.created", "https://www.googleapis.com/auth/documents",
+			"https://www.googleapis.com/auth/forms.body.readonly", "https://www.googleapis.com/auth/forms.responses.readonly"}
 		if _, _, err := connect(t, s, p); err != nil {
 			t.Fatal(err)
 		}

@@ -12,7 +12,7 @@ export const PALETTE_TABS: { id: PaletteTab; label: string; hint: string }[] = [
   { id: "basics", label: "Basics", hint: "Inputs, outputs and text" },
   { id: "ai", label: "AI", hint: "Ask an AI to write, summarize or decide" },
   { id: "knowledge", label: "Knowledge", hint: "Your documents and files" },
-  { id: "apps", label: "Apps", hint: "Gmail, Sheets, Notion, Discord and more" },
+  { id: "apps", label: "Apps", hint: "Gmail, Docs, Sheets, Forms, Airtable, Notion, Discord and more" },
   { id: "media", label: "Media", hint: "Recordings and other media" },
   { id: "logic", label: "Logic", hint: "Branches, conditions and data shaping" },
 ];
@@ -39,13 +39,11 @@ export type Tile =
 
 /** Apps shown as "Coming soon" until they exist in the catalog. */
 export const COMING_SOON: { id: string; name: string }[] = [
-  { id: "google_docs", name: "Google Docs" },
-  { id: "google_forms", name: "Google Forms" },
-  { id: "airtable", name: "Airtable" },
   { id: "google_drive", name: "Google Drive" },
   { id: "slack", name: "Slack" },
   { id: "whatsapp", name: "WhatsApp" },
   { id: "telegram", name: "Telegram" },
+  { id: "trello", name: "Trello" },
 ];
 
 /** A tile's name: an app action's name ("Send Email"), else the step's

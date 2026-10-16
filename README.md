@@ -275,6 +275,78 @@ enable the **Google Meet REST API**, add the scope to Data Access, and
 reconnect the Google account; an account connected earlier fails Create
 Meeting with `PERMISSION_DENIED` asking to reconnect.
 
+## Google Docs and Google Forms (Phase J)
+
+Both use the same Google connected account.
+
+| Node | Side effects | Outputs |
+|---|---|---|
+| `google_docs.read_document` | none | `text`, `title`, `document_id`, `link` |
+| `google_docs.create_document` | unsafe | `document_id`, `link`, `title` |
+| `google_docs.append_text` (Add Text) | unsafe | `document_id`, `link` |
+| `google_forms.read_responses` | none | `responses` [{`<question>`: answer, `submitted_at`, `email`, `response_id`}], `count`, `latest` {}, `questions` [] |
+
+- **Document** takes the document's browser link or ID. Read Document returns
+  the body as plain text (paragraphs, list items and table cells, one per
+  line). Create Document makes a document in the account's Drive with an
+  optional text; Add Text puts text at the end, on a new line. Neither write
+  can be deduplicated by Google, so a failure that may have applied is not
+  retried automatically.
+- **Form** takes the link of the form's **edit** page (it ends with `/edit`)
+  or its ID. The link people fill the form in at (`…/d/e/…/viewform`,
+  `forms.gle`) does not name the form and is rejected with that hint.
+  Responses are rows keyed by question title, newest first (grid rows are
+  `Question [Row]`, several checkbox answers are joined with `, `, uploads
+  are file names), up to **Max responses** (default 50, at most 1000).
+
+**Scopes** added: `documents` (read and edit Google Docs the account can
+open; no other Drive files), `forms.body.readonly` and
+`forms.responses.readonly` (a form's questions and responses, read only). In
+Google Cloud, enable the **Google Docs API** and the **Google Forms API**, add
+the three scopes to Data Access, and reconnect the Google account; an account
+connected earlier fails these nodes with `PERMISSION_DENIED` asking to
+reconnect.
+
+## Airtable (Phase J)
+
+Airtable accounts connect with OAuth (an Airtable **OAuth integration**;
+provider `airtable`, `internal/oauth/airtable`) with PKCE, which Airtable
+requires. In Airtable's consent screen the user picks the bases to share.
+Scopes: `data.records:read`, `data.records:write`, `schema.bases:read` (the
+pickers) and `user.email:read` (the account's label); a connection missing
+any of them fails. The account is the Airtable user ID. Refresh tokens
+rotate; `invalid_grant` marks the account REVOKED. Airtable has no token
+revocation: disconnecting removes the tokens here, and the grant can be
+removed in Airtable's account settings.
+
+| Node | Side effects | Outputs |
+|---|---|---|
+| `airtable.list_records` (Find Records) | none | `records` [{`<field>`: value, `record_id`}], `count`, `first_record` {}, `record_id` (first) |
+| `airtable.create_record` (Add Record) | unsafe | `record_id`, `record` {} |
+| `airtable.update_record` (Update Record) | idempotent | `record_id`, `record` {} |
+
+- **Base** is picked from the shared bases, or a link to the base (or a table
+  in it; the table then needs no setting). **Table** and the field names are
+  picked from the base's schema.
+- Find Records can keep only records whose **field** equals a **value** (as
+  text, surrounding spaces ignored), only those of a **View**, and at most
+  **Max records** (default 100, at most 1000). Airtable leaves empty fields
+  out; every returned record gets every field seen, empty as `""`.
+- **Fields** are written with `typecast`, so text is converted to the field's
+  type (numbers, dates, new select options). When the setting is empty, an
+  object connected to the input is written (a record's `record_id` is not).
+- Update Record finds the record by **Record ID** or else by field and value
+  (the first match).
+- A base that exists but was not shared answers 403 at Airtable; it fails
+  with `RESOURCE_NOT_FOUND` asking to reconnect Airtable and add the base.
+  Rate limits (5 requests a second per base) wait 30 seconds.
+
+Configuration: `AIRTABLE_CLIENT_ID`, `AIRTABLE_CLIENT_SECRET` and
+`AIRTABLE_OAUTH_REDIRECT_URI` (all three or none; the redirect URI ends with
+`/api/v1/oauth/callback/airtable`). Create the integration at
+airtable.com/create/oauth, generate a client secret, register the redirect
+URI and tick the four scopes.
+
 ## Notion (Phase C5)
 
 Notion workspaces connect with OAuth like Google (a Notion **public

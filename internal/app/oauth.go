@@ -8,13 +8,17 @@ import (
 	"workflow-optimizer/internal/credential"
 	"workflow-optimizer/internal/infrastructure/postgres"
 	"workflow-optimizer/internal/integration"
+	"workflow-optimizer/internal/integration/airtable"
 	"workflow-optimizer/internal/integration/calendar"
 	"workflow-optimizer/internal/integration/discord"
+	"workflow-optimizer/internal/integration/docs"
+	"workflow-optimizer/internal/integration/forms"
 	"workflow-optimizer/internal/integration/gmail"
 	"workflow-optimizer/internal/integration/meet"
 	"workflow-optimizer/internal/integration/notion"
 	"workflow-optimizer/internal/integration/sheets"
 	"workflow-optimizer/internal/oauth"
+	oauthairtable "workflow-optimizer/internal/oauth/airtable"
 	oauthdiscord "workflow-optimizer/internal/oauth/discord"
 	"workflow-optimizer/internal/oauth/google"
 	oauthnotion "workflow-optimizer/internal/oauth/notion"
@@ -35,7 +39,10 @@ type Extensions struct {
 	Sheets   sheets.Options
 	Calendar calendar.Options
 	Meet     meet.Options
+	Docs     docs.Options
+	Forms    forms.Options
 	Notion   notion.Options
+	Airtable airtable.Options
 	Discord  discord.Options
 }
 
@@ -58,6 +65,14 @@ func oauthProviders(cfg config.Config, ext Extensions) ([]oauth.Provider, error)
 			return nil, err
 		}
 		providers = append(providers, n)
+	}
+	if cfg.AirtableOAuthConfigured() {
+		a, err := oauthairtable.New(oauthairtable.Options{ClientID: cfg.AirtableClientID, ClientSecret: credential.NewSecret(cfg.AirtableClientSecret),
+			RedirectURL: cfg.AirtableOAuthRedirectURI})
+		if err != nil {
+			return nil, err
+		}
+		providers = append(providers, a)
 	}
 	if cfg.DiscordConfigured() {
 		d, err := oauthdiscord.New(oauthdiscord.Options{ClientID: cfg.DiscordClientID, ClientSecret: credential.NewSecret(cfg.DiscordClientSecret),
@@ -103,7 +118,7 @@ func newCredentialChain(cfg config.Config, store *postgres.Store, enc credential
 }
 
 func (c *credentialChain) dependencies(ext Extensions) Dependencies {
-	deps := Dependencies{Credentials: c.resolver, Gmail: ext.Gmail, Sheets: ext.Sheets, Calendar: ext.Calendar, Meet: ext.Meet, Notion: ext.Notion, Discord: ext.Discord}
+	deps := Dependencies{Credentials: c.resolver, Gmail: ext.Gmail, Sheets: ext.Sheets, Calendar: ext.Calendar, Meet: ext.Meet, Docs: ext.Docs, Forms: ext.Forms, Notion: ext.Notion, Airtable: ext.Airtable, Discord: ext.Discord}
 	if ext.Integrations != nil {
 		deps.Integrations = ext.Integrations(c.resolver)
 	}

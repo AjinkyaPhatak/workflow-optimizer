@@ -143,7 +143,7 @@ function CredentialSelect({ id, value, provider, credentials, onCommit, disabled
 }
 
 /** Plain names of the services accounts are connected for. */
-const ACCOUNT_NAMES: Record<string, string> = { google: "Google", notion: "Notion", discord: "Discord" };
+const ACCOUNT_NAMES: Record<string, string> = { google: "Google", notion: "Notion", discord: "Discord", airtable: "Airtable" };
 
 /** The account picker of nodes that use connected accounts (OAuth). The
  * node stores the account's credential_id; the account itself (and its

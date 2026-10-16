@@ -90,7 +90,7 @@ describe("Gmail in the catalog", () => {
     expect(onAdd).toHaveBeenCalledWith(expect.objectContaining({ type: "gmail.search" }));
     expect(screen.queryByTestId("palette-menu-gmail")).toBeNull();
     // Apps that do not exist yet are shown, but cannot be added.
-    expect(screen.getByTestId("palette-soon-google_docs").textContent).toContain("Coming soon");
+    expect(screen.getByTestId("palette-soon-google_drive").textContent).toContain("Coming soon");
     fireEvent.change(screen.getByLabelText("Search nodes"), { target: { value: "send email" } });
     expect(screen.getByTestId("palette-gmail.send").textContent).toContain("Gmail: Send Email");
   });

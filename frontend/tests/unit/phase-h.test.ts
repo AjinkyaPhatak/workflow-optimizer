@@ -38,8 +38,8 @@ describe("palette bar", () => {
     expect(apps.find((t) => t.kind === "node")).toMatchObject({ label: "Web request (API)" });
     expect(apps.filter((t) => t.kind === "soon")).toHaveLength(COMING_SOON.length);
     // A coming-soon app disappears once it exists.
-    const docs = { ...search, type: "google_docs.read", integration: { id: "google_docs", name: "Google Docs", action: "read" } };
-    expect(tilesFor([...catalog, docs], "apps").some((t) => t.key === "soon-google_docs")).toBe(false);
+    const drive = { ...search, type: "google_drive.list", integration: { id: "google_drive", name: "Google Drive", action: "list" } };
+    expect(tilesFor([...catalog, drive], "apps").some((t) => t.key === "soon-google_drive")).toBe(false);
     expect(tilesFor(catalog, "basics").map((t) => t.label)).toEqual(["Input", "Output"]);
     expect(searchTiles(catalog, "send email").map((t) => t.label)).toEqual(["Gmail: Send Email"]);
   });

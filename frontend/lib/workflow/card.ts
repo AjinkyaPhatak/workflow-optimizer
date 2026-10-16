@@ -12,21 +12,22 @@ export const CARD_FIELD_LIMIT = 3;
 const ADVANCED = new Set([
   "temperature", "max_tokens", "image_urls", "image_file", "input_mode", "max_results", "days_ahead", "duration_minutes", "time_zone",
   "language", "timeout_ms", "top_k", "notify_attendees", "add_meet_link", "embed_title", "embed_description", "embed_color", "headers",
-  "query_params", "response_format", "access_type", "cc", "bcc", "reply_to", "from_name",
+  "query_params", "response_format", "access_type", "cc", "bcc", "reply_to", "from_name", "view", "max_records", "max_responses",
   // Technical IDs, normally connected from an earlier step.
-  "message_id", "thread_id", "event_id", "page_id", "file_id",
+  "message_id", "thread_id", "event_id", "page_id", "file_id", "record_id",
 ]);
 
 const hasDefault = (f: ConfigField) => !(f.default === null || f.default === undefined || f.default === "");
 
 /** The settings edited on the card, most important first: required ones
- * that must be filled in, then text the user writes (prompts, messages),
+ * that must be filled in, then what the user writes (prompts, messages,
+ * the values of a row or record),
  * then required ones with a default, then the rest; never the credential
  * (shown as the account picker), fine-tuning or JSON settings. */
 export function cardFields(def: NodeDefinition | undefined): ConfigField[] {
   if (!def) return [];
   const usable = def.config.filter((f) => f.name !== CREDENTIAL_FIELD && !ADVANCED.has(f.name) && fieldControl(f) !== "json");
-  const rank = (f: ConfigField) => (f.required && !hasDefault(f) ? 0 : fieldControl(f) === "multiline" ? 1 : f.required ? 2 : 3);
+  const rank = (f: ConfigField) => (f.required && !hasDefault(f) ? 0 : ["multiline", "key_value"].includes(fieldControl(f)) ? 1 : f.required ? 2 : 3);
   return usable.map((f, i) => ({ f, i })).sort((a, b) => rank(a.f) - rank(b.f) || a.i - b.i).slice(0, CARD_FIELD_LIMIT).map((x) => x.f);
 }
 

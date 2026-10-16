@@ -28,14 +28,17 @@ func TestBootstrapRegistersAllV1Nodes(t *testing.T) {
 	// Expect the 11 V1 nodes plus 5 Gmail actions (Phase C3), 3 Google
 	// Sheets and 2 Google Calendar actions (C4), 4 Notion actions (C5) and
 	// 2 Discord actions (C6), Extract Text (D1), the 2 knowledge nodes (D2)
-	// and Switch (E1), Google Meet's Create Meeting, and Transcribe Audio (G)
+	// and Switch (E1), Google Meet's Create Meeting, Transcribe Audio (G),
+	// and 3 Google Docs, 1 Google Forms and 3 Airtable actions (J)
 	got := len(a.NodeRegistry.List())
-	if got != 33 {
-		t.Fatalf("expected 33 nodes (11 V1 + 5 Gmail + 3 Sheets + 2 Calendar + 1 Meet + 4 Notion + 2 Discord + 3 knowledge + Switch + Transcribe), got %d", got)
+	if got != 40 {
+		t.Fatalf("expected 40 nodes (11 V1 + 5 Gmail + 3 Sheets + 2 Calendar + 1 Meet + 3 Docs + 1 Forms + 3 Airtable + 4 Notion + 2 Discord + 3 knowledge + Switch + Transcribe), got %d", got)
 	}
 	for _, typ := range []string{"gmail.search", "gmail.read", "gmail.create_draft", "gmail.send", "gmail.reply",
 		"google_sheets.read_rows", "google_sheets.append_row", "google_sheets.update_row",
 		"google_calendar.list_events", "google_calendar.create_event", "google_meet.create_meeting",
+		"google_docs.read_document", "google_docs.create_document", "google_docs.append_text", "google_forms.read_responses",
+		"airtable.list_records", "airtable.create_record", "airtable.update_record",
 		"notion.search", "notion.query_database", "notion.create_page", "notion.update_page",
 		"discord.send_message", "discord.read_messages"} {
 		if !a.NodeRegistry.HasNodeType(typ) {
