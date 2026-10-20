@@ -160,6 +160,19 @@ func (r CreateWorkflow) Validate() (uuid.UUID, string, *string, error) {
 	return p, n, d, err
 }
 
+// SaveTemplate is POST /templates (Phase K): save a workflow's newest
+// version as a template of its workspace.
+type SaveTemplate struct {
+	WorkflowID  string `json:"workflow_id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+}
+
+// Validate returns the workflow ID.
+func (r SaveTemplate) Validate() (uuid.UUID, error) {
+	return ParseUUID("workflow_id", r.WorkflowID)
+}
+
 // UpdateWorkflow is PATCH /workflows/{id}. Omitted fields are unchanged; an
 // empty description clears it.
 type UpdateWorkflow struct {

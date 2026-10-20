@@ -1,0 +1,93 @@
+{
+  "id": "ask-a-google-doc",
+  "name": "Ask questions about a Google Doc",
+  "description": "Ask anything about a Google Doc, like a contract, a plan or long notes.",
+  "category": "Team & projects",
+  "order": 3,
+  "setup": [
+    "Paste the document's link on the Read the document card."
+  ],
+  "definition": {
+    "version": 1,
+    "settings": {},
+    "nodes": [
+      {
+        "id": "question",
+        "type": "input",
+        "name": "Question",
+        "position": {
+          "x": 0,
+          "y": 40
+        },
+        "config": {
+          "field": "question"
+        }
+      },
+      {
+        "id": "read",
+        "type": "google_docs.read_document",
+        "name": "Read the document",
+        "position": {
+          "x": 380,
+          "y": 120
+        },
+        "config": {}
+      },
+      {
+        "id": "answer",
+        "type": "llm",
+        "name": "Answer",
+        "position": {
+          "x": 760,
+          "y": 120
+        },
+        "config": {
+          "provider": "gemini",
+          "model": "gemini-2.5-flash",
+          "temperature": 0.1,
+          "prompt": "Answer the question using only the document below. If the answer is not in it, say so.\n\nQuestion: {{question}}\n\nDocument:\n{{document}}"
+        }
+      },
+      {
+        "id": "out",
+        "type": "output",
+        "name": "Answer",
+        "position": {
+          "x": 1140,
+          "y": 120
+        },
+        "config": {}
+      }
+    ],
+    "edges": [
+      {
+        "id": "e1",
+        "source": "question",
+        "source_port": "data",
+        "target": "read",
+        "target_port": "data"
+      },
+      {
+        "id": "e2",
+        "source": "read",
+        "source_port": "text",
+        "target": "answer",
+        "target_port": "var:document"
+      },
+      {
+        "id": "e3",
+        "source": "question",
+        "source_port": "data",
+        "target": "answer",
+        "target_port": "var:question"
+      },
+      {
+        "id": "e4",
+        "source": "answer",
+        "source_port": "response",
+        "target": "out",
+        "target_port": "value"
+      }
+    ]
+  }
+}

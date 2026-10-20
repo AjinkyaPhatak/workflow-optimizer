@@ -1,0 +1,110 @@
+{
+  "id": "schedule-meeting",
+  "name": "Schedule a meeting with a Meet link",
+  "description": "Creates a Google Calendar event with a Google Meet link and invites a guest.",
+  "category": "Meetings",
+  "order": 0,
+  "setup": [
+    "When you run it, type the start like 2026-10-20 15:00.",
+    "Set your time zone (e.g. Asia/Kolkata) under More settings on the event card."
+  ],
+  "definition": {
+    "version": 1,
+    "settings": {},
+    "nodes": [
+      {
+        "id": "topic",
+        "type": "input",
+        "name": "Topic",
+        "position": {
+          "x": 0,
+          "y": 40
+        },
+        "config": {
+          "field": "topic"
+        }
+      },
+      {
+        "id": "start",
+        "type": "input",
+        "name": "Start",
+        "position": {
+          "x": 0,
+          "y": 240
+        },
+        "config": {
+          "field": "start"
+        }
+      },
+      {
+        "id": "guest",
+        "type": "input",
+        "name": "Guest email",
+        "position": {
+          "x": 0,
+          "y": 440
+        },
+        "config": {
+          "field": "guest_email"
+        }
+      },
+      {
+        "id": "event",
+        "type": "google_calendar.create_event",
+        "name": "Create the event",
+        "position": {
+          "x": 380,
+          "y": 120
+        },
+        "config": {
+          "summary": "{{topic}}",
+          "start": "{{start}}",
+          "duration_minutes": 30,
+          "attendees": "{{guest}}",
+          "add_meet_link": true,
+          "notify_attendees": true
+        }
+      },
+      {
+        "id": "out",
+        "type": "output",
+        "name": "Meeting link",
+        "position": {
+          "x": 760,
+          "y": 120
+        },
+        "config": {}
+      }
+    ],
+    "edges": [
+      {
+        "id": "e1",
+        "source": "topic",
+        "source_port": "data",
+        "target": "event",
+        "target_port": "var:topic"
+      },
+      {
+        "id": "e2",
+        "source": "start",
+        "source_port": "data",
+        "target": "event",
+        "target_port": "var:start"
+      },
+      {
+        "id": "e3",
+        "source": "guest",
+        "source_port": "data",
+        "target": "event",
+        "target_port": "var:guest"
+      },
+      {
+        "id": "e4",
+        "source": "event",
+        "source_port": "meet_link",
+        "target": "out",
+        "target_port": "value"
+      }
+    ]
+  }
+}

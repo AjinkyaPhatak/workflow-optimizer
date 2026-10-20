@@ -1,0 +1,84 @@
+{
+  "id": "inbox-summary",
+  "name": "Summarize my unread email",
+  "description": "Get a short summary of the email that came in today, with what needs an answer.",
+  "category": "Email",
+  "order": 0,
+  "definition": {
+    "version": 1,
+    "settings": {},
+    "nodes": [
+      {
+        "id": "start",
+        "type": "input",
+        "name": "Start",
+        "position": {
+          "x": 0,
+          "y": 120
+        },
+        "config": {}
+      },
+      {
+        "id": "find",
+        "type": "gmail.search",
+        "name": "Find unread email",
+        "position": {
+          "x": 380,
+          "y": 120
+        },
+        "config": {
+          "query": "is:unread newer_than:1d",
+          "max_results": 20
+        }
+      },
+      {
+        "id": "summarize",
+        "type": "llm",
+        "name": "Summarize",
+        "position": {
+          "x": 760,
+          "y": 120
+        },
+        "config": {
+          "provider": "gemini",
+          "model": "gemini-2.5-flash",
+          "temperature": 0.2,
+          "prompt": "Here are my unread emails from today. Give me a short summary: first the ones that need an answer or an action, then the rest in one line each. Mention who each is from.\n\n{{emails}}"
+        }
+      },
+      {
+        "id": "out",
+        "type": "output",
+        "name": "Summary",
+        "position": {
+          "x": 1140,
+          "y": 120
+        },
+        "config": {}
+      }
+    ],
+    "edges": [
+      {
+        "id": "e1",
+        "source": "start",
+        "source_port": "data",
+        "target": "find",
+        "target_port": "query"
+      },
+      {
+        "id": "e2",
+        "source": "find",
+        "source_port": "messages",
+        "target": "summarize",
+        "target_port": "var:emails"
+      },
+      {
+        "id": "e3",
+        "source": "summarize",
+        "source_port": "response",
+        "target": "out",
+        "target_port": "value"
+      }
+    ]
+  }
+}

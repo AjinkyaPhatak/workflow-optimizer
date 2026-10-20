@@ -1,0 +1,116 @@
+{
+  "id": "airtable-follow-up",
+  "name": "Follow up with a customer from Airtable",
+  "description": "Finds a customer marked \"Follow up\" in Airtable and drafts a friendly follow-up email.",
+  "category": "Sales & customers",
+  "order": 3,
+  "setup": [
+    "Your Airtable table needs a Status field (with the value \"Follow up\") and an Email field; pick the table on the first card."
+  ],
+  "definition": {
+    "version": 1,
+    "settings": {},
+    "nodes": [
+      {
+        "id": "start",
+        "type": "input",
+        "name": "Start",
+        "position": {
+          "x": 0,
+          "y": 120
+        },
+        "config": {}
+      },
+      {
+        "id": "find",
+        "type": "airtable.list_records",
+        "name": "Find who to follow up",
+        "position": {
+          "x": 380,
+          "y": 120
+        },
+        "config": {
+          "match_field": "Status",
+          "match_value": "Follow up",
+          "max_records": 1
+        }
+      },
+      {
+        "id": "write",
+        "type": "llm",
+        "name": "Write the follow-up",
+        "position": {
+          "x": 760,
+          "y": 120
+        },
+        "config": {
+          "provider": "gemini",
+          "model": "gemini-2.5-flash",
+          "temperature": 0.6,
+          "prompt": "Write a short, friendly follow-up email to this customer, based on what we know about them. Reply with the email body only.\n\n{{customer}}"
+        }
+      },
+      {
+        "id": "draft",
+        "type": "gmail.create_draft",
+        "name": "Save the draft",
+        "position": {
+          "x": 1140,
+          "y": 120
+        },
+        "config": {
+          "to": "{{customer.Email}}",
+          "subject": "Following up",
+          "body": "{{email}}"
+        }
+      },
+      {
+        "id": "out",
+        "type": "output",
+        "name": "Draft",
+        "position": {
+          "x": 1520,
+          "y": 120
+        },
+        "config": {}
+      }
+    ],
+    "edges": [
+      {
+        "id": "e1",
+        "source": "start",
+        "source_port": "data",
+        "target": "find",
+        "target_port": "fields"
+      },
+      {
+        "id": "e2",
+        "source": "find",
+        "source_port": "first_record",
+        "target": "write",
+        "target_port": "var:customer"
+      },
+      {
+        "id": "e3",
+        "source": "find",
+        "source_port": "first_record",
+        "target": "draft",
+        "target_port": "var:customer"
+      },
+      {
+        "id": "e4",
+        "source": "write",
+        "source_port": "response",
+        "target": "draft",
+        "target_port": "var:email"
+      },
+      {
+        "id": "e5",
+        "source": "draft",
+        "source_port": "status",
+        "target": "out",
+        "target_port": "value"
+      }
+    ]
+  }
+}

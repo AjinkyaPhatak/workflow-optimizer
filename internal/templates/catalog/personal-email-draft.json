@@ -1,0 +1,154 @@
+{
+  "id": "personal-email-draft",
+  "name": "Write a personal email",
+  "description": "Say who it is for and what it is about; a polished email is saved in Gmail Drafts for you to check and send.",
+  "category": "Email",
+  "order": 3,
+  "definition": {
+    "version": 1,
+    "settings": {},
+    "nodes": [
+      {
+        "id": "name",
+        "type": "input",
+        "name": "Name",
+        "position": {
+          "x": 0,
+          "y": 40
+        },
+        "config": {
+          "field": "name"
+        }
+      },
+      {
+        "id": "address",
+        "type": "input",
+        "name": "Email address",
+        "position": {
+          "x": 0,
+          "y": 240
+        },
+        "config": {
+          "field": "email_address"
+        }
+      },
+      {
+        "id": "purpose",
+        "type": "input",
+        "name": "Purpose",
+        "position": {
+          "x": 0,
+          "y": 440
+        },
+        "config": {
+          "field": "purpose"
+        }
+      },
+      {
+        "id": "write",
+        "type": "llm",
+        "name": "Write the email",
+        "position": {
+          "x": 380,
+          "y": 120
+        },
+        "config": {
+          "provider": "gemini",
+          "model": "gemini-2.5-flash",
+          "temperature": 0.6,
+          "prompt": "Write a warm, clear email to {{name}} about: {{purpose}}\nReply with the email body only (no subject line), signed off politely."
+        }
+      },
+      {
+        "id": "subject",
+        "type": "llm",
+        "name": "Write a subject",
+        "position": {
+          "x": 760,
+          "y": 120
+        },
+        "config": {
+          "provider": "gemini",
+          "model": "gemini-2.5-flash",
+          "temperature": 0.3,
+          "prompt": "Write a short email subject line (max 8 words, no quotes) for this email:\n\n{{email}}"
+        }
+      },
+      {
+        "id": "draft",
+        "type": "gmail.create_draft",
+        "name": "Save the draft",
+        "position": {
+          "x": 1140,
+          "y": 120
+        },
+        "config": {
+          "to": "{{address}}",
+          "subject": "{{subject}}",
+          "body": "{{email}}"
+        }
+      },
+      {
+        "id": "out",
+        "type": "output",
+        "name": "Draft",
+        "position": {
+          "x": 1520,
+          "y": 120
+        },
+        "config": {}
+      }
+    ],
+    "edges": [
+      {
+        "id": "e1",
+        "source": "name",
+        "source_port": "data",
+        "target": "write",
+        "target_port": "var:name"
+      },
+      {
+        "id": "e2",
+        "source": "purpose",
+        "source_port": "data",
+        "target": "write",
+        "target_port": "var:purpose"
+      },
+      {
+        "id": "e3",
+        "source": "write",
+        "source_port": "response",
+        "target": "subject",
+        "target_port": "var:email"
+      },
+      {
+        "id": "e4",
+        "source": "address",
+        "source_port": "data",
+        "target": "draft",
+        "target_port": "var:address"
+      },
+      {
+        "id": "e5",
+        "source": "subject",
+        "source_port": "response",
+        "target": "draft",
+        "target_port": "var:subject"
+      },
+      {
+        "id": "e6",
+        "source": "write",
+        "source_port": "response",
+        "target": "draft",
+        "target_port": "var:email"
+      },
+      {
+        "id": "e7",
+        "source": "draft",
+        "source_port": "status",
+        "target": "out",
+        "target_port": "value"
+      }
+    ]
+  }
+}

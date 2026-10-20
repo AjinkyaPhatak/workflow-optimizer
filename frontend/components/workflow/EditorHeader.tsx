@@ -5,6 +5,7 @@ import { useState } from "react";
 import { useEditorContext } from "@/features/workflows/EditorContext";
 import { useShowDetails } from "@/stores/ui/details";
 import { useEditorStore, useIsDirty } from "@/stores/workflow-editor/store";
+import { SaveTemplateDialog } from "./SaveTemplateDialog";
 import { VersionsPanel } from "./VersionsPanel";
 
 /** The editor's top bar (Phase I1): the workflow's name, whether it is
@@ -13,6 +14,7 @@ import { VersionsPanel } from "./VersionsPanel";
 export function EditorHeader({ onRun }: { onRun: () => void }) {
   const { workflow, version, busy, notice, save, validate, publish, canPublish, refreshVersions } = useEditorContext();
   const [history, setHistory] = useState(false);
+  const [saveTemplate, setSaveTemplate] = useState(false);
   const details = useShowDetails();
   const dirty = useIsDirty();
   const readonly = useEditorStore((s) => s.mode === "readonly");
@@ -84,8 +86,16 @@ export function EditorHeader({ onRun }: { onRun: () => void }) {
           </button>
         </>
       )}
+      {workflow && !readonly && (
+        <button type="button" onClick={() => setSaveTemplate(true)} title="Let anyone in this workspace start from a copy of this workflow"
+          data-testid="save-as-template">Save as template</button>
+      )}
       {workflow && <Link className="button" href={`/workflows/${workflow.id}/executions`}>History</Link>}
       <button className="primary" onClick={onRun} disabled={readonly} data-testid="run-open">▶ Run</button>
+      {saveTemplate && workflow && (
+        <SaveTemplateDialog workflowId={workflow.id} defaultName={workflow.name} beforeSave={() => (dirty ? save() : Promise.resolve())}
+          onClose={() => setSaveTemplate(false)} />
+      )}
     </header>
   );
 }

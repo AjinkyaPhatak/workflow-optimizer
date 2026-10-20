@@ -90,13 +90,61 @@ func (h *Handlers) CreateWorkflow(w http.ResponseWriter, r *http.Request) {
 }
 
 // ListTemplates handles GET /api/v1/templates: the workflow templates a new
-// workflow can start from.
+// workflow can start from. With ?workspace_id=, the workspace's saved
+// templates come first (Phase K).
 func (h *Handlers) ListTemplates(w http.ResponseWriter, r *http.Request) {
 	out := responses.List[responses.Template]{Items: []responses.Template{}}
+	if r.URL.Query().Get("workspace_id") != "" {
+		ws, ok := h.queryID(w, r, "workspace_id")
+		if !ok {
+			return
+		}
+		saved, err := h.Workflows.ListSavedTemplates(r.Context(), user(r), ws)
+		if err != nil {
+			h.fail(w, r, err)
+			return
+		}
+		for _, s := range saved {
+			out.Items = append(out.Items, responses.NewSavedTemplate(s))
+		}
+	}
 	for _, t := range templates.List() {
 		out.Items = append(out.Items, responses.NewTemplate(t))
 	}
 	httpx.WriteJSON(w, http.StatusOK, out)
+}
+
+// SaveTemplate handles POST /api/v1/templates: "Save as template".
+func (h *Handlers) SaveTemplate(w http.ResponseWriter, r *http.Request) {
+	var req requests.SaveTemplate
+	if !h.decode(w, r, &req) {
+		return
+	}
+	id, err := req.Validate()
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	s, err := h.Workflows.SaveTemplate(r.Context(), user(r), id, req.Name, req.Description)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusCreated, responses.NewSavedTemplate(s))
+}
+
+// DeleteTemplate handles DELETE /api/v1/templates/{templateID} (saved
+// templates only).
+func (h *Handlers) DeleteTemplate(w http.ResponseWriter, r *http.Request) {
+	id, ok := h.pathID(w, r, "templateID")
+	if !ok {
+		return
+	}
+	if err := h.Workflows.DeleteSavedTemplate(r.Context(), user(r), id); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // ListWorkflows handles GET /api/v1/workflows?project_id=&page=&page_size=.

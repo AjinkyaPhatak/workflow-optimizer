@@ -1,0 +1,87 @@
+{
+  "id": "meeting-recording-notes",
+  "name": "Meeting notes from a recording",
+  "description": "Upload a meeting recording and get a summary, decisions and action items.",
+  "category": "Meetings",
+  "order": 2,
+  "setup": [
+    "Upload the recording (MP3, M4A, WAV, up to 14 MB) on the Files page; the Run window lets you pick it."
+  ],
+  "definition": {
+    "version": 1,
+    "settings": {},
+    "nodes": [
+      {
+        "id": "recording",
+        "type": "input",
+        "name": "Recording",
+        "position": {
+          "x": 0,
+          "y": 40
+        },
+        "config": {
+          "field": "recording",
+          "field_type": "file"
+        }
+      },
+      {
+        "id": "listen",
+        "type": "transcribe_audio",
+        "name": "Transcribe the recording",
+        "position": {
+          "x": 380,
+          "y": 120
+        },
+        "config": {}
+      },
+      {
+        "id": "notes",
+        "type": "llm",
+        "name": "Write the notes",
+        "position": {
+          "x": 760,
+          "y": 120
+        },
+        "config": {
+          "provider": "gemini",
+          "model": "gemini-2.5-flash",
+          "temperature": 0.2,
+          "prompt": "Here is the transcript of a meeting. Write meeting notes with: a short summary, decisions made, action items (who and what), and open questions.\n\n{{transcript}}"
+        }
+      },
+      {
+        "id": "out",
+        "type": "output",
+        "name": "Meeting notes",
+        "position": {
+          "x": 1140,
+          "y": 120
+        },
+        "config": {}
+      }
+    ],
+    "edges": [
+      {
+        "id": "e1",
+        "source": "recording",
+        "source_port": "data",
+        "target": "listen",
+        "target_port": "audio"
+      },
+      {
+        "id": "e2",
+        "source": "listen",
+        "source_port": "text",
+        "target": "notes",
+        "target_port": "var:transcript"
+      },
+      {
+        "id": "e3",
+        "source": "notes",
+        "source_port": "response",
+        "target": "out",
+        "target_port": "value"
+      }
+    ]
+  }
+}

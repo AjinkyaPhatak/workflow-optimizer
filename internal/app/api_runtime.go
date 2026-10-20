@@ -131,7 +131,8 @@ func (rt *APIRuntime) build(enc credential.SecretEncryptor, tokens auth.TokenSer
 	identities := postgres.NewIdentityRepository(rt.store)
 	access := application.NewAccess(identities)
 	workflows := application.NewWorkflowService(access, postgres.NewWorkflowRepository(rt.store),
-		workflow.NewValidator(engine.NodeRegistry)).WithCredentialCheck(credentialRepo)
+		workflow.NewValidator(engine.NodeRegistry)).WithCredentialCheck(credentialRepo).
+		WithSavedTemplates(postgres.NewSavedTemplateRepository(rt.store))
 	// OAuth states live in Redis next to the queue's keys, single-use and
 	// expiring on their own.
 	states, err := redisinfra.NewOAuthStateStore(rt.redis, rt.cfg.RedisQueueName+":oauth-state")

@@ -319,7 +319,14 @@ export interface WorkflowTemplate {
   id: string;
   name: string;
   description: string;
+  /** Gallery category ("Email", "Saved", ...). */
+  category: string;
+  /** What to prepare besides accounts and keys (Phase K). */
+  setup: string[];
   node_types: string[];
+  /** Saved by the workspace from one of its workflows. */
+  saved: boolean;
+  created_at?: string;
   definition: WorkflowDefinition;
 }
 

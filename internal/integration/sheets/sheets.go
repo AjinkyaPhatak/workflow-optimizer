@@ -274,24 +274,24 @@ func readRows(ctx context.Context, c *Client, in node.NodeInput) (node.NodeOutpu
 }
 
 // values is the Values setting, else a non-empty object connected to the
-// values input. The setting wins: the input also carries whatever upstream
-// node was connected just to run first.
-func values(in node.NodeInput) (map[string]any, error) {
+// values input (connected reports which). The setting wins: the input also
+// carries whatever upstream node was connected just to run first.
+func values(in node.NodeInput) (vals map[string]any, connected bool, err error) {
 	if raw, ok := in.GetConfig("values"); ok && raw != nil {
 		m, ok := raw.(map[string]any)
 		if !ok {
-			return nil, configError(`values must be an object of column names, e.g. {"Name": "Ada"}`)
+			return nil, false, configError(`values must be an object of column names, e.g. {"Name": "Ada"}`)
 		}
 		if len(m) > 0 {
-			return m, nil
+			return m, false, nil
 		}
 	}
 	if v, ok := in.GetPort("values"); ok {
 		if m, ok := v.Data.(map[string]any); ok && len(m) > 0 {
-			return m, nil
+			return m, true, nil
 		}
 	}
-	return nil, configError("set the Values to write")
+	return nil, false, configError("set the Values to write")
 }
 
 // column finds a header by name, ignoring case and surrounding spaces.
@@ -305,18 +305,25 @@ func column(headers []string, name string) int {
 	return -1
 }
 
-// place writes vals into row under their columns; every key must name one.
-func place(row []any, headers []string, vals map[string]any) error {
+// place writes vals into row under their columns. Typed-in Values must each
+// name a column; a connected object (a form response, a record) may carry
+// more fields than the sheet has columns: those are skipped, as long as one
+// matches (lenient).
+func place(row []any, headers []string, vals map[string]any, lenient bool) error {
 	keys := make([]string, 0, len(vals))
 	for k := range vals {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
+	placed := 0
 	for _, k := range keys {
 		if k == rowNumberKey {
 			continue // carried over from Read Rows
 		}
 		i := column(headers, k)
+		if i < 0 && lenient {
+			continue
+		}
 		if i < 0 {
 			return invalid(fmt.Sprintf("the sheet has no column %q; its columns are: %s", k, strings.Join(headers, ", ")))
 		}
@@ -329,6 +336,10 @@ func place(row []any, headers []string, vals map[string]any) error {
 			b, _ := json.Marshal(v)
 			row[i] = string(b)
 		}
+		placed++
+	}
+	if lenient && placed == 0 {
+		return invalid("none of the connected values match a column; the sheet's columns are: " + strings.Join(headers, ", "))
 	}
 	return nil
 }
@@ -341,7 +352,7 @@ func inputMode(in node.NodeInput) string {
 }
 
 func appendRow(ctx context.Context, c *Client, in node.NodeInput) (node.NodeOutput, error) {
-	vals, err := values(in)
+	vals, connected, err := values(in)
 	if err != nil {
 		return node.NodeOutput{}, err
 	}
@@ -361,7 +372,7 @@ func appendRow(ctx context.Context, c *Client, in node.NodeInput) (node.NodeOutp
 	for i := range row {
 		row[i] = ""
 	}
-	if err := place(row, headers, vals); err != nil {
+	if err := place(row, headers, vals, connected); err != nil {
 		return node.NodeOutput{}, err
 	}
 	updated, err := c.Append(ctx, id, SheetRange(sheet, "A1"), row, inputMode(in))
@@ -375,7 +386,7 @@ func appendRow(ctx context.Context, c *Client, in node.NodeInput) (node.NodeOutp
 }
 
 func updateRow(ctx context.Context, c *Client, in node.NodeInput) (node.NodeOutput, error) {
-	vals, err := values(in)
+	vals, connected, err := values(in)
 	if err != nil {
 		return node.NodeOutput{}, err
 	}
@@ -429,7 +440,7 @@ func updateRow(ctx context.Context, c *Client, in node.NodeInput) (node.NodeOutp
 			row[j] = t.rows[idx][j]
 		}
 	}
-	if err := place(row, t.headers, vals); err != nil {
+	if err := place(row, t.headers, vals, connected); err != nil {
 		return node.NodeOutput{}, err
 	}
 	number := t.start + idx

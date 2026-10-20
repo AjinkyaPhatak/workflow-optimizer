@@ -1,0 +1,85 @@
+{
+  "id": "translate-text",
+  "name": "Translate text",
+  "description": "Translate any text into another language, keeping its tone.",
+  "category": "Writing",
+  "order": 4,
+  "definition": {
+    "version": 1,
+    "settings": {},
+    "nodes": [
+      {
+        "id": "text",
+        "type": "input",
+        "name": "Text",
+        "position": {
+          "x": 0,
+          "y": 40
+        },
+        "config": {
+          "field": "text"
+        }
+      },
+      {
+        "id": "language",
+        "type": "input",
+        "name": "Language",
+        "position": {
+          "x": 0,
+          "y": 240
+        },
+        "config": {
+          "field": "language"
+        }
+      },
+      {
+        "id": "translate",
+        "type": "llm",
+        "name": "Translate",
+        "position": {
+          "x": 380,
+          "y": 120
+        },
+        "config": {
+          "provider": "gemini",
+          "model": "gemini-2.5-flash",
+          "temperature": 0.1,
+          "prompt": "Translate the text below into {{language}}. Keep the tone and formatting. Reply with the translation only.\n\n{{text}}"
+        }
+      },
+      {
+        "id": "out",
+        "type": "output",
+        "name": "Translation",
+        "position": {
+          "x": 760,
+          "y": 120
+        },
+        "config": {}
+      }
+    ],
+    "edges": [
+      {
+        "id": "e1",
+        "source": "text",
+        "source_port": "data",
+        "target": "translate",
+        "target_port": "var:text"
+      },
+      {
+        "id": "e2",
+        "source": "language",
+        "source_port": "data",
+        "target": "translate",
+        "target_port": "var:language"
+      },
+      {
+        "id": "e3",
+        "source": "translate",
+        "source_port": "response",
+        "target": "out",
+        "target_port": "value"
+      }
+    ]
+  }
+}

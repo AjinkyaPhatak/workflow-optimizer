@@ -1,0 +1,106 @@
+{
+  "id": "email-digest-to-discord",
+  "name": "Post an email digest to Discord",
+  "description": "Summarize today's email and post it in a Discord channel for your team.",
+  "category": "Email",
+  "order": 2,
+  "setup": [
+    "Pick the Discord channel on the Post to Discord card."
+  ],
+  "definition": {
+    "version": 1,
+    "settings": {},
+    "nodes": [
+      {
+        "id": "start",
+        "type": "input",
+        "name": "Start",
+        "position": {
+          "x": 0,
+          "y": 120
+        },
+        "config": {}
+      },
+      {
+        "id": "find",
+        "type": "gmail.search",
+        "name": "Find today's email",
+        "position": {
+          "x": 380,
+          "y": 120
+        },
+        "config": {
+          "query": "newer_than:1d",
+          "max_results": 25
+        }
+      },
+      {
+        "id": "summarize",
+        "type": "llm",
+        "name": "Write the digest",
+        "position": {
+          "x": 760,
+          "y": 120
+        },
+        "config": {
+          "provider": "gemini",
+          "model": "gemini-2.5-flash",
+          "temperature": 0.2,
+          "prompt": "Write a short digest of these emails for a team chat: one bullet per email with the sender and what it is about. Start with the ones that need action.\n\n{{emails}}"
+        }
+      },
+      {
+        "id": "post",
+        "type": "discord.send_message",
+        "name": "Post to Discord",
+        "position": {
+          "x": 1140,
+          "y": 120
+        },
+        "config": {
+          "content": "**Email digest**\n{{digest}}"
+        }
+      },
+      {
+        "id": "out",
+        "type": "output",
+        "name": "Message link",
+        "position": {
+          "x": 1520,
+          "y": 120
+        },
+        "config": {}
+      }
+    ],
+    "edges": [
+      {
+        "id": "e1",
+        "source": "start",
+        "source_port": "data",
+        "target": "find",
+        "target_port": "query"
+      },
+      {
+        "id": "e2",
+        "source": "find",
+        "source_port": "messages",
+        "target": "summarize",
+        "target_port": "var:emails"
+      },
+      {
+        "id": "e3",
+        "source": "summarize",
+        "source_port": "response",
+        "target": "post",
+        "target_port": "var:digest"
+      },
+      {
+        "id": "e4",
+        "source": "post",
+        "source_port": "url",
+        "target": "out",
+        "target_port": "value"
+      }
+    ]
+  }
+}

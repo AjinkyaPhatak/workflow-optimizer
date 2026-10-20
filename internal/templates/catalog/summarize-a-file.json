@@ -1,0 +1,87 @@
+{
+  "id": "summarize-a-file",
+  "name": "Summarize a document",
+  "description": "Upload a PDF or text file and get its key points.",
+  "category": "Writing",
+  "order": 6,
+  "setup": [
+    "Upload the document on the Files page (PDF, text, Markdown or CSV); the Run window lets you pick it."
+  ],
+  "definition": {
+    "version": 1,
+    "settings": {},
+    "nodes": [
+      {
+        "id": "file",
+        "type": "input",
+        "name": "File",
+        "position": {
+          "x": 0,
+          "y": 40
+        },
+        "config": {
+          "field": "file",
+          "field_type": "file"
+        }
+      },
+      {
+        "id": "read",
+        "type": "extract_text",
+        "name": "Read the file",
+        "position": {
+          "x": 380,
+          "y": 120
+        },
+        "config": {}
+      },
+      {
+        "id": "summarize",
+        "type": "llm",
+        "name": "Summarize",
+        "position": {
+          "x": 760,
+          "y": 120
+        },
+        "config": {
+          "provider": "gemini",
+          "model": "gemini-2.5-flash",
+          "temperature": 0.2,
+          "prompt": "Summarize this document for someone in a hurry: a two-sentence overview, then the key points as bullets, then any dates, numbers or actions it mentions.\n\n{{document}}"
+        }
+      },
+      {
+        "id": "out",
+        "type": "output",
+        "name": "Summary",
+        "position": {
+          "x": 1140,
+          "y": 120
+        },
+        "config": {}
+      }
+    ],
+    "edges": [
+      {
+        "id": "e1",
+        "source": "file",
+        "source_port": "data",
+        "target": "read",
+        "target_port": "file"
+      },
+      {
+        "id": "e2",
+        "source": "read",
+        "source_port": "text",
+        "target": "summarize",
+        "target_port": "var:document"
+      },
+      {
+        "id": "e3",
+        "source": "summarize",
+        "source_port": "response",
+        "target": "out",
+        "target_port": "value"
+      }
+    ]
+  }
+}

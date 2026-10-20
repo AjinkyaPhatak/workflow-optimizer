@@ -1,0 +1,96 @@
+{
+  "id": "answer-from-knowledge",
+  "name": "Answer from your own documents",
+  "description": "Ask a question and get an answer based on the documents in a knowledge base.",
+  "category": "Team & projects",
+  "order": 4,
+  "setup": [
+    "Make a knowledge base and add your documents on the Knowledge page, then pick it on the Search your documents card."
+  ],
+  "definition": {
+    "version": 1,
+    "settings": {},
+    "nodes": [
+      {
+        "id": "question",
+        "type": "input",
+        "name": "Question",
+        "position": {
+          "x": 0,
+          "y": 40
+        },
+        "config": {
+          "field": "question"
+        }
+      },
+      {
+        "id": "search",
+        "type": "knowledge_search",
+        "name": "Search your documents",
+        "position": {
+          "x": 380,
+          "y": 120
+        },
+        "config": {
+          "query": "{{question}}",
+          "top_k": 5
+        }
+      },
+      {
+        "id": "answer",
+        "type": "llm",
+        "name": "Answer",
+        "position": {
+          "x": 760,
+          "y": 120
+        },
+        "config": {
+          "provider": "gemini",
+          "model": "gemini-2.5-flash",
+          "temperature": 0.1,
+          "prompt": "Answer the question using only the information below. If it does not contain the answer, say you could not find it.\n\nQuestion: {{question}}\n\nInformation:\n{{context}}"
+        }
+      },
+      {
+        "id": "out",
+        "type": "output",
+        "name": "Answer",
+        "position": {
+          "x": 1140,
+          "y": 120
+        },
+        "config": {}
+      }
+    ],
+    "edges": [
+      {
+        "id": "e1",
+        "source": "question",
+        "source_port": "data",
+        "target": "search",
+        "target_port": "var:question"
+      },
+      {
+        "id": "e2",
+        "source": "search",
+        "source_port": "context",
+        "target": "answer",
+        "target_port": "var:context"
+      },
+      {
+        "id": "e3",
+        "source": "question",
+        "source_port": "data",
+        "target": "answer",
+        "target_port": "var:question"
+      },
+      {
+        "id": "e4",
+        "source": "answer",
+        "source_port": "response",
+        "target": "out",
+        "target_port": "value"
+      }
+    ]
+  }
+}

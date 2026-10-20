@@ -1,0 +1,106 @@
+{
+  "id": "sheet-weekly-report",
+  "name": "Weekly report from a sheet",
+  "description": "Reads a Google Sheet and writes a short report of what it shows, saved as a Google Doc.",
+  "category": "Team & projects",
+  "order": 2,
+  "setup": [
+    "Paste your sheet's link on the Read the sheet card (the first row should hold the column names)."
+  ],
+  "definition": {
+    "version": 1,
+    "settings": {},
+    "nodes": [
+      {
+        "id": "start",
+        "type": "input",
+        "name": "Start",
+        "position": {
+          "x": 0,
+          "y": 120
+        },
+        "config": {}
+      },
+      {
+        "id": "rows",
+        "type": "google_sheets.read_rows",
+        "name": "Read the sheet",
+        "position": {
+          "x": 380,
+          "y": 120
+        },
+        "config": {
+          "max_rows": 200
+        }
+      },
+      {
+        "id": "report",
+        "type": "llm",
+        "name": "Write the report",
+        "position": {
+          "x": 760,
+          "y": 120
+        },
+        "config": {
+          "provider": "gemini",
+          "model": "gemini-2.5-flash",
+          "temperature": 0.3,
+          "prompt": "Here is a table from a spreadsheet. Write a short weekly report: the main numbers, trends, anything unusual, and 3 suggestions.\n\n{{rows}}"
+        }
+      },
+      {
+        "id": "doc",
+        "type": "google_docs.create_document",
+        "name": "Save as a Google Doc",
+        "position": {
+          "x": 1140,
+          "y": 120
+        },
+        "config": {
+          "title": "Weekly report",
+          "text": "{{report}}"
+        }
+      },
+      {
+        "id": "out",
+        "type": "output",
+        "name": "Document link",
+        "position": {
+          "x": 1520,
+          "y": 120
+        },
+        "config": {}
+      }
+    ],
+    "edges": [
+      {
+        "id": "e1",
+        "source": "start",
+        "source_port": "data",
+        "target": "rows",
+        "target_port": "data"
+      },
+      {
+        "id": "e2",
+        "source": "rows",
+        "source_port": "rows",
+        "target": "report",
+        "target_port": "var:rows"
+      },
+      {
+        "id": "e3",
+        "source": "report",
+        "source_port": "response",
+        "target": "doc",
+        "target_port": "var:report"
+      },
+      {
+        "id": "e4",
+        "source": "doc",
+        "source_port": "link",
+        "target": "out",
+        "target_port": "value"
+      }
+    ]
+  }
+}

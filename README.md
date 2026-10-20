@@ -748,3 +748,42 @@ the idempotency key `<key>#<index>`. Its outputs are lists, item by item, and
 typed `array` for connections. A retry after an item failed continues with
 that item: finished items never run again. Publishing requires the list to
 be connected; entry and exit steps cannot repeat.
+
+## Templates gallery (Phase K)
+
+`/templates` lists ready-made workflows by category (Writing, Email, Sales &
+customers, Meetings, Team & projects; the developer examples are under
+Advanced, shown with technical details on), with search by name,
+description or app. They live in `internal/templates/catalog/*.json`: the
+workflow definition plus `category`, `order` and `setup` (what to prepare
+besides accounts and keys, e.g. a sheet's column names). Gallery templates
+ask their questions through Input cards with a Field name, and every
+`{{name}}` a step uses is connected (`TestGalleryTemplatesAreSelfContained`).
+
+Opening one shows its steps and **Before you start**: the accounts its app
+steps use (one line per service, with the apps) and the AI keys its AI steps
+use, ticked off when the workspace has them (worked out from the steps:
+`lib/workflow/requirements.ts`), then the template's own notes. **Use this
+template** creates the workflow (`template_id`) and opens the editor.
+
+The editor fills in a step's account or key when there is exactly one
+choice (one active Google account, one Gemini key), so a template is ready
+to run without picking it on every card.
+
+**Save as template** (editor) copies the workflow's newest version into the
+workspace's **Saved** templates (migration `000010_saved_templates`):
+
+- `POST /api/v1/templates` `{workflow_id, name, description}`: editors.
+- `GET /api/v1/templates?workspace_id=`: the workspace's saved templates
+  first (`saved: true`, category `Saved`), then the built-in ones; without
+  the parameter, built-in only.
+- `DELETE /api/v1/templates/{id}`: editors; workflows made from it are kept.
+- `POST /workflows` accepts a saved template's ID as `template_id` (same
+  workspace only).
+
+A saved template keeps the workflow's account and key choices; they only
+work in the same workspace.
+
+Google Sheets' Append Row and Update Row now skip fields of a **connected**
+object that the sheet has no column for (a form response's `response_id`),
+as long as one field matches; typed-in Values must still each name a column.

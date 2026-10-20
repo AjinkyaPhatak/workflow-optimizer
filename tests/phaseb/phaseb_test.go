@@ -268,7 +268,11 @@ func TestTemplateVariablesStructuredOutputAndVersions(t *testing.T) {
 
 	// --- templates ---------------------------------------------------------------
 	list := e.must(e.call(tok, "GET", "/api/v1/templates", nil), 200)["items"].([]any)
-	if len(list) != 3 || list[2].(map[string]any)["id"] != "structured-ai-response" {
+	found := false
+	for _, x := range list {
+		found = found || x.(map[string]any)["id"] == "structured-ai-response"
+	}
+	if len(list) < 25 || !found { // Phase K: the gallery
 		t.Fatalf("templates: %v", list)
 	}
 	if r := e.call(tok, "POST", "/api/v1/workflows", map[string]any{"project_id": project, "name": "X", "template_id": "nope"}); r.status != 400 {

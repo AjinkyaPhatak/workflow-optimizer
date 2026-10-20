@@ -1,0 +1,85 @@
+{
+  "id": "blog-post-writer",
+  "name": "Write a blog post",
+  "description": "Turn a topic into a ready-to-edit blog post with a title, headings and a conclusion.",
+  "category": "Writing",
+  "order": 1,
+  "definition": {
+    "version": 1,
+    "settings": {},
+    "nodes": [
+      {
+        "id": "topic",
+        "type": "input",
+        "name": "Topic",
+        "position": {
+          "x": 0,
+          "y": 40
+        },
+        "config": {
+          "field": "topic"
+        }
+      },
+      {
+        "id": "audience",
+        "type": "input",
+        "name": "Audience",
+        "position": {
+          "x": 0,
+          "y": 240
+        },
+        "config": {
+          "field": "audience"
+        }
+      },
+      {
+        "id": "write",
+        "type": "llm",
+        "name": "Write the post",
+        "position": {
+          "x": 380,
+          "y": 120
+        },
+        "config": {
+          "provider": "gemini",
+          "model": "gemini-2.5-flash",
+          "temperature": 0.7,
+          "prompt": "Write a blog post about: {{topic}}\nIt is for: {{audience}}\n\nUse a catchy title, a short introduction, 3 to 5 sections with headings, and a conclusion. Keep the language simple and friendly. Around 700 words."
+        }
+      },
+      {
+        "id": "out",
+        "type": "output",
+        "name": "Blog post",
+        "position": {
+          "x": 760,
+          "y": 120
+        },
+        "config": {}
+      }
+    ],
+    "edges": [
+      {
+        "id": "e1",
+        "source": "topic",
+        "source_port": "data",
+        "target": "write",
+        "target_port": "var:topic"
+      },
+      {
+        "id": "e2",
+        "source": "audience",
+        "source_port": "data",
+        "target": "write",
+        "target_port": "var:audience"
+      },
+      {
+        "id": "e3",
+        "source": "write",
+        "source_port": "response",
+        "target": "out",
+        "target_port": "value"
+      }
+    ]
+  }
+}

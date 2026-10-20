@@ -1,0 +1,93 @@
+{
+  "id": "company-brief-doc",
+  "name": "Prepare a company brief",
+  "description": "Write a one-page brief about a company before a call, saved as a Google Doc.",
+  "category": "Sales & customers",
+  "order": 4,
+  "definition": {
+    "version": 1,
+    "settings": {},
+    "nodes": [
+      {
+        "id": "company",
+        "type": "input",
+        "name": "Company",
+        "position": {
+          "x": 0,
+          "y": 40
+        },
+        "config": {
+          "field": "company"
+        }
+      },
+      {
+        "id": "write",
+        "type": "llm",
+        "name": "Write the brief",
+        "position": {
+          "x": 380,
+          "y": 120
+        },
+        "config": {
+          "provider": "gemini",
+          "model": "gemini-2.5-flash",
+          "temperature": 0.4,
+          "prompt": "Write a one-page briefing about the company {{company}} to prepare for a sales call. Include: what they do, who their customers are, likely needs, good questions to ask, and a short pitch. Say clearly when you are unsure of a fact."
+        }
+      },
+      {
+        "id": "doc",
+        "type": "google_docs.create_document",
+        "name": "Save as a Google Doc",
+        "position": {
+          "x": 760,
+          "y": 120
+        },
+        "config": {
+          "title": "Brief: {{company}}",
+          "text": "{{brief}}"
+        }
+      },
+      {
+        "id": "out",
+        "type": "output",
+        "name": "Document link",
+        "position": {
+          "x": 1140,
+          "y": 120
+        },
+        "config": {}
+      }
+    ],
+    "edges": [
+      {
+        "id": "e1",
+        "source": "company",
+        "source_port": "data",
+        "target": "write",
+        "target_port": "var:company"
+      },
+      {
+        "id": "e2",
+        "source": "company",
+        "source_port": "data",
+        "target": "doc",
+        "target_port": "var:company"
+      },
+      {
+        "id": "e3",
+        "source": "write",
+        "source_port": "response",
+        "target": "doc",
+        "target_port": "var:brief"
+      },
+      {
+        "id": "e4",
+        "source": "doc",
+        "source_port": "link",
+        "target": "out",
+        "target_port": "value"
+      }
+    ]
+  }
+}

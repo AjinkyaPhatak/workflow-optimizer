@@ -18,6 +18,7 @@ import { useShowDetails, useTechnicalDetails } from "@/stores/ui/details";
 import { availableVariables } from "@/lib/workflow/variables";
 import { useEditorStore } from "@/stores/workflow-editor/store";
 import { accountLabel, statusLabel } from "@/lib/connectedAccounts";
+import { ACCOUNT_NAMES } from "@/lib/workflow/requirements";
 import type { ConfigField, ConfigOption, ConnectedAccount, Credential, WorkflowNode } from "@/types/api";
 import { VariableField } from "./VariableField";
 import { VariablesEditor } from "./VariablesEditor";
@@ -142,8 +143,6 @@ function CredentialSelect({ id, value, provider, credentials, onCommit, disabled
   );
 }
 
-/** Plain names of the services accounts are connected for. */
-const ACCOUNT_NAMES: Record<string, string> = { google: "Google", notion: "Notion", discord: "Discord", airtable: "Airtable" };
 
 /** The account picker of nodes that use connected accounts (OAuth). The
  * node stores the account's credential_id; the account itself (and its

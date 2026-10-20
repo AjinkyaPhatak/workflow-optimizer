@@ -1,0 +1,126 @@
+{
+  "id": "recording-to-doc",
+  "name": "Save meeting notes to Google Docs",
+  "description": "Transcribes a recording, writes the notes and saves them as a Google Doc to share.",
+  "category": "Meetings",
+  "order": 3,
+  "setup": [
+    "Upload the recording (MP3, M4A, WAV, up to 14 MB) on the Files page."
+  ],
+  "definition": {
+    "version": 1,
+    "settings": {},
+    "nodes": [
+      {
+        "id": "recording",
+        "type": "input",
+        "name": "Recording",
+        "position": {
+          "x": 0,
+          "y": 40
+        },
+        "config": {
+          "field": "recording",
+          "field_type": "file"
+        }
+      },
+      {
+        "id": "title",
+        "type": "input",
+        "name": "Meeting name",
+        "position": {
+          "x": 0,
+          "y": 240
+        },
+        "config": {
+          "field": "meeting_name"
+        }
+      },
+      {
+        "id": "listen",
+        "type": "transcribe_audio",
+        "name": "Transcribe the recording",
+        "position": {
+          "x": 380,
+          "y": 120
+        },
+        "config": {}
+      },
+      {
+        "id": "notes",
+        "type": "llm",
+        "name": "Write the notes",
+        "position": {
+          "x": 760,
+          "y": 120
+        },
+        "config": {
+          "provider": "gemini",
+          "model": "gemini-2.5-flash",
+          "temperature": 0.2,
+          "prompt": "Here is the transcript of a meeting. Write meeting notes with: a short summary, decisions made, action items (who and what), and open questions.\n\n{{transcript}}"
+        }
+      },
+      {
+        "id": "doc",
+        "type": "google_docs.create_document",
+        "name": "Save as a Google Doc",
+        "position": {
+          "x": 1140,
+          "y": 120
+        },
+        "config": {
+          "title": "Meeting notes: {{title}}",
+          "text": "{{notes}}"
+        }
+      },
+      {
+        "id": "out",
+        "type": "output",
+        "name": "Document link",
+        "position": {
+          "x": 1520,
+          "y": 120
+        },
+        "config": {}
+      }
+    ],
+    "edges": [
+      {
+        "id": "e1",
+        "source": "recording",
+        "source_port": "data",
+        "target": "listen",
+        "target_port": "audio"
+      },
+      {
+        "id": "e2",
+        "source": "listen",
+        "source_port": "text",
+        "target": "notes",
+        "target_port": "var:transcript"
+      },
+      {
+        "id": "e3",
+        "source": "title",
+        "source_port": "data",
+        "target": "doc",
+        "target_port": "var:title"
+      },
+      {
+        "id": "e4",
+        "source": "notes",
+        "source_port": "response",
+        "target": "doc",
+        "target_port": "var:notes"
+      },
+      {
+        "id": "e5",
+        "source": "doc",
+        "source_port": "link",
+        "target": "out",
+        "target_port": "value"
+      }
+    ]
+  }
+}

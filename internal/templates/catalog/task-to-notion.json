@@ -1,0 +1,113 @@
+{
+  "id": "task-to-notion",
+  "name": "Turn a message into a Notion task",
+  "description": "Paste a request from a message or email; AI writes a clear task and adds it to a Notion database.",
+  "category": "Team & projects",
+  "order": 0,
+  "setup": [
+    "Pick your tasks database on the Add to Notion card (share it with the app when you connect Notion). Its title column should be called Name."
+  ],
+  "definition": {
+    "version": 1,
+    "settings": {},
+    "nodes": [
+      {
+        "id": "request",
+        "type": "input",
+        "name": "Request",
+        "position": {
+          "x": 0,
+          "y": 40
+        },
+        "config": {
+          "field": "request"
+        }
+      },
+      {
+        "id": "task",
+        "type": "llm",
+        "name": "Write the task",
+        "position": {
+          "x": 380,
+          "y": 120
+        },
+        "config": {
+          "provider": "gemini",
+          "model": "gemini-2.5-flash",
+          "temperature": 0,
+          "prompt": "Turn this request into a task. Reply with JSON only, like {\"title\": \"short task title\", \"details\": \"what needs to be done\"}\n\n{{request}}"
+        }
+      },
+      {
+        "id": "parse",
+        "type": "structured_output",
+        "name": "Check the task",
+        "position": {
+          "x": 760,
+          "y": 120
+        },
+        "config": {
+          "schema": {
+            "title": "string",
+            "details": "string"
+          }
+        }
+      },
+      {
+        "id": "add",
+        "type": "notion.create_page",
+        "name": "Add to Notion",
+        "position": {
+          "x": 1140,
+          "y": 120
+        },
+        "config": {
+          "properties": {
+            "Name": "{{todo.title}}"
+          },
+          "content": "{{todo.details}}"
+        }
+      },
+      {
+        "id": "out",
+        "type": "output",
+        "name": "Task link",
+        "position": {
+          "x": 1520,
+          "y": 120
+        },
+        "config": {}
+      }
+    ],
+    "edges": [
+      {
+        "id": "e1",
+        "source": "request",
+        "source_port": "data",
+        "target": "task",
+        "target_port": "var:request"
+      },
+      {
+        "id": "e2",
+        "source": "task",
+        "source_port": "response",
+        "target": "parse",
+        "target_port": "input"
+      },
+      {
+        "id": "e3",
+        "source": "parse",
+        "source_port": "output",
+        "target": "add",
+        "target_port": "var:todo"
+      },
+      {
+        "id": "e4",
+        "source": "add",
+        "source_port": "url",
+        "target": "out",
+        "target_port": "value"
+      }
+    ]
+  }
+}

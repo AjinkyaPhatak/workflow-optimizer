@@ -25,12 +25,33 @@ var files embed.FS
 // ErrNotFound reports an unknown template ID.
 var ErrNotFound = errors.New("template not found")
 
-// Template is a named starting-point workflow definition.
+// Template is a named starting-point workflow definition (Phase K: with
+// its gallery category and what to prepare before running it).
 type Template struct {
-	ID          string              `json:"id"`
-	Name        string              `json:"name"`
-	Description string              `json:"description"`
-	Definition  workflow.Definition `json:"definition"`
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	// Category groups the gallery; Order sorts within it.
+	Category string `json:"category"`
+	Order    int    `json:"order"`
+	// Setup lists what to prepare besides the accounts and keys the steps
+	// use (the editor works those out from the steps), e.g. a sheet's
+	// column names.
+	Setup      []string            `json:"setup,omitempty"`
+	Definition workflow.Definition `json:"definition"`
+}
+
+// Categories are the gallery's categories in display order. "Advanced"
+// holds the developer examples.
+var Categories = []string{"Writing", "Email", "Sales & customers", "Meetings", "Team & projects", "Advanced"}
+
+func categoryRank(c string) int {
+	for i, x := range Categories {
+		if x == c {
+			return i
+		}
+	}
+	return len(Categories)
 }
 
 var catalog = mustLoad()
@@ -54,19 +75,17 @@ func mustLoad() []Template {
 		}
 		out = append(out, t)
 	}
-	sort.SliceStable(out, func(i, j int) bool { return order(out[i].ID) < order(out[j].ID) })
+	sort.SliceStable(out, func(i, j int) bool {
+		a, b := out[i], out[j]
+		if ra, rb := categoryRank(a.Category), categoryRank(b.Category); ra != rb {
+			return ra < rb
+		}
+		if a.Order != b.Order {
+			return a.Order < b.Order
+		}
+		return a.ID < b.ID
+	})
 	return out
-}
-
-// order lists templates from simplest to richest.
-func order(id string) int {
-	switch id {
-	case "basic-ai-prompt":
-		return 0
-	case "data-transformation":
-		return 1
-	}
-	return 2
 }
 
 // List returns all templates (callers must not modify them).
@@ -92,7 +111,13 @@ func Instantiate(id string) (workflow.Definition, error) {
 	if err != nil {
 		return workflow.Definition{}, err
 	}
-	raw, err := json.Marshal(t.Definition)
+	return InstantiateDefinition(t.Definition)
+}
+
+// InstantiateDefinition is Instantiate for any definition (a saved
+// template's): a copy with fresh node and edge IDs.
+func InstantiateDefinition(src workflow.Definition) (workflow.Definition, error) {
+	raw, err := json.Marshal(src)
 	if err != nil {
 		return workflow.Definition{}, err
 	}

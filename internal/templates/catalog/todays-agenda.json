@@ -1,0 +1,84 @@
+{
+  "id": "todays-agenda",
+  "name": "Brief me on today's meetings",
+  "description": "Reads today's calendar and writes a short plan for the day.",
+  "category": "Meetings",
+  "order": 1,
+  "definition": {
+    "version": 1,
+    "settings": {},
+    "nodes": [
+      {
+        "id": "start",
+        "type": "input",
+        "name": "Start",
+        "position": {
+          "x": 0,
+          "y": 120
+        },
+        "config": {}
+      },
+      {
+        "id": "events",
+        "type": "google_calendar.list_events",
+        "name": "Read today's events",
+        "position": {
+          "x": 380,
+          "y": 120
+        },
+        "config": {
+          "days_ahead": 1,
+          "max_results": 20
+        }
+      },
+      {
+        "id": "brief",
+        "type": "llm",
+        "name": "Write the briefing",
+        "position": {
+          "x": 760,
+          "y": 120
+        },
+        "config": {
+          "provider": "gemini",
+          "model": "gemini-2.5-flash",
+          "temperature": 0.3,
+          "prompt": "Here are my calendar events for today. Write a short morning briefing: a timeline of the day, how to prepare for each meeting, and any free time I have.\n\n{{events}}"
+        }
+      },
+      {
+        "id": "out",
+        "type": "output",
+        "name": "Briefing",
+        "position": {
+          "x": 1140,
+          "y": 120
+        },
+        "config": {}
+      }
+    ],
+    "edges": [
+      {
+        "id": "e1",
+        "source": "start",
+        "source_port": "data",
+        "target": "events",
+        "target_port": "query"
+      },
+      {
+        "id": "e2",
+        "source": "events",
+        "source_port": "events",
+        "target": "brief",
+        "target_port": "var:events"
+      },
+      {
+        "id": "e3",
+        "source": "brief",
+        "source_port": "response",
+        "target": "out",
+        "target_port": "value"
+      }
+    ]
+  }
+}

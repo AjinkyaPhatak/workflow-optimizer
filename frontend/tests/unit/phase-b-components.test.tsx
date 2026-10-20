@@ -9,7 +9,6 @@ import { NewWorkflow } from "@/components/workflow/NewWorkflow";
 import { VersionsPanel } from "@/components/workflow/VersionsPanel";
 import { EditorContext } from "@/features/workflows/EditorContext";
 import type { EditorSession } from "@/features/workflows/useEditorSession";
-import { workflowApi } from "@/lib/api";
 import { useEditorStore } from "@/stores/workflow-editor/store";
 import type { NodeDefinition, VersionSummary } from "@/types/api";
 import { catalog, sampleDefinition } from "./fixtures";
@@ -166,26 +165,16 @@ describe("versions panel", () => {
 });
 
 describe("new workflow", () => {
-  it("offers blank or a template and creates from the choice", async () => {
-    vi.spyOn(workflowApi, "templates").mockResolvedValue({ items: [
-      { id: "basic-ai-prompt", name: "Basic AI Prompt", description: "Prompt a model.", node_types: ["input", "prompt", "llm", "output"],
-        definition: { version: 1, settings: {}, edges: [], nodes: [
-          { id: "a", type: "input", name: "Input", position: null, config: {} },
-          { id: "b", type: "llm", name: "LLM", position: null, config: {} },
-        ] } },
-    ] });
+  it("creates an empty workflow and points to the templates", async () => {
     const create = vi.fn().mockResolvedValue({ id: "wf-1" });
     const onCreated = vi.fn();
     render(<NewWorkflow projects={[]} create={create} onCreated={onCreated} />);
-    const card = await screen.findByTestId("template-basic-ai-prompt");
-    expect(card.textContent).toContain("Input → LLM");
-    expect(screen.getByRole("radio", { name: /Blank workflow/ }).getAttribute("aria-checked")).toBe("true");
-    fireEvent.click(card);
+    expect(screen.getByTestId("browse-templates").getAttribute("href")).toBe("/templates");
     fireEvent.change(screen.getByLabelText("Workflow name"), { target: { value: "Summaries" } });
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Create workflow" }));
+      fireEvent.click(screen.getByRole("button", { name: "Create empty workflow" }));
     });
-    expect(create).toHaveBeenCalledWith("Summaries", undefined, "basic-ai-prompt");
+    expect(create).toHaveBeenCalledWith("Summaries", undefined);
     expect(onCreated).toHaveBeenCalledWith({ id: "wf-1" });
   });
 });

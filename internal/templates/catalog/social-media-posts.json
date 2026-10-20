@@ -1,0 +1,66 @@
+{
+  "id": "social-media-posts",
+  "name": "Social media posts from an idea",
+  "description": "Write a LinkedIn post, a post for X and an Instagram caption about the same news.",
+  "category": "Writing",
+  "order": 2,
+  "definition": {
+    "version": 1,
+    "settings": {},
+    "nodes": [
+      {
+        "id": "news",
+        "type": "input",
+        "name": "News",
+        "position": {
+          "x": 0,
+          "y": 40
+        },
+        "config": {
+          "field": "news"
+        }
+      },
+      {
+        "id": "write",
+        "type": "llm",
+        "name": "Write the posts",
+        "position": {
+          "x": 380,
+          "y": 120
+        },
+        "config": {
+          "provider": "gemini",
+          "model": "gemini-2.5-flash",
+          "temperature": 0.8,
+          "prompt": "Write social media posts about this news:\n\n{{news}}\n\nWrite three versions, each under its own heading:\nLinkedIn (professional, up to 150 words)\nX (under 280 characters)\nInstagram (casual, with a few hashtags)"
+        }
+      },
+      {
+        "id": "out",
+        "type": "output",
+        "name": "Posts",
+        "position": {
+          "x": 760,
+          "y": 120
+        },
+        "config": {}
+      }
+    ],
+    "edges": [
+      {
+        "id": "e1",
+        "source": "news",
+        "source_port": "data",
+        "target": "write",
+        "target_port": "var:news"
+      },
+      {
+        "id": "e2",
+        "source": "write",
+        "source_port": "response",
+        "target": "out",
+        "target_port": "value"
+      }
+    ]
+  }
+}

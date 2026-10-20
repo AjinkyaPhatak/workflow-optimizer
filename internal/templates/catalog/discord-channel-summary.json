@@ -1,0 +1,86 @@
+{
+  "id": "discord-channel-summary",
+  "name": "Catch up on a Discord channel",
+  "description": "Summarizes the latest messages of a Discord channel.",
+  "category": "Team & projects",
+  "order": 1,
+  "setup": [
+    "Pick the channel on the Read recent messages card."
+  ],
+  "definition": {
+    "version": 1,
+    "settings": {},
+    "nodes": [
+      {
+        "id": "start",
+        "type": "input",
+        "name": "Start",
+        "position": {
+          "x": 0,
+          "y": 120
+        },
+        "config": {}
+      },
+      {
+        "id": "read",
+        "type": "discord.read_messages",
+        "name": "Read recent messages",
+        "position": {
+          "x": 380,
+          "y": 120
+        },
+        "config": {
+          "limit": 50
+        }
+      },
+      {
+        "id": "summarize",
+        "type": "llm",
+        "name": "Summarize",
+        "position": {
+          "x": 760,
+          "y": 120
+        },
+        "config": {
+          "provider": "gemini",
+          "model": "gemini-2.5-flash",
+          "temperature": 0.2,
+          "prompt": "Summarize this team chat: the main topics, decisions, questions waiting for an answer, and anything I am asked to do.\n\n{{chat}}"
+        }
+      },
+      {
+        "id": "out",
+        "type": "output",
+        "name": "Summary",
+        "position": {
+          "x": 1140,
+          "y": 120
+        },
+        "config": {}
+      }
+    ],
+    "edges": [
+      {
+        "id": "e1",
+        "source": "start",
+        "source_port": "data",
+        "target": "read",
+        "target_port": "channel"
+      },
+      {
+        "id": "e2",
+        "source": "read",
+        "source_port": "text",
+        "target": "summarize",
+        "target_port": "var:chat"
+      },
+      {
+        "id": "e3",
+        "source": "summarize",
+        "source_port": "response",
+        "target": "out",
+        "target_port": "value"
+      }
+    ]
+  }
+}

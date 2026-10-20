@@ -1,6 +1,8 @@
 package templates_test
 
 import (
+	"encoding/json"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -102,5 +104,64 @@ func TestInstantiateKeepsTransformMapping(t *testing.T) {
 	}
 	if mapping["question"] != "{{input.query}}" || mapping["source"] != "{{source}}" || mapping["received"] != true {
 		t.Fatalf("mapping: %#v", mapping)
+	}
+}
+
+// The gallery templates (Phase K) are built for people: every one has a
+// known category, each Input card asks one named question, and every
+// {{name}} a step uses is fed by a connection, so the Run window asks only
+// the Input cards' questions.
+func TestGalleryTemplatesAreSelfContained(t *testing.T) {
+	list := templates.List()
+	if len(list) < 25 {
+		t.Fatalf("the gallery has %d templates", len(list))
+	}
+	known := map[string]bool{}
+	for _, c := range templates.Categories {
+		known[c] = true
+	}
+	ref := regexp.MustCompile(`\{\{([A-Za-z_][A-Za-z0-9_]*)`)
+	names := map[string]bool{}
+	for _, tpl := range list {
+		if !known[tpl.Category] {
+			t.Errorf("%s: unknown category %q", tpl.ID, tpl.Category)
+		}
+		if names[tpl.Name] {
+			t.Errorf("%s: duplicate name %q", tpl.ID, tpl.Name)
+		}
+		names[tpl.Name] = true
+		if tpl.Category == "Advanced" {
+			continue // the developer examples use {{input.x}} and variables
+		}
+		if len(tpl.Definition.Variables) > 0 {
+			t.Errorf("%s: gallery templates ask through Input cards, not variables", tpl.ID)
+		}
+		fed := map[string]map[string]bool{}
+		for _, e := range tpl.Definition.Edges {
+			if name, ok := workflow.VariableInput(e.TargetPort); ok {
+				if fed[e.Target] == nil {
+					fed[e.Target] = map[string]bool{}
+				}
+				fed[e.Target][name] = true
+			}
+		}
+		for _, n := range tpl.Definition.Nodes {
+			raw, _ := json.Marshal(n.Config)
+			used := map[string]bool{}
+			for _, m := range ref.FindAllStringSubmatch(string(raw), -1) {
+				used[m[1]] = true
+				if !fed[n.ID][m[1]] {
+					t.Errorf("%s: %s uses {{%s}} but nothing is connected to it", tpl.ID, n.ID, m[1])
+				}
+			}
+			for name := range fed[n.ID] {
+				if !used[name] {
+					t.Errorf("%s: %s has {{%s}} connected but does not use it", tpl.ID, n.ID, name)
+				}
+			}
+			if n.Type == "input" && len(tpl.Definition.Nodes) > 0 && n.Name != "Start" && n.Config["field"] == nil {
+				t.Errorf("%s: input %s has no Field name", tpl.ID, n.ID)
+			}
+		}
 	}
 }

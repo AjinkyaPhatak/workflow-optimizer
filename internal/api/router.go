@@ -95,6 +95,8 @@ func NewRouter(h *handlers.Handlers, tokens auth.TokenService, logger *slog.Logg
 	private("GET "+Prefix+"/nodes", h.ListNodes)
 	private("POST "+Prefix+"/nodes/{nodeType}/options", h.ListNodeOptions)
 	private("GET "+Prefix+"/templates", h.ListTemplates)
+	private("POST "+Prefix+"/templates", h.SaveTemplate)
+	private("DELETE "+Prefix+"/templates/{templateID}", h.DeleteTemplate)
 
 	mux.Handle("/", unmatched(mux, logger))
 

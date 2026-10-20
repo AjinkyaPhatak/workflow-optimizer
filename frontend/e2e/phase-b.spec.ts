@@ -50,11 +50,16 @@ test("template, variables, prompt template, LLM, structured output, search and v
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page).toHaveURL(/\/workflows$/);
 
-  const create = page.getByTestId("new-workflow");
-  await expect(create.getByTestId("template-structured-ai-response")).toContainText("Input → Prompt → LLM → Structured Output → Output");
-  await create.getByLabel("Workflow name").fill("Meeting Summarizer");
-  await create.getByTestId("template-structured-ai-response").click();
-  await create.getByRole("button", { name: "Create workflow" }).click();
+  // Phase K: templates live in the gallery (Advanced shows with technical
+  // details on, as in this spec).
+  await page.getByTestId("new-workflow").getByTestId("browse-templates").click();
+  await expect(page).toHaveURL(/\/templates$/);
+  await page.getByRole("tab", { name: "Advanced" }).click();
+  await page.getByTestId("template-structured-ai-response").click();
+  const details = page.getByTestId("template-details");
+  await expect(details).toContainText("What it does");
+  await details.getByLabel("Name your workflow").fill("Meeting Summarizer");
+  await details.getByTestId("use-template").click();
   await expect(page).toHaveURL(/\/workflows\/[0-9a-f-]{36}\/editor$/, { timeout: 60_000 });
   const workflowId = page.url().split("/").at(-2)!;
   await expect(page.getByTestId("version-status")).toHaveText("v1 · Draft");

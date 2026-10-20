@@ -10,6 +10,8 @@ import { ErrorBanner } from "@/components/ui/ErrorBanner";
 import { EditorContext } from "@/features/workflows/EditorContext";
 import { useEditorSession } from "@/features/workflows/useEditorSession";
 import { copyFragment, type Fragment } from "@/lib/workflow/clipboard";
+import { CREDENTIAL_FIELD } from "@/lib/workflow/labels";
+import { credentialFills } from "@/lib/workflow/requirements";
 import { isDirty, useEditorStore, useIsDirty } from "@/stores/workflow-editor/store";
 import type { NodeDefinition } from "@/types/api";
 import { EditorHeader } from "./EditorHeader";
@@ -31,6 +33,20 @@ function useAutosave(save: () => Promise<unknown>, busy: boolean) {
 
 const AUTOSAVE_MS = 1500;
 
+/** Phase K: a step whose account or key is not chosen gets the only one
+ * there is (e.g. every Gmail step of a new template, the one Google
+ * account), so a template is ready to run without picking it on each card. */
+function useFillCredentials(session: ReturnType<typeof useEditorSession>) {
+  const definition = useEditorStore((s) => s.definition);
+  const editing = useEditorStore((s) => s.mode === "editing");
+  const { catalog, catalogList, connectedAccounts, credentials } = session;
+  useEffect(() => {
+    if (!editing || catalogList.length === 0) return;
+    const set = useEditorStore.getState().setConfigValue;
+    for (const f of credentialFills(definition, catalog, connectedAccounts, credentials)) set(f.nodeId, CREDENTIAL_FIELD, f.credentialId);
+  }, [definition, editing, catalog, catalogList, connectedAccounts, credentials]);
+}
+
 function isTyping(target: EventTarget | null): boolean {
   const el = target as HTMLElement | null;
   return !!el && (el.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName));
@@ -44,6 +60,7 @@ function EditorLayout({ workflowId }: { workflowId: string }) {
   const [running, setRunning] = useState(false);
   const details = useShowDetails();
   useAutosave(session.save, session.busy !== null);
+  useFillCredentials(session);
   const validation = useEditorStore((s) => s.validation);
 
   // Show validation findings as soon as they arrive.

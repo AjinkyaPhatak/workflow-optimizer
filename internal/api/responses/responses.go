@@ -115,21 +115,41 @@ func NewWorkflowFromTemplate(w workflow.Workflow, v workflow.Version) WorkflowFr
 	return WorkflowFromTemplate{Workflow: NewWorkflow(w), Version: NewVersionSummary(v)}
 }
 
-// Template is a workflow template: a ready-made workflow definition.
+// Template is a workflow template: a ready-made workflow definition, built
+// in or saved by the workspace (Phase K: Saved, CreatedAt).
 type Template struct {
 	ID          string              `json:"id"`
 	Name        string              `json:"name"`
 	Description string              `json:"description"`
+	Category    string              `json:"category"`
+	Setup       []string            `json:"setup"`
 	NodeTypes   []string            `json:"node_types"`
+	Saved       bool                `json:"saved"`
+	CreatedAt   *time.Time          `json:"created_at,omitempty"`
 	Definition  workflow.Definition `json:"definition"`
 }
 
-func NewTemplate(t templates.Template) Template {
+func nodeTypes(d workflow.Definition) []string {
 	types := []string{}
-	for _, n := range t.Definition.Nodes {
+	for _, n := range d.Nodes {
 		types = append(types, n.Type)
 	}
-	return Template{ID: t.ID, Name: t.Name, Description: t.Description, NodeTypes: types, Definition: t.Definition}
+	return types
+}
+
+func NewTemplate(t templates.Template) Template {
+	setup := t.Setup
+	if setup == nil {
+		setup = []string{}
+	}
+	return Template{ID: t.ID, Name: t.Name, Description: t.Description, Category: t.Category, Setup: setup,
+		NodeTypes: nodeTypes(t.Definition), Definition: t.Definition}
+}
+
+func NewSavedTemplate(s templates.Saved) Template {
+	at := s.CreatedAt
+	return Template{ID: s.ID.String(), Name: s.Name, Description: s.Description, Category: templates.SavedCategory, Setup: []string{},
+		NodeTypes: nodeTypes(s.Definition), Saved: true, CreatedAt: &at, Definition: s.Definition}
 }
 
 // VersionSummary is version metadata (no definition).

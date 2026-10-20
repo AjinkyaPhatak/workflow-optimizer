@@ -396,3 +396,25 @@ func TestOptions(t *testing.T) {
 		t.Fatalf("values field: %+v", f)
 	}
 }
+
+// A connected object (e.g. a form response) may carry fields the sheet has
+// no column for: they are skipped, as long as one field matches.
+func TestConnectedValuesSkipUnknownColumns(t *testing.T) {
+	m := newMock(t)
+	h := apitest.New(t, m.options())
+	cfg := func() map[string]any { return map[string]any{"spreadsheet": sheetID, "sheet": "Leads"} }
+	if _, err := h.Result("google_sheets.append_row", cfg(), map[string]any{"Name": "Zed", "response_id": "r1"}); err != nil {
+		t.Fatal(err)
+	}
+	_, err := h.Result("google_sheets.append_row", cfg(), map[string]any{"response_id": "r1"})
+	if f := apitest.Failure(t, err); f.Code != "INVALID_REQUEST" || !strings.Contains(f.Message, "none of the connected values") {
+		t.Fatalf("nothing matches: %+v", f)
+	}
+	// Typed-in Values still must each name a column.
+	c := cfg()
+	c["values"] = map[string]any{"Name": "Zed", "Phone": "1"}
+	_, err = h.Result("google_sheets.append_row", c, map[string]any{})
+	if f := apitest.Failure(t, err); !strings.Contains(f.Message, `no column "Phone"`) {
+		t.Fatalf("typed-in: %+v", f)
+	}
+}

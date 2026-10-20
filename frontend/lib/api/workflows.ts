@@ -11,8 +11,14 @@ export const workflowApi = {
    * backend instantiates it with fresh node IDs). */
   createFromTemplate: (projectId: string, name: string, templateId: string) =>
     request<WorkflowFromTemplate>("POST", "/workflows", { body: { project_id: projectId, name, template_id: templateId } }),
-  /** Workflow templates: ready-made workflow definitions. */
-  templates: () => request<List<WorkflowTemplate>>("GET", "/templates"),
+  /** Workflow templates: ready-made workflow definitions; with a workspace,
+   * its saved templates first (Phase K). */
+  templates: (workspaceId?: string) =>
+    request<List<WorkflowTemplate>>("GET", "/templates", workspaceId ? { query: { workspace_id: workspaceId } } : {}),
+  /** Saves the workflow's current version as a template of its workspace. */
+  saveTemplate: (workflowId: string, name: string, description: string) =>
+    request<WorkflowTemplate>("POST", "/templates", { body: { workflow_id: workflowId, name, description } }),
+  deleteTemplate: (id: string) => request<void>("DELETE", `/templates/${encodeURIComponent(id)}`),
   update: (id: string, patch: { name?: string; description?: string }) =>
     request<Workflow>("PATCH", `/workflows/${id}`, { body: patch }),
   remove: (id: string) => request<void>("DELETE", `/workflows/${id}`),

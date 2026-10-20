@@ -1,0 +1,82 @@
+{
+  "id": "form-to-sheet",
+  "name": "Copy form responses to a sheet",
+  "description": "Adds the newest Google Form response as a row in a Google Sheet.",
+  "category": "Sales & customers",
+  "order": 0,
+  "setup": [
+    "Paste the form's link from its edit page (it ends with /edit) on the first card.",
+    "Make a Google Sheet whose first row has the same column names as your form questions, and paste its link on the second card."
+  ],
+  "definition": {
+    "version": 1,
+    "settings": {},
+    "nodes": [
+      {
+        "id": "start",
+        "type": "input",
+        "name": "Start",
+        "position": {
+          "x": 0,
+          "y": 120
+        },
+        "config": {}
+      },
+      {
+        "id": "responses",
+        "type": "google_forms.read_responses",
+        "name": "Read the newest response",
+        "position": {
+          "x": 380,
+          "y": 120
+        },
+        "config": {
+          "max_responses": 1
+        }
+      },
+      {
+        "id": "add",
+        "type": "google_sheets.append_row",
+        "name": "Add it to the sheet",
+        "position": {
+          "x": 760,
+          "y": 120
+        },
+        "config": {}
+      },
+      {
+        "id": "out",
+        "type": "output",
+        "name": "Row added",
+        "position": {
+          "x": 1140,
+          "y": 120
+        },
+        "config": {}
+      }
+    ],
+    "edges": [
+      {
+        "id": "e1",
+        "source": "start",
+        "source_port": "data",
+        "target": "responses",
+        "target_port": "data"
+      },
+      {
+        "id": "e2",
+        "source": "responses",
+        "source_port": "latest",
+        "target": "add",
+        "target_port": "values"
+      },
+      {
+        "id": "e3",
+        "source": "add",
+        "source_port": "row_number",
+        "target": "out",
+        "target_port": "value"
+      }
+    ]
+  }
+}

@@ -57,6 +57,8 @@ type WorkflowService struct {
 	// credentials, when set, makes saving check that every literal
 	// credential_id names a credential of the workflow's workspace.
 	credentials CredentialLocator
+	// saved, when set, stores templates saved from workflows (Phase K).
+	saved templates.SavedRepository
 }
 
 // WithCredentialCheck makes CreateVersion refuse credential references to
@@ -168,17 +170,15 @@ func (s *WorkflowService) CreateWorkflow(ctx context.Context, user, projectID uu
 }
 
 // CreateWorkflowFromTemplate creates a workflow whose first version is a
-// DRAFT copy of the template's definition (fresh node IDs). The draft goes
+// DRAFT copy of the template's definition (fresh node IDs): a built-in
+// template's ID, or a saved template of the project's workspace. The draft goes
 // through CreateVersion, so it is validated and stored like any other.
 func (s *WorkflowService) CreateWorkflowFromTemplate(ctx context.Context, user, projectID uuid.UUID, name string, description *string, templateID string) (workflow.Workflow, workflow.Version, error) {
-	def, err := templates.Instantiate(templateID)
-	if errors.Is(err, templates.ErrNotFound) {
-		return workflow.Workflow{}, workflow.Version{}, &InvalidError{Message: "unknown template_id"}
-	}
+	project, err := s.project(ctx, user, projectID, workspace.ActionWrite)
 	if err != nil {
 		return workflow.Workflow{}, workflow.Version{}, err
 	}
-	raw, err := json.Marshal(def)
+	raw, err := s.templateDefinition(ctx, user, project, templateID)
 	if err != nil {
 		return workflow.Workflow{}, workflow.Version{}, err
 	}

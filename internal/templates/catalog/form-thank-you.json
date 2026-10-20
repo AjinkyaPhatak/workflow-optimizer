@@ -1,0 +1,115 @@
+{
+  "id": "form-thank-you",
+  "name": "Thank people who fill in a form",
+  "description": "Writes a personal thank-you for the newest form response and saves it in Gmail Drafts.",
+  "category": "Sales & customers",
+  "order": 1,
+  "setup": [
+    "Paste the form's link from its edit page on the first card.",
+    "In the form's settings, turn on \"Collect email addresses\" so there is an address to write to."
+  ],
+  "definition": {
+    "version": 1,
+    "settings": {},
+    "nodes": [
+      {
+        "id": "start",
+        "type": "input",
+        "name": "Start",
+        "position": {
+          "x": 0,
+          "y": 120
+        },
+        "config": {}
+      },
+      {
+        "id": "responses",
+        "type": "google_forms.read_responses",
+        "name": "Read the newest response",
+        "position": {
+          "x": 380,
+          "y": 120
+        },
+        "config": {
+          "max_responses": 1
+        }
+      },
+      {
+        "id": "write",
+        "type": "llm",
+        "name": "Write a thank-you",
+        "position": {
+          "x": 760,
+          "y": 120
+        },
+        "config": {
+          "provider": "gemini",
+          "model": "gemini-2.5-flash",
+          "temperature": 0.6,
+          "prompt": "Someone just filled in our form. Write a short, warm thank-you email that mentions what they told us. Reply with the email body only.\n\nTheir answers:\n{{response}}"
+        }
+      },
+      {
+        "id": "draft",
+        "type": "gmail.create_draft",
+        "name": "Save the draft",
+        "position": {
+          "x": 1140,
+          "y": 120
+        },
+        "config": {
+          "to": "{{response.email}}",
+          "subject": "Thanks for getting in touch",
+          "body": "{{thanks}}"
+        }
+      },
+      {
+        "id": "out",
+        "type": "output",
+        "name": "Draft",
+        "position": {
+          "x": 1520,
+          "y": 120
+        },
+        "config": {}
+      }
+    ],
+    "edges": [
+      {
+        "id": "e1",
+        "source": "start",
+        "source_port": "data",
+        "target": "responses",
+        "target_port": "data"
+      },
+      {
+        "id": "e2",
+        "source": "responses",
+        "source_port": "latest",
+        "target": "write",
+        "target_port": "var:response"
+      },
+      {
+        "id": "e3",
+        "source": "responses",
+        "source_port": "latest",
+        "target": "draft",
+        "target_port": "var:response"
+      },
+      {
+        "id": "e4",
+        "source": "write",
+        "source_port": "response",
+        "target": "draft",
+        "target_port": "var:thanks"
+      },
+      {
+        "id": "e5",
+        "source": "draft",
+        "source_port": "status",
+        "target": "out",
+        "target_port": "value"
+      }
+    ]
+  }
+}

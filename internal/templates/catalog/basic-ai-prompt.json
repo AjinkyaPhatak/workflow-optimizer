@@ -1,22 +1,66 @@
 {
   "id": "basic-ai-prompt",
-  "name": "Basic AI Prompt",
-  "description": "Build a prompt from the run input and send it to a language model.",
+  "name": "Ask AI a question",
+  "description": "Type a question and get a clear, short answer.",
+  "category": "Writing",
+  "order": 0,
   "definition": {
     "version": 1,
     "settings": {},
     "nodes": [
-      { "id": "input", "type": "input", "name": "Input", "position": { "x": 0, "y": 80 }, "config": {} },
-      { "id": "prompt", "type": "prompt", "name": "Prompt", "position": { "x": 320, "y": 80 },
-        "config": { "template": "Answer the following question clearly and concisely.\n\nQuestion: {{input.query}}" } },
-      { "id": "llm", "type": "llm", "name": "LLM", "position": { "x": 640, "y": 80 },
-        "config": { "provider": "gemini", "model": "gemini-2.5-flash", "temperature": 0.2 } },
-      { "id": "output", "type": "output", "name": "Output", "position": { "x": 960, "y": 80 }, "config": {} }
+      {
+        "id": "question",
+        "type": "input",
+        "name": "Question",
+        "position": {
+          "x": 0,
+          "y": 40
+        },
+        "config": {
+          "field": "question"
+        }
+      },
+      {
+        "id": "ask",
+        "type": "llm",
+        "name": "Answer the question",
+        "position": {
+          "x": 380,
+          "y": 120
+        },
+        "config": {
+          "provider": "gemini",
+          "model": "gemini-2.5-flash",
+          "temperature": 0.2,
+          "prompt": "Answer clearly and concisely:\n\n{{question}}"
+        }
+      },
+      {
+        "id": "out",
+        "type": "output",
+        "name": "Answer",
+        "position": {
+          "x": 760,
+          "y": 120
+        },
+        "config": {}
+      }
     ],
     "edges": [
-      { "id": "e1", "source": "input", "source_port": "data", "target": "prompt", "target_port": "variables" },
-      { "id": "e2", "source": "prompt", "source_port": "prompt", "target": "llm", "target_port": "prompt" },
-      { "id": "e3", "source": "llm", "source_port": "response", "target": "output", "target_port": "value" }
+      {
+        "id": "e1",
+        "source": "question",
+        "source_port": "data",
+        "target": "ask",
+        "target_port": "var:question"
+      },
+      {
+        "id": "e2",
+        "source": "ask",
+        "source_port": "response",
+        "target": "out",
+        "target_port": "value"
+      }
     ]
   }
 }

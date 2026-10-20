@@ -1,0 +1,175 @@
+{
+  "id": "qualify-lead-airtable",
+  "name": "Score a new lead into Airtable",
+  "description": "Describe a lead; AI rates how promising it is and adds it to an Airtable table.",
+  "category": "Sales & customers",
+  "order": 2,
+  "setup": [
+    "Make an Airtable table with the fields Name, Company, Notes, Score (number) and Reason, and pick it on the Add to Airtable card."
+  ],
+  "definition": {
+    "version": 1,
+    "settings": {},
+    "nodes": [
+      {
+        "id": "name",
+        "type": "input",
+        "name": "Name",
+        "position": {
+          "x": 0,
+          "y": 40
+        },
+        "config": {
+          "field": "name"
+        }
+      },
+      {
+        "id": "company",
+        "type": "input",
+        "name": "Company",
+        "position": {
+          "x": 0,
+          "y": 240
+        },
+        "config": {
+          "field": "company"
+        }
+      },
+      {
+        "id": "notes",
+        "type": "input",
+        "name": "Notes",
+        "position": {
+          "x": 0,
+          "y": 440
+        },
+        "config": {
+          "field": "notes"
+        }
+      },
+      {
+        "id": "score",
+        "type": "llm",
+        "name": "Score the lead",
+        "position": {
+          "x": 380,
+          "y": 120
+        },
+        "config": {
+          "provider": "gemini",
+          "model": "gemini-2.5-flash",
+          "temperature": 0,
+          "prompt": "Rate this sales lead from 1 (poor) to 5 (excellent) and give a one-sentence reason. Reply with JSON only, like {\"score\": 4, \"reason\": \"...\"}\n\nName: {{name}}\nCompany: {{company}}\nNotes: {{notes}}"
+        }
+      },
+      {
+        "id": "parse",
+        "type": "structured_output",
+        "name": "Check the score",
+        "position": {
+          "x": 760,
+          "y": 120
+        },
+        "config": {
+          "schema": {
+            "score": "number",
+            "reason": "string"
+          }
+        }
+      },
+      {
+        "id": "add",
+        "type": "airtable.create_record",
+        "name": "Add to Airtable",
+        "position": {
+          "x": 1140,
+          "y": 120
+        },
+        "config": {
+          "fields": {
+            "Name": "{{name}}",
+            "Company": "{{company}}",
+            "Notes": "{{notes}}",
+            "Score": "{{lead.score}}",
+            "Reason": "{{lead.reason}}"
+          }
+        }
+      },
+      {
+        "id": "out",
+        "type": "output",
+        "name": "Lead",
+        "position": {
+          "x": 1520,
+          "y": 120
+        },
+        "config": {}
+      }
+    ],
+    "edges": [
+      {
+        "id": "e1",
+        "source": "name",
+        "source_port": "data",
+        "target": "score",
+        "target_port": "var:name"
+      },
+      {
+        "id": "e2",
+        "source": "company",
+        "source_port": "data",
+        "target": "score",
+        "target_port": "var:company"
+      },
+      {
+        "id": "e3",
+        "source": "notes",
+        "source_port": "data",
+        "target": "score",
+        "target_port": "var:notes"
+      },
+      {
+        "id": "e4",
+        "source": "score",
+        "source_port": "response",
+        "target": "parse",
+        "target_port": "input"
+      },
+      {
+        "id": "e5",
+        "source": "parse",
+        "source_port": "output",
+        "target": "add",
+        "target_port": "var:lead"
+      },
+      {
+        "id": "e6",
+        "source": "name",
+        "source_port": "data",
+        "target": "add",
+        "target_port": "var:name"
+      },
+      {
+        "id": "e7",
+        "source": "company",
+        "source_port": "data",
+        "target": "add",
+        "target_port": "var:company"
+      },
+      {
+        "id": "e8",
+        "source": "notes",
+        "source_port": "data",
+        "target": "add",
+        "target_port": "var:notes"
+      },
+      {
+        "id": "e9",
+        "source": "add",
+        "source_port": "record",
+        "target": "out",
+        "target_port": "value"
+      }
+    ]
+  }
+}

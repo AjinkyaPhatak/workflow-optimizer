@@ -12,6 +12,8 @@ export function TopBar() {
     <header className="topbar">
       <Link href="/workflows" className="brand"><BrandMark size={22} />Workflow Optimizer</Link>
       <span className="spacer" />
+      <Link href="/workflows" className="topbar-link">Workflows</Link>
+      <Link href="/templates" className="topbar-link">Templates</Link>
       <Link href="/knowledge" className="topbar-link">Knowledge</Link>
       <Link href="/files" className="topbar-link">Files</Link>
       <Link href="/settings/credentials" className="topbar-link">Credentials</Link>
