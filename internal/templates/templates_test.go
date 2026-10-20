@@ -165,3 +165,36 @@ func TestGalleryTemplatesAreSelfContained(t *testing.T) {
 		}
 	}
 }
+
+// A {{name}} fed by a variable input stays {{name}} in a new workflow, even
+// when the template has a node with that ID (e.g. an Input card "question"
+// feeding {{question}}): only node references are renamed.
+func TestInstanceKeepsVariableInputNames(t *testing.T) {
+	ref := regexp.MustCompile(`\{\{([A-Za-z_][A-Za-z0-9_]*)`)
+	for _, tpl := range templates.List() {
+		if tpl.Category == "Advanced" {
+			continue
+		}
+		def, err := templates.Instantiate(tpl.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		fed := map[string]map[string]bool{}
+		for _, e := range def.Edges {
+			if name, ok := workflow.VariableInput(e.TargetPort); ok {
+				if fed[e.Target] == nil {
+					fed[e.Target] = map[string]bool{}
+				}
+				fed[e.Target][name] = true
+			}
+		}
+		for _, n := range def.Nodes {
+			raw, _ := json.Marshal(n.Config)
+			for _, m := range ref.FindAllStringSubmatch(string(raw), -1) {
+				if !fed[n.ID][m[1]] {
+					t.Errorf("%s: %s uses {{%s}} in the new workflow but nothing feeds it", tpl.ID, n.Name, m[1])
+				}
+			}
+		}
+	}
+}

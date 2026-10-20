@@ -144,7 +144,7 @@ export function RunDialog({ open, onClose, workflowId }: { open: boolean; onClos
           <section className="run-questions">
             <h3>Inputs</h3>
             {fields.length === 0 ? (
-              <p className="muted small">This workflow does not ask for anything. Give an Input card a Field name to ask a question here.</p>
+              <p className="muted small">This workflow does not need any answers: just press Run.</p>
             ) : (
               fields.map((f) => (
                 <Question key={f.name} field={f} value={answers[f.name] ?? ""} files={files}
@@ -218,7 +218,9 @@ export function RunDialog({ open, onClose, workflowId }: { open: boolean; onClos
                   {friendly.action === "add_key" && <Link className="button" href="/settings/credentials">Keys</Link>}
                   {friendly.action === "try_again" && <button type="button" onClick={start}>Try again</button>}
                 </div>
-                {details && failure.code && <div className="small muted" style={{ marginTop: 6 }}><code>{failure.code}</code></div>}
+                {details && (failure.code || failure.message) && (
+                  <div className="small muted" style={{ marginTop: 6 }}><code>{[failure.code, failure.message].filter(Boolean).join(": ")}</code></div>
+                )}
               </div>
             )}
             {e && (e.status === "COMPLETED" || failure) && (

@@ -62,7 +62,13 @@ describe("plain errors", () => {
     expect(friendlyError("RATE_LIMITED")).toMatchObject({ title: "The service asked us to slow down", action: "try_again" });
     expect(friendlyError("PERMISSION_DENIED", "Reconnect the Google account").detail).toBe("Reconnect the Google account");
     expect(friendlyError("SOMETHING_NEW")).toMatchObject({ title: "A step did not work", action: "show_step" });
-    expect(friendlyError(undefined, "unresolved variable reference {{x}}").action).toBe("fill_inputs");
+    expect(friendlyError(undefined, "unresolved variable reference {{x}}").title).toBe("A blank was never filled in");
+    // The engine's wrapping is never shown; an unfilled blank says what to connect.
+    const blank = friendlyError("CONFIGURATION_ERROR", 'node "llm_4b78" (type "llm") failed during resolve_config: execution: unresolved variable reference: {{input_1ee6}} must name an output port of node "input_1ee6"');
+    expect(blank).toMatchObject({ title: "A blank was never filled in", action: "show_step" });
+    expect(blank.detail).toBe("Nothing is connected to {{input_1ee6}} on this step. Connect a step's output to it, or remove it from the text.");
+    expect(friendlyError("RESOURCE_NOT_FOUND", 'node "g" (type "google_docs.read_document") failed during execute: [RESOURCE_NOT_FOUND] integration request failed: google_docs.read_document: RESOURCE_NOT_FOUND (HTTP 404): read document failed: not found'))
+      .toMatchObject({ title: "Something a step looks for does not exist", detail: "Read document failed: not found" });
   });
 });
 

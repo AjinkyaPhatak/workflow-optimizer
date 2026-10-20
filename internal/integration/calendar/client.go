@@ -98,6 +98,17 @@ func (c *Client) List(ctx context.Context, calendarID, timeMin, timeMax, query s
 	return out.Items, nil
 }
 
+// TimeZone is the calendar's own time zone (an IANA name), read from an
+// events listing: the calendar.events scope cannot read the calendar
+// itself.
+func (c *Client) TimeZone(ctx context.Context, calendarID string) (string, error) {
+	var out struct {
+		TimeZone string `json:"timeZone"`
+	}
+	err := c.api.Do(ctx, http.MethodGet, eventsPath(calendarID), url.Values{"maxResults": {"1"}}, nil, &out, "read calendar time zone")
+	return out.TimeZone, err
+}
+
 // Insert creates an event. sendUpdates is "all" or "none".
 func (c *Client) Insert(ctx context.Context, calendarID string, e Event, sendUpdates string) (Event, error) {
 	var out Event

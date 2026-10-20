@@ -103,3 +103,22 @@ describe("templates gallery", () => {
     expect(onUse).toHaveBeenCalledWith("My inbox");
   });
 });
+
+describe("copy and paste", () => {
+  it("keeps a {{name}} fed by a connection even when a copied step has that ID", async () => {
+    const { copyFragment, pasteFragment } = await import("@/lib/workflow/clipboard");
+    const d = {
+      version: 1, settings: {},
+      nodes: [node("question", "input", { field: "question" }), node("ask", "llm", { prompt: "Answer {{question}}; before: {{other.response}}" }), node("other", "llm")],
+      edges: [
+        { id: "e1", source: "question", source_port: "data", target: "ask", target_port: "var:question" },
+        { id: "e2", source: "other", source_port: "response", target: "ask", target_port: "prompt" },
+      ],
+    };
+    const fragment = copyFragment(d, ["question", "ask", "other"])!;
+    const { definition, nodeIds } = pasteFragment(d, fragment);
+    const pasted = definition.nodes.find((n) => n.id === nodeIds[1])!;
+    const other = nodeIds[2];
+    expect(pasted.config.prompt).toBe(`Answer {{question}}; before: {{${other}.response}}`);
+  });
+});

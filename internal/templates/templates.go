@@ -126,6 +126,18 @@ func InstantiateDefinition(src workflow.Definition) (workflow.Definition, error)
 		return workflow.Definition{}, err
 	}
 
+	// A {{name}} fed by a variable input of its node (Phase H4) is that
+	// input, never a node reference, even when a node has the same ID
+	// (the executor reads variable inputs first).
+	fed := map[string]map[string]bool{}
+	for _, e := range def.Edges {
+		if name, ok := workflow.VariableInput(e.TargetPort); ok {
+			if fed[e.Target] == nil {
+				fed[e.Target] = map[string]bool{}
+			}
+			fed[e.Target][name] = true
+		}
+	}
 	ids := make(map[string]string, len(def.Nodes))
 	taken := map[string]bool{}
 	for i, n := range def.Nodes {
@@ -134,7 +146,16 @@ func InstantiateDefinition(src workflow.Definition) (workflow.Definition, error)
 		def.Nodes[i].ID = fresh
 	}
 	for i, n := range def.Nodes {
-		def.Nodes[i].Config = remap(n.Config, ids).(map[string]any)
+		own := ids
+		if inputs := fed[src.Nodes[i].ID]; len(inputs) > 0 {
+			own = make(map[string]string, len(ids))
+			for k, v := range ids {
+				if !inputs[k] {
+					own[k] = v
+				}
+			}
+		}
+		def.Nodes[i].Config = remap(n.Config, own).(map[string]any)
 	}
 	for i, e := range def.Edges {
 		def.Edges[i].ID = freshID("edge", taken)

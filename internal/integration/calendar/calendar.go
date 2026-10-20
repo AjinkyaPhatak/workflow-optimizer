@@ -260,12 +260,28 @@ func meetRequestID(eventID string) string {
 	return hex.EncodeToString(b)
 }
 
-func eventSpec(in node.NodeInput) (Event, string, error) {
+// local reports whether s is a time without a UTC offset (it needs a time
+// zone).
+func local(s string) bool {
+	for _, l := range localLayouts {
+		if _, err := time.Parse(l, s); err == nil {
+			return true
+		}
+	}
+	return false
+}
+
+// eventSpec builds the event. defaultZone is used when Time zone is empty
+// (the calendar's own zone).
+func eventSpec(in node.NodeInput, defaultZone string) (Event, string, error) {
 	title := text(in, "summary")
 	if title == "" {
 		return Event{}, "", configError("set a Title")
 	}
 	zone := text(in, "time_zone")
+	if zone == "" {
+		zone = defaultZone
+	}
 	var loc *time.Location
 	if zone != "" {
 		l, err := time.LoadLocation(zone)
@@ -322,7 +338,13 @@ func eventSpec(in node.NodeInput) (Event, string, error) {
 }
 
 func createEvent(ctx context.Context, c *Client, in node.NodeInput) (node.NodeOutput, error) {
-	e, send, err := eventSpec(in)
+	// A time like "2026-10-20 15:00" without a Time zone is in the
+	// calendar's own zone, as when typing it in Google Calendar.
+	defaultZone := ""
+	if text(in, "time_zone") == "" && (local(text(in, "start")) || local(text(in, "end"))) {
+		defaultZone, _ = c.TimeZone(ctx, calendarID(in))
+	}
+	e, send, err := eventSpec(in, defaultZone)
 	if err != nil {
 		return node.NodeOutput{}, err
 	}

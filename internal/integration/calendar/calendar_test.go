@@ -73,7 +73,7 @@ func (m *mockCalendar) serve(w http.ResponseWriter, r *http.Request) {
 				items = append(items, e)
 			}
 		}
-		writeJSON(w, 200, map[string]any{"items": items})
+		writeJSON(w, 200, map[string]any{"items": items, "timeZone": "Asia/Kolkata"})
 	case r.URL.Path == base && r.Method == http.MethodPost:
 		id, _ := req.Body["id"].(string)
 		for _, e := range m.events {
@@ -209,7 +209,6 @@ func TestCreateEvent(t *testing.T) {
 
 	before := len(m.requests)
 	for name, cfg := range map[string]map[string]any{
-		"no zone":        {"summary": "x", "start": "2026-10-20 15:00"},
 		"bad zone":       {"summary": "x", "start": "2026-10-20 15:00", "time_zone": "Mars/Base"},
 		"bad start":      {"summary": "x", "start": "next tuesday"},
 		"end before":     {"summary": "x", "start": "2026-10-20T10:00:00Z", "end": "2026-10-20T09:00:00Z"},
@@ -224,6 +223,12 @@ func TestCreateEvent(t *testing.T) {
 	}
 	if len(m.requests) != before {
 		t.Fatal("invalid settings must not reach Google Calendar")
+	}
+
+	// A time without a Time zone is in the calendar's own zone.
+	out, err = h.Result("google_calendar.create_event", map[string]any{"summary": "x", "start": "2026-10-20 15:00"}, map[string]any{})
+	if err != nil || out["start"] != "2026-10-20T15:00:00+05:30" || m.last().Body["start"].(map[string]any)["timeZone"] != "Asia/Kolkata" {
+		t.Fatalf("calendar zone: %v %v %+v", out, err, m.last().Body)
 	}
 }
 

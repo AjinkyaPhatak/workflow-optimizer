@@ -5,8 +5,7 @@
   "category": "Meetings",
   "order": 0,
   "setup": [
-    "When you run it, type the start like 2026-10-20 15:00.",
-    "Set your time zone (e.g. Asia/Kolkata) under More settings on the event card."
+    "When you run it, type the start like 2026-10-20 15:00 (your Google Calendar's time zone is used)."
   ],
   "definition": {
     "version": 1,
