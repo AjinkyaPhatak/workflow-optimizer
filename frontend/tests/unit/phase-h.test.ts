@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { COMING_SOON, searchTiles, tabOf, tilesFor } from "@/features/nodes/palette";
+import { searchTiles, tabOf, tilesFor } from "@/features/nodes/palette";
 import { cardFields, credentialField, siblingActions } from "@/lib/workflow/card";
 import { createNode } from "@/lib/workflow/definition";
 import { useEditorStore } from "@/stores/workflow-editor/store";
@@ -36,10 +36,7 @@ describe("palette bar", () => {
     expect(apps[0]).toMatchObject({ kind: "app", label: "Gmail", integrationId: "gmail" });
     expect(apps[0].kind === "app" && apps[0].actions.map((a) => a.type)).toEqual(["gmail.search", "gmail.send"]);
     expect(apps.find((t) => t.kind === "node")).toMatchObject({ label: "Web request (API)" });
-    expect(apps.filter((t) => t.kind === "soon")).toHaveLength(COMING_SOON.length);
-    // A coming-soon app disappears once it exists.
-    const drive = { ...search, type: "google_drive.list", integration: { id: "google_drive", name: "Google Drive", action: "list" } };
-    expect(tilesFor([...catalog, drive], "apps").some((t) => t.key === "soon-google_drive")).toBe(false);
+    expect(apps.every((t) => t.kind === "app" || t.kind === "node")).toBe(true);
     expect(tilesFor(catalog, "basics").map((t) => t.label)).toEqual(["Input", "Output"]);
     expect(searchTiles(catalog, "send email").map((t) => t.label)).toEqual(["Gmail: Send Email"]);
   });

@@ -30,21 +30,10 @@ export function tabOf(d: Pick<NodeDefinition, "type" | "category" | "integration
   return "basics";
 }
 
-/** One tile: a single node, an app with its actions, or an app that is
- * not available yet. */
+/** One tile: a single node, or an app with its actions. */
 export type Tile =
   | { kind: "node"; key: string; label: string; def: NodeDefinition }
-  | { kind: "app"; key: string; label: string; integrationId: string; actions: NodeDefinition[] }
-  | { kind: "soon"; key: string; label: string; integrationId: string };
-
-/** Apps shown as "Coming soon" until they exist in the catalog. */
-export const COMING_SOON: { id: string; name: string }[] = [
-  { id: "google_drive", name: "Google Drive" },
-  { id: "slack", name: "Slack" },
-  { id: "whatsapp", name: "WhatsApp" },
-  { id: "telegram", name: "Telegram" },
-  { id: "trello", name: "Trello" },
-];
+  | { kind: "app"; key: string; label: string; integrationId: string; actions: NodeDefinition[] };
 
 /** A tile's name: an app action's name ("Send Email"), else the step's
  * plain name ("Ask AI"). */
@@ -53,7 +42,7 @@ export function tileName(d: Pick<NodeDefinition, "type" | "name" | "integration"
 }
 
 /** The tiles of a tab, in catalog order: apps grouped by integration
- * (alphabetically), then the "Coming soon" apps. */
+ * (alphabetically) first. */
 export function tilesFor(catalog: NodeDefinition[], tab: PaletteTab): Tile[] {
   const tiles: Tile[] = [];
   const apps = new Map<string, Extract<Tile, { kind: "app" }>>();
@@ -72,8 +61,7 @@ export function tilesFor(catalog: NodeDefinition[], tab: PaletteTab): Tile[] {
   }
   if (tab !== "apps") return tiles;
   const appTiles = [...apps.values()].sort((a, b) => a.label.localeCompare(b.label));
-  const soon: Tile[] = COMING_SOON.filter((c) => !apps.has(c.id)).map((c) => ({ kind: "soon", key: `soon-${c.id}`, label: c.name, integrationId: c.id }));
-  return [...appTiles, ...tiles, ...soon];
+  return [...appTiles, ...tiles];
 }
 
 /** Search results: matching nodes as single tiles (an app action is named

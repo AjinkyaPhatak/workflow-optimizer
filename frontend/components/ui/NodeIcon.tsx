@@ -12,7 +12,7 @@ interface Brand {
   hex: string;
 }
 
-/** Brand logos by integration ID (also used for "Coming soon" tiles). */
+/** Brand logos by integration ID. */
 const BRANDS: Record<string, Brand> = {
   gmail: siGmail, google_sheets: siGooglesheets, google_calendar: siGooglecalendar, google_meet: siGooglemeet,
   google_docs: siGoogledocs, google_forms: siGoogleforms, google_drive: siGoogledrive, notion: siNotion, discord: siDiscord,

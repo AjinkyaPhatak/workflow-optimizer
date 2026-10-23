@@ -35,7 +35,7 @@ export function PaletteBar({ onAdd }: { onAdd: (def: NodeDefinition) => void }) 
 
   const searching = filter.trim() !== "";
   const tiles = useMemo(() => (searching ? searchTiles(catalogList, filter) : tilesFor(catalogList, tab)), [catalogList, tab, filter, searching]);
-  const counts = useMemo(() => new Map(PALETTE_TABS.map((t) => [t.id, tilesFor(catalogList, t.id).filter((x) => x.kind !== "soon").length])), [catalogList]);
+  const counts = useMemo(() => new Map(PALETTE_TABS.map((t) => [t.id, tilesFor(catalogList, t.id).length])), [catalogList]);
   const activeIndex = Math.min(active, Math.max(tiles.length - 1, 0));
 
   const hideHover = () => {
@@ -99,15 +99,6 @@ export function PaletteBar({ onAdd }: { onAdd: (def: NodeDefinition) => void }) 
   });
 
   const renderTile = (t: Tile, i: number) => {
-    if (t.kind === "soon") {
-      return (
-        <div key={t.key} className="palette-tile soon" data-testid={`palette-soon-${t.integrationId}`} aria-disabled title={`${t.label} is coming soon`}>
-          <span className="tile-icon"><NodeIcon integrationId={t.integrationId} size={22} /></span>
-          <span className="tile-label">{t.label}</span>
-          <span className="tile-soon">Coming soon</span>
-        </div>
-      );
-    }
     if (t.kind === "app") {
       return (
         <button

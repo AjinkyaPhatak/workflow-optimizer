@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { COMING_SOON, tilesFor } from "@/features/nodes/palette";
+import { tilesFor } from "@/features/nodes/palette";
 import { cardFields } from "@/lib/workflow/card";
 import type { ConfigField, NodeDefinition } from "@/types/api";
 
@@ -27,11 +27,9 @@ describe("Phase J apps", () => {
     expect(cardFields(list).map((f) => f.name)).toEqual(["base", "table", "match_field"]);
   });
 
-  it("shows built apps as apps, never as coming soon", () => {
-    const ids = COMING_SOON.map((c) => c.id);
-    for (const built of ["google_docs", "google_forms", "airtable"]) expect(ids).not.toContain(built);
+  it("shows only apps that exist", () => {
     const tiles = tilesFor([airtable("list_records", table)], "apps");
+    expect(tiles).toHaveLength(1);
     expect(tiles[0]).toMatchObject({ kind: "app", label: "Airtable" });
-    expect(tiles.filter((t) => t.kind === "soon").map((t) => t.label)).toContain("Trello");
   });
 });

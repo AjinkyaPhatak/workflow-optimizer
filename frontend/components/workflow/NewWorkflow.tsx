@@ -32,12 +32,11 @@ export function NewWorkflow({ projects, create, onCreated }: {
 
   return (
     <form className="card new-workflow" onSubmit={submit} data-testid="new-workflow">
-      <div className="row">
-        <h3>New workflow</h3>
-        <span className="spacer" />
-        <Link className="button primary" href="/templates" data-testid="browse-templates">Start from a template</Link>
-      </div>
-      <p className="small muted">Templates are ready-made workflows for email, documents, meetings and more. Or start with an empty canvas:</p>
+      <h3>New workflow</h3>
+      <p className="small muted">
+        Start with an empty canvas, or <Link href="/templates" data-testid="browse-templates">pick a ready-made template</Link> for
+        email, documents, meetings and more.
+      </p>
       <ErrorBanner error={error} />
       <div className="row">
         <input aria-label="Workflow name" placeholder="Workflow name" value={name} onChange={(e) => setName(e.target.value)} required maxLength={255} />
