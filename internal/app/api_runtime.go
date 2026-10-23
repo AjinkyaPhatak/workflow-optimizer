@@ -164,6 +164,7 @@ func (rt *APIRuntime) build(enc credential.SecretEncryptor, tokens auth.TokenSer
 		Files:             application.NewFileService(access, files.NewService(postgres.NewFileRepository(rt.store))),
 		Knowledge:         rt.knowledge,
 		TestRuns:          application.NewTestRunService(workflows, engine.NodeRegistry, rt.cfg.ExposeNodeData),
+		Account:           application.NewAccountService(access, identities, postgres.NewUsageRepository(rt.store)),
 		Ready: []handlers.Check{
 			{Name: "postgres", Check: rt.store.Pool.Ping},
 			{Name: "redis", Check: rt.redis.Ping},

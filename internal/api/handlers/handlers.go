@@ -49,8 +49,10 @@ type Handlers struct {
 	Files *application.FileService
 	// NodeOptions lists setting choices through connected accounts (C8).
 	NodeOptions *application.NodeOptionsService
-	Ready       []Check
-	Logger      *slog.Logger
+	// Account serves account settings and usage (Phase M).
+	Account *application.AccountService
+	Ready   []Check
+	Logger  *slog.Logger
 }
 
 func (h *Handlers) fail(w http.ResponseWriter, r *http.Request, err error) {

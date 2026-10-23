@@ -24,6 +24,8 @@ interface SessionState {
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, name: string, password: string) => Promise<void>;
   logout: () => void;
+  /** Updates the stored profile after it changed (Phase M). */
+  setUser: (user: User) => void;
 }
 
 function read(): StoredSession | null {
@@ -69,6 +71,12 @@ export const useSession = create<SessionState>((set) => ({
     write(null);
     set({ session: null });
   },
+  setUser: (user) => set((st) => {
+    if (!st.session) return {};
+    const s = { ...st.session, user };
+    write(s);
+    return { session: s };
+  }),
 }));
 
 configureClient({

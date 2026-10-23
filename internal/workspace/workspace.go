@@ -43,6 +43,8 @@ const (
 	ActionManageCredentials Action = "manage_credentials"
 	// ActionManageProjects: create projects.
 	ActionManageProjects Action = "manage_projects"
+	// ActionManageWorkspace: rename the workspace (Phase M).
+	ActionManageWorkspace Action = "manage_workspace"
 )
 
 // permissions is the whole authorization model: a fixed role -> actions
@@ -52,9 +54,9 @@ const (
 // only read.
 var permissions = map[Role]map[Action]bool{
 	RoleOwner: {ActionRead: true, ActionWrite: true, ActionDelete: true, ActionPublish: true,
-		ActionExecute: true, ActionManageCredentials: true, ActionManageProjects: true},
+		ActionExecute: true, ActionManageCredentials: true, ActionManageProjects: true, ActionManageWorkspace: true},
 	RoleAdmin: {ActionRead: true, ActionWrite: true, ActionDelete: true, ActionPublish: true,
-		ActionExecute: true, ActionManageCredentials: true, ActionManageProjects: true},
+		ActionExecute: true, ActionManageCredentials: true, ActionManageProjects: true, ActionManageWorkspace: true},
 	RoleMember: {ActionRead: true, ActionWrite: true, ActionExecute: true},
 	RoleViewer: {ActionRead: true},
 }

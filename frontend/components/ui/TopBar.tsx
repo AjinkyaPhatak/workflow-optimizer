@@ -18,7 +18,8 @@ export function TopBar() {
       <Link href="/files" className="topbar-link">Files</Link>
       <Link href="/settings/credentials" className="topbar-link">Credentials</Link>
       <Link href="/settings/connected-accounts" className="topbar-link">Connected accounts</Link>
-      {session && <span className="muted small">{session.user.name}</span>}
+      <Link href="/settings/usage" className="topbar-link">Usage</Link>
+      {session && <Link href="/settings/account" className="topbar-link" title="Account settings" data-testid="account-link">{session.user.name}</Link>}
       <button
         onClick={() => {
           logout();

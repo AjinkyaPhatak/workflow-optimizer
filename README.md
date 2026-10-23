@@ -787,3 +787,23 @@ work in the same workspace.
 Google Sheets' Append Row and Update Row now skip fields of a **connected**
 object that the sheet has no column for (a form response's `response_id`),
 as long as one field matches; typed-in Values must still each name a column.
+
+## Account and usage (Phase M)
+
+**Account** (`/settings/account`, the name in the top bar): change your
+name, your password (the current one is checked; tokens issued before stay
+valid until they expire), and the workspace's name (owners and admins:
+`ActionManageWorkspace`).
+
+- `PATCH /api/v1/auth/me` `{name}`
+- `POST /api/v1/auth/password` `{current_password, new_password}` (8 to 72 bytes; 204)
+- `PATCH /api/v1/workspaces/{id}` `{name}`
+
+**Usage** (`/settings/usage`, any member): the last 7, 30 or 90 days of
+the workspace: runs and how they ended (with the share that worked), runs per
+day, AI steps and the tokens they reported, app steps, the busiest workflows
+and stored files. `GET /api/v1/workspaces/{id}/usage?days=30` (1 to 90; days
+are UTC). It is computed from executions, node executions and files
+(`internal/usage`, `postgres.UsageRepository`); nothing new is stored.
+
+Team members and roles management is not part of this phase.

@@ -19,6 +19,7 @@ import (
 	"workflow-optimizer/internal/oauth"
 	"workflow-optimizer/internal/observability"
 	"workflow-optimizer/internal/templates"
+	"workflow-optimizer/internal/usage"
 	"workflow-optimizer/internal/workflow"
 	"workflow-optimizer/internal/workspace"
 )
@@ -619,4 +620,66 @@ type KnowledgeResult struct {
 	DocumentTitle string    `json:"document_title"`
 	Text          string    `json:"text"`
 	Score         float64   `json:"score"`
+}
+
+// --- account and usage (Phase M) ---------------------------------------------
+
+// Usage is a workspace's usage report.
+type Usage struct {
+	Since         time.Time       `json:"since"`
+	Days          int             `json:"days"`
+	Runs          UsageRuns       `json:"runs"`
+	Daily         []UsageDay      `json:"daily"`
+	AI            UsageAI         `json:"ai"`
+	AppSteps      int64           `json:"app_steps"`
+	Workflows     []UsageWorkflow `json:"workflows"`
+	Files         UsageFiles      `json:"files"`
+	LiveWorkflows int64           `json:"live_workflows"`
+}
+
+type UsageRuns struct {
+	Total     int64 `json:"total"`
+	Completed int64 `json:"completed"`
+	Failed    int64 `json:"failed"`
+	Cancelled int64 `json:"cancelled"`
+	Active    int64 `json:"active"`
+}
+
+type UsageDay struct {
+	Date      string `json:"date"`
+	Completed int64  `json:"completed"`
+	Failed    int64  `json:"failed"`
+	Cancelled int64  `json:"cancelled"`
+}
+
+type UsageAI struct {
+	Steps        int64 `json:"steps"`
+	InputTokens  int64 `json:"input_tokens"`
+	OutputTokens int64 `json:"output_tokens"`
+	TotalTokens  int64 `json:"total_tokens"`
+}
+
+type UsageWorkflow struct {
+	WorkflowID uuid.UUID `json:"workflow_id"`
+	Name       string    `json:"name"`
+	Runs       int64     `json:"runs"`
+	Failed     int64     `json:"failed"`
+	LastRunAt  time.Time `json:"last_run_at"`
+}
+
+type UsageFiles struct {
+	Count int64 `json:"count"`
+	Bytes int64 `json:"bytes"`
+}
+
+func NewUsage(r usage.Report, days int) Usage {
+	out := Usage{Since: r.Since, Days: days, Runs: UsageRuns(r.Runs), Daily: make([]UsageDay, 0, len(r.Daily)), AI: UsageAI(r.AI),
+		AppSteps: r.AppSteps, Workflows: make([]UsageWorkflow, 0, len(r.Workflows)), Files: UsageFiles(r.Files), LiveWorkflows: r.LiveWorkflows}
+	for _, d := range r.Daily {
+		out.Daily = append(out.Daily, UsageDay(d))
+	}
+	for _, w := range r.Workflows {
+		out.Workflows = append(out.Workflows, UsageWorkflow(w))
+	}
+	return out
 }

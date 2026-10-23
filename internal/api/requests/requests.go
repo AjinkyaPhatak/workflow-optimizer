@@ -307,3 +307,19 @@ type AuthorizeConnectedAccount struct {
 func (r AuthorizeConnectedAccount) Validate() (uuid.UUID, error) {
 	return ParseUUID("workspace_id", r.WorkspaceID)
 }
+
+// UpdateProfile is PATCH /auth/me (Phase M).
+type UpdateProfile struct {
+	Name string `json:"name"`
+}
+
+// ChangePassword is POST /auth/password (Phase M).
+type ChangePassword struct {
+	CurrentPassword string `json:"current_password"`
+	NewPassword     string `json:"new_password"`
+}
+
+// RenameWorkspace is PATCH /workspaces/{id} (Phase M).
+type RenameWorkspace struct {
+	Name string `json:"name"`
+}

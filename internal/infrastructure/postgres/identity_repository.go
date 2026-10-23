@@ -122,3 +122,34 @@ SELECT w.id, w.name, w.owner_id, w.created_at, w.updated_at, m.role
 	}
 	return out, rows.Err()
 }
+
+// UpdateUserName changes a user's display name (Phase M).
+func (r *IdentityRepository) UpdateUserName(ctx context.Context, id uuid.UUID, name string) (auth.User, error) {
+	return scanUser(r.pool.QueryRow(ctx, `UPDATE users SET name = $2, updated_at = now() WHERE id = $1 RETURNING `+userColumns, id, name))
+}
+
+// UpdatePasswordHash replaces a user's password hash (Phase M).
+func (r *IdentityRepository) UpdatePasswordHash(ctx context.Context, id uuid.UUID, hash string) error {
+	tag, err := r.pool.Exec(ctx, `UPDATE users SET password_hash = $2, updated_at = now() WHERE id = $1`, id, hash)
+	if err != nil {
+		return fmt.Errorf("update password: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return auth.ErrUserNotFound
+	}
+	return nil
+}
+
+// RenameWorkspace changes a workspace's name (Phase M).
+func (r *IdentityRepository) RenameWorkspace(ctx context.Context, id uuid.UUID, name string) (workspace.Workspace, error) {
+	var ws workspace.Workspace
+	err := r.pool.QueryRow(ctx, `UPDATE workspaces SET name = $2, updated_at = now() WHERE id = $1
+		RETURNING id, name, owner_id, created_at, updated_at`, id, name).Scan(&ws.ID, &ws.Name, &ws.OwnerID, &ws.CreatedAt, &ws.UpdatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return workspace.Workspace{}, workspace.ErrNotMember
+	}
+	if err != nil {
+		return workspace.Workspace{}, fmt.Errorf("rename workspace: %w", err)
+	}
+	return ws, nil
+}

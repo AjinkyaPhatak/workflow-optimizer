@@ -39,6 +39,10 @@ func NewRouter(h *handlers.Handlers, tokens auth.TokenService, logger *slog.Logg
 	public("POST "+Prefix+"/auth/register", h.Register)
 	public("POST "+Prefix+"/auth/login", h.Login)
 	private("GET "+Prefix+"/auth/me", h.Me)
+	private("PATCH "+Prefix+"/auth/me", h.UpdateProfile)
+	private("POST "+Prefix+"/auth/password", h.ChangePassword)
+	private("PATCH "+Prefix+"/workspaces/{workspaceID}", h.RenameWorkspace)
+	private("GET "+Prefix+"/workspaces/{workspaceID}/usage", h.WorkspaceUsage)
 
 	private("POST "+Prefix+"/projects", h.CreateProject)
 	private("GET "+Prefix+"/projects", h.ListProjects)

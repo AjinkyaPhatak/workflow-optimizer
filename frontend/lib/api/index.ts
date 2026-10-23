@@ -8,3 +8,4 @@ export { workflowApi } from "./workflows";
 export { connectedAccountApi } from "./connectedAccounts";
 export { fileApi } from "./files";
 export { knowledgeApi } from "./knowledge";
+export { accountApi } from "./account";

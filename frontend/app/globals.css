@@ -599,3 +599,27 @@ pre.json { background: var(--subtle); border: 1px solid var(--border); border-ra
 @media (max-width: 640px) {
   .gallery-grid { grid-template-columns: 1fr; }
 }
+
+/* --- account and usage (Phase M) ------------------------------------------- */
+.settings-page, .usage-page { max-width: 900px; }
+.settings-page h2, .usage-page h2 { font-size: 16px; }
+.settings-page .card { max-width: 560px; }
+.stat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+.stat-tile { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; box-shadow: var(--shadow-sm); }
+.stat-label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.stat-value { font-size: 26px; font-weight: 700; color: var(--text); margin: 2px 0; }
+.legend { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+.swatch { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.swatch.ok, .bar-seg.ok { background: var(--ok); }
+.swatch.bad, .bar-seg.bad { background: var(--danger); }
+.bars { display: flex; align-items: flex-end; gap: 2px; height: 140px; border-bottom: 1px solid var(--border); }
+.bar-col { flex: 1; height: 100%; display: flex; align-items: flex-end; min-width: 2px; }
+.bar-col.hover { background: var(--subtle); }
+.bar-stack { width: 100%; display: flex; flex-direction: column; gap: 2px; min-height: 0; }
+.bar-seg { min-height: 2px; }
+.bar-stack > .bar-seg:first-child { border-radius: 4px 4px 0 0; }
+.bars-axis { display: flex; justify-content: space-between; }
+.usage-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.usage-table th { text-align: left; color: var(--muted); font-weight: 600; font-size: 12px; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+.usage-table td { padding: 8px; border-bottom: 1px solid var(--border); }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }

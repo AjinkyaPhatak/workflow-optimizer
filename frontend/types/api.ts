@@ -482,3 +482,16 @@ export interface TestRunResult {
   nodes: TestNodeResult[];
   output?: Record<string, unknown>;
 }
+
+/** GET /workspaces/{id}/usage (Phase M). */
+export interface Usage {
+  since: string;
+  days: number;
+  runs: { total: number; completed: number; failed: number; cancelled: number; active: number };
+  daily: { date: string; completed: number; failed: number; cancelled: number }[];
+  ai: { steps: number; input_tokens: number; output_tokens: number; total_tokens: number };
+  app_steps: number;
+  workflows: { workflow_id: UUID; name: string; runs: number; failed: number; last_run_at: string }[];
+  files: { count: number; bytes: number };
+  live_workflows: number;
+}
