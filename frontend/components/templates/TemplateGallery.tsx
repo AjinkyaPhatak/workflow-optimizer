@@ -9,6 +9,8 @@ import { NodeIcon } from "@/components/ui/NodeIcon";
 import { ErrorBanner } from "@/components/ui/ErrorBanner";
 import { Spinner } from "@/components/ui/BrandMark";
 import { useTemplateGallery } from "@/features/templates/useTemplateGallery";
+import { useProviders } from "@/features/connected-accounts/useProviders";
+import { comingSoonApps, unavailableApps } from "@/lib/workflow/availability";
 import { appsOf } from "@/lib/workflow/requirements";
 import { useShowDetails } from "@/stores/ui/details";
 import type { NodeDefinition, WorkflowTemplate } from "@/types/api";
@@ -41,11 +43,14 @@ export function filterTemplates(list: WorkflowTemplate[], category: string, quer
   });
 }
 
-function TemplateCard({ template, catalog, onOpen }: { template: WorkflowTemplate; catalog: Map<string, NodeDefinition>; onOpen: () => void }) {
+function TemplateCard({ template, catalog, soon, onOpen }: {
+  template: WorkflowTemplate; catalog: Map<string, NodeDefinition>; soon: string[]; onOpen: () => void;
+}) {
   const apps = appsOf(template.node_types, catalog);
   const ai = template.node_types.some((t) => t === "llm" || t === "transcribe_audio");
   return (
-    <button type="button" className="gallery-card" onClick={onOpen} data-testid={`template-${template.id}`}>
+    <button type="button" className={`gallery-card ${soon.length ? "soon" : ""}`} onClick={onOpen} data-testid={`template-${template.id}`}
+      disabled={soon.length > 0} title={soon.length ? `Coming soon: needs ${soon.join(" and ")}` : undefined}>
       <span className="gallery-icons" aria-hidden>
         {apps.map((a) => <NodeIcon key={a.id} integrationId={a.id} size={22} />)}
         {ai && <NodeIcon def={{ type: "llm", category: "ai" }} size={22} />}
@@ -53,7 +58,8 @@ function TemplateCard({ template, catalog, onOpen }: { template: WorkflowTemplat
       </span>
       <b>{template.name}</b>
       <span className="small muted">{template.description}</span>
-      {template.saved && <span className="badge draft">Saved</span>}
+      {template.saved && !soon.length && <span className="badge draft">Saved</span>}
+      {soon.length > 0 && <span className="badge soon-badge">Coming soon · {soon.join(", ")}</span>}
     </button>
   );
 }
@@ -62,6 +68,8 @@ export function TemplateGallery() {
   const router = useRouter();
   const g = useTemplateGallery();
   const showAdvanced = useShowDetails();
+  const providers = useProviders();
+  const unavailable = useMemo(() => unavailableApps(g.catalog.values(), providers), [g.catalog, providers]);
   const [category, setCategory] = useState(ALL);
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState<WorkflowTemplate | null>(null);
@@ -69,7 +77,11 @@ export function TemplateGallery() {
   const list = useMemo(() => g.templates ?? [], [g.templates]);
   const categories = categoriesOf(list, showAdvanced);
   const active = categories.includes(category) ? category : ALL;
-  const shown = filterTemplates(list, active, query, showAdvanced, g.catalog);
+  // Templates that need an app not set up yet go last, as Coming soon.
+  const soonOf = (t: WorkflowTemplate) => comingSoonApps(t.node_types, g.catalog, unavailable);
+  const shown = filterTemplates(list, active, query, showAdvanced, g.catalog)
+    .map((t, i) => ({ t, i, soon: soonOf(t) }))
+    .sort((a, b) => Number(a.soon.length > 0) - Number(b.soon.length > 0) || a.i - b.i);
 
   return (
     <main className="dashboard stack gallery">
@@ -105,7 +117,7 @@ export function TemplateGallery() {
         </div>
       ) : (
         <div className="gallery-grid">
-          {shown.map((t) => <TemplateCard key={t.id} template={t} catalog={g.catalog} onOpen={() => setOpen(t)} />)}
+          {shown.map(({ t, soon }) => <TemplateCard key={t.id} template={t} catalog={g.catalog} soon={soon} onOpen={() => setOpen(t)} />)}
         </div>
       )}
       {open && (

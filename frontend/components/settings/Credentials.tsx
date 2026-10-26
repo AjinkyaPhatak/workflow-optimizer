@@ -145,7 +145,7 @@ export function Credentials({ state, confirm = (m) => window.confirm(m) }: {
       </div>
       <p className="muted">
         API keys and tokens that nodes in this workspace use. Workflows store only a reference; the secret stays encrypted on
-        the server. Accounts like Google or Notion are added under Connected accounts instead.
+        the server. Accounts like Google are added under Connected accounts instead.
       </p>
       <ErrorBanner error={s.error} />
       {s.loading ? (

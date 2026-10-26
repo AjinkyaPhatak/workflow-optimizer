@@ -17,7 +17,7 @@ const SECTIONS = [
 /** Settings, in the account menu. */
 const SETTINGS = [
   { href: "/settings/account", label: "Account", hint: "Your name, password and workspace" },
-  { href: "/settings/connected-accounts", label: "Connected accounts", hint: "Google, Notion, Discord, Airtable" },
+  { href: "/settings/connected-accounts", label: "Connected accounts", hint: "Your Google account and other apps" },
   { href: "/settings/credentials", label: "AI keys", hint: "Gemini and other keys" },
   { href: "/settings/usage", label: "Usage", hint: "Runs, AI and storage" },
 ];

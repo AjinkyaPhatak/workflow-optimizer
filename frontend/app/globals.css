@@ -745,3 +745,9 @@ button.account-item.signout:hover:not(:disabled) { background: var(--danger-weak
 
 /* sign in */
 .auth-brand { background: radial-gradient(120% 90% at 0% 0%, #6366f1 0%, transparent 55%), linear-gradient(150deg, #0f1430 0%, #1e1b4b 45%, #4c1d95 100%); }
+
+/* Coming soon: apps whose sign-in is not set up on the server */
+.palette-tile.soon { opacity: .6; cursor: not-allowed; box-shadow: none; }
+.palette-tile .tile-soon { font-size: 10px; font-weight: 600; color: var(--muted); }
+.gallery-card.soon:disabled { opacity: .62; cursor: not-allowed; filter: grayscale(.6); }
+.badge.soon-badge { background: #eef0f6; color: var(--muted); }

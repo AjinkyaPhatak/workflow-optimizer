@@ -108,7 +108,7 @@ export function UsageView({ usage }: { usage: Usage }) {
         <Stat label="Runs" value={formatCount(r.total)} note={r.active ? `${r.active} still running or waiting` : undefined} />
         <Stat label="Worked" value={success === null ? "—" : `${success}%`} note={`${formatCount(r.completed)} worked, ${formatCount(r.failed + r.cancelled)} did not`} />
         <Stat label="AI steps" value={formatCount(usage.ai.steps)} note={usage.ai.total_tokens ? `${formatCount(usage.ai.total_tokens)} tokens` : undefined} />
-        <Stat label="App steps" value={formatCount(usage.app_steps)} note="Gmail, Sheets, Notion and other apps" />
+        <Stat label="App steps" value={formatCount(usage.app_steps)} note="Gmail, Sheets, Docs and other apps" />
         <Stat label="Workflows" value={formatCount(usage.live_workflows)} />
         <Stat label="Files" value={formatCount(usage.files.count)} note={formatBytes(usage.files.bytes)} />
       </div>

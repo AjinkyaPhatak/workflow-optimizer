@@ -19,6 +19,7 @@ import { availableVariables } from "@/lib/workflow/variables";
 import { useEditorStore } from "@/stores/workflow-editor/store";
 import { accountLabel, statusLabel } from "@/lib/connectedAccounts";
 import { ACCOUNT_NAMES } from "@/lib/workflow/requirements";
+import { useProviders } from "@/features/connected-accounts/useProviders";
 import type { ConfigField, ConfigOption, ConnectedAccount, Credential, WorkflowNode } from "@/types/api";
 import { VariableField } from "./VariableField";
 import { VariablesEditor } from "./VariablesEditor";
@@ -153,6 +154,14 @@ function AccountSelect({ id, value, provider, accounts, onCommit, disabled, inva
 }) {
   const options = accounts.filter((a) => a.provider === provider);
   const selected = options.find((a) => a.credential_id === value);
+  const providers = useProviders();
+  if (providers && !providers.has(provider)) {
+    return (
+      <div className="hint coming-soon-note" data-testid="account-coming-soon">
+        {ACCOUNT_NAMES[provider] ?? provider} is coming soon: this step cannot run yet.
+      </div>
+    );
+  }
   return (
     <>
       <select
