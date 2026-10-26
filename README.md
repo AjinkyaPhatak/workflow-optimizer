@@ -580,7 +580,7 @@ the OpenAI format, so one client (`internal/provider/llm/openai`, an
 
 | Provider | Free? | Used for | Key from |
 |---|---|---|---|
-| `gemini` | yes (free tier, rate limited) | LLM node (default: `gemini-2.5-flash`), images, knowledge base embeddings, Transcribe Audio (default) | https://aistudio.google.com/apikey |
+| `gemini` | yes (free tier, rate limited) | LLM node (default: `gemini-3.5-flash-lite`; the 2.5 models only work for keys that used them before. When Gemini answers 404 or 503 for the chosen model, the call is retried once with `gemini-3.5-flash-lite`), images, knowledge base embeddings, Transcribe Audio (default) | https://aistudio.google.com/apikey |
 | `groq` | yes (free plan, rate limited; optional) | LLM node (`openai/gpt-oss-120b`...), Transcribe Audio (Whisper) | https://console.groq.com/keys |
 | `openai` | no | LLM node, embeddings, Transcribe Audio | https://platform.openai.com/api-keys |
 

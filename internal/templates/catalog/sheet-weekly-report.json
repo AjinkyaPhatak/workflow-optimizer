@@ -43,7 +43,7 @@
         },
         "config": {
           "provider": "gemini",
-          "model": "gemini-2.5-flash",
+          "model": "gemini-3.5-flash-lite",
           "temperature": 0.3,
           "prompt": "Here is a table from a spreadsheet. Write a short weekly report: the main numbers, trends, anything unusual, and 3 suggestions.\n\n{{rows}}"
         }

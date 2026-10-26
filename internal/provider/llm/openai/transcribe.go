@@ -126,14 +126,13 @@ func (p *Provider) transcribeWithChat(ctx context.Context, req llm.TranscribeReq
 	if req.Language != "" {
 		prompt += " The recording is in the language with code " + req.Language + "."
 	}
-	body, err := json.Marshal(chatRequest{Model: req.Model, Messages: []chatMessage{{Role: string(llm.RoleUser), Content: []contentPart{
-		{Type: "text", Text: prompt},
-		{Type: "input_audio", InputAudio: &inputAudio{Data: base64.StdEncoding.EncodeToString(req.Audio), Format: audioFormat(req.Filename)}},
-	}}}})
-	if err != nil {
-		return llm.TranscribeResponse{}, &llm.Error{Provider: p.name, Code: llm.CodeInvalidRequest, Message: "request could not be encoded"}
-	}
-	resp, err := p.complete(ctx, req.Credential, body)
+	audio := base64.StdEncoding.EncodeToString(req.Audio)
+	resp, err := p.send(ctx, req.Credential, req.Model, func(model string) any {
+		return chatRequest{Model: model, Messages: []chatMessage{{Role: string(llm.RoleUser), Content: []contentPart{
+			{Type: "text", Text: prompt},
+			{Type: "input_audio", InputAudio: &inputAudio{Data: audio, Format: audioFormat(req.Filename)}},
+		}}}}
+	})
 	if err != nil {
 		return llm.TranscribeResponse{}, err
 	}

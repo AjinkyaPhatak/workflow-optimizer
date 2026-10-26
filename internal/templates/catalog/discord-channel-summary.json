@@ -43,7 +43,7 @@
         },
         "config": {
           "provider": "gemini",
-          "model": "gemini-2.5-flash",
+          "model": "gemini-3.5-flash-lite",
           "temperature": 0.2,
           "prompt": "Summarize this team chat: the main topics, decisions, questions waiting for an answer, and anything I am asked to do.\n\n{{chat}}"
         }

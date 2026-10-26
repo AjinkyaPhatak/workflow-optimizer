@@ -21,7 +21,7 @@ const NodeType = "llm"
 // DefaultProvider and DefaultModel are the free Gemini tier (Phase G).
 const (
 	DefaultProvider = "gemini"
-	DefaultModel    = "gemini-2.5-flash"
+	DefaultModel    = "gemini-3.5-flash-lite"
 )
 
 // Error codes reported by the LLM node for credential problems (never

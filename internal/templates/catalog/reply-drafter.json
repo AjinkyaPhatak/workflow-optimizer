@@ -43,7 +43,7 @@
         },
         "config": {
           "provider": "gemini",
-          "model": "gemini-2.5-flash",
+          "model": "gemini-3.5-flash-lite",
           "temperature": 0.5,
           "prompt": "Write a friendly, short reply to this email. Reply with the text of the reply only, without a subject line.\n\nFrom: {{sender}}\nSubject: {{subject}}\n\n{{body}}"
         }

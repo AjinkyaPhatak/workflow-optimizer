@@ -54,7 +54,7 @@
         },
         "config": {
           "provider": "gemini",
-          "model": "gemini-2.5-flash",
+          "model": "gemini-3.5-flash-lite",
           "temperature": 0.6,
           "prompt": "Write a warm, clear email to {{name}} about: {{purpose}}\nReply with the email body only (no subject line), signed off politely."
         }
@@ -69,7 +69,7 @@
         },
         "config": {
           "provider": "gemini",
-          "model": "gemini-2.5-flash",
+          "model": "gemini-3.5-flash-lite",
           "temperature": 0.3,
           "prompt": "Write a short email subject line (max 8 words, no quotes) for this email:\n\n{{email}}"
         }

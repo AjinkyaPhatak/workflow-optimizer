@@ -44,7 +44,7 @@
         },
         "config": {
           "provider": "gemini",
-          "model": "gemini-2.5-flash",
+          "model": "gemini-3.5-flash-lite",
           "temperature": 0.2,
           "prompt": "Summarize this document for someone in a hurry: a two-sentence overview, then the key points as bullets, then any dates, numbers or actions it mentions.\n\n{{document}}"
         }

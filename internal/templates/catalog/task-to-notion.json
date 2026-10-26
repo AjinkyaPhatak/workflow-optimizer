@@ -33,7 +33,7 @@
         },
         "config": {
           "provider": "gemini",
-          "model": "gemini-2.5-flash",
+          "model": "gemini-3.5-flash-lite",
           "temperature": 0,
           "prompt": "Turn this request into a task. Reply with JSON only, like {\"title\": \"short task title\", \"details\": \"what needs to be done\"}\n\n{{request}}"
         }

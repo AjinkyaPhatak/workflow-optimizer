@@ -28,7 +28,7 @@ type Provider struct {
 // DefaultProvider and DefaultModel are the free Gemini tier.
 const (
 	DefaultProvider = "gemini"
-	DefaultModel    = "gemini-2.5-flash"
+	DefaultModel    = "gemini-3.5-flash-lite"
 )
 
 // Definition is the node's metadata; the provider and model choices are

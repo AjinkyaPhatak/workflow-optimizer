@@ -41,7 +41,7 @@
         },
         "config": {
           "provider": "gemini",
-          "model": "gemini-2.5-flash",
+          "model": "gemini-3.5-flash-lite",
           "temperature": 0.3,
           "prompt": "Here are my calendar events for today. Write a short morning briefing: a timeline of the day, how to prepare for each meeting, and any free time I have.\n\n{{events}}"
         }

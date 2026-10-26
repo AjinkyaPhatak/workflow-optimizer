@@ -43,7 +43,7 @@
         },
         "config": {
           "provider": "gemini",
-          "model": "gemini-2.5-flash",
+          "model": "gemini-3.5-flash-lite",
           "temperature": 0,
           "prompt": "From this email, find the shop or company, the date and the total amount. Reply with JSON only, like {\"shop\": \"...\", \"date\": \"YYYY-MM-DD\", \"amount\": \"...\"}\n\nFrom: {{sender}}\nSubject: {{subject}}\n\n{{body}}"
         }

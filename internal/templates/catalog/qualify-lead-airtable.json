@@ -57,7 +57,7 @@
         },
         "config": {
           "provider": "gemini",
-          "model": "gemini-2.5-flash",
+          "model": "gemini-3.5-flash-lite",
           "temperature": 0,
           "prompt": "Rate this sales lead from 1 (poor) to 5 (excellent) and give a one-sentence reason. Reply with JSON only, like {\"score\": 4, \"reason\": \"...\"}\n\nName: {{name}}\nCompany: {{company}}\nNotes: {{notes}}"
         }

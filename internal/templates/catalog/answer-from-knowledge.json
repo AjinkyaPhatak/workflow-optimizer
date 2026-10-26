@@ -46,7 +46,7 @@
         },
         "config": {
           "provider": "gemini",
-          "model": "gemini-2.5-flash",
+          "model": "gemini-3.5-flash-lite",
           "temperature": 0.1,
           "prompt": "Answer the question using only the information below. If it does not contain the answer, say you could not find it.\n\nQuestion: {{question}}\n\nInformation:\n{{context}}"
         }

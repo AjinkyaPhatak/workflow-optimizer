@@ -30,7 +30,7 @@
         },
         "config": {
           "provider": "gemini",
-          "model": "gemini-2.5-flash",
+          "model": "gemini-3.5-flash-lite",
           "temperature": 0.4,
           "prompt": "Write a one-page briefing about the company {{company}} to prepare for a sales call. Include: what they do, who their customers are, likely needs, good questions to ask, and a short pitch. Say clearly when you are unsure of a fact."
         }

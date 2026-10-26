@@ -168,12 +168,12 @@ func TestGeminiTranscribesThroughChat(t *testing.T) {
 		raw, _ := io.ReadAll(r.Body)
 		_ = json.Unmarshal(raw, &body)
 		path = r.URL.Path
-		_, _ = fmt.Fprint(w, `{"model":"gemini-2.5-flash","choices":[{"message":{"content":"\nLet us ship on Friday.\n"},"finish_reason":"stop"}]}`)
+		_, _ = fmt.Fprint(w, `{"model":"gemini-3.5-flash-lite","choices":[{"message":{"content":"\nLet us ship on Friday.\n"},"finish_reason":"stop"}]}`)
 	})
-	if ms := p.TranscriptionModels(); len(ms) == 0 || ms[0].ID != "gemini-2.5-flash" {
+	if ms := p.TranscriptionModels(); len(ms) == 0 || ms[0].ID != "gemini-3.5-flash-lite" {
 		t.Fatalf("models: %v", ms)
 	}
-	resp, err := p.Transcribe(context.Background(), llm.TranscribeRequest{Model: "gemini-2.5-flash", Audio: []byte("RIFFwav"),
+	resp, err := p.Transcribe(context.Background(), llm.TranscribeRequest{Model: "gemini-3.5-flash-lite", Audio: []byte("RIFFwav"),
 		Filename: "Call.WAV", Language: "hi", Credential: keyFor("gemini")})
 	if err != nil || resp.Text != "Let us ship on Friday." {
 		t.Fatalf("%v %+v", err, resp)
@@ -181,12 +181,50 @@ func TestGeminiTranscribesThroughChat(t *testing.T) {
 	parts := body["messages"].([]any)[0].(map[string]any)["content"].([]any)
 	text := parts[0].(map[string]any)["text"].(string)
 	audio := parts[1].(map[string]any)["input_audio"].(map[string]any)
-	if path != "/v1/chat/completions" || body["model"] != "gemini-2.5-flash" || !strings.Contains(text, "Write down exactly what is said") ||
+	if path != "/v1/chat/completions" || body["model"] != "gemini-3.5-flash-lite" || !strings.Contains(text, "Write down exactly what is said") ||
 		!strings.Contains(text, "code hi") || audio["format"] != "wav" || audio["data"] != "UklGRndhdg==" {
 		t.Fatalf("request: %s %v", path, body)
 	}
 	never := compat(t, openai.Gemini, func(w http.ResponseWriter, r *http.Request) { t.Error("must not be called") })
 	if _, err := never.Transcribe(context.Background(), llm.TranscribeRequest{Model: "m", Audio: make([]byte, openai.MaxChatAudioBytes+1), Credential: keyFor("gemini")}); err == nil {
 		t.Fatal("an oversized recording was sent")
+	}
+}
+
+// Gemini serves its legacy models only to keys that used them before (404)
+// and is sometimes overloaded (503): the call is retried once with the
+// fallback model. Other failures are not retried.
+func TestGeminiFallsBackWhenAModelIsUnavailable(t *testing.T) {
+	for _, status := range []int{404, 503} {
+		var models []string
+		p := compat(t, openai.Gemini, func(w http.ResponseWriter, r *http.Request) {
+			var body map[string]any
+			raw, _ := io.ReadAll(r.Body)
+			_ = json.Unmarshal(raw, &body)
+			models = append(models, body["model"].(string))
+			if body["model"] != openai.Gemini.FallbackModel {
+				w.WriteHeader(status)
+				return
+			}
+			_, _ = fmt.Fprint(w, okBody)
+		})
+		req := request()
+		req.Model = "gemini-2.5-flash"
+		req.Credential = keyFor("gemini")
+		resp, err := p.Generate(context.Background(), req)
+		if err != nil || resp.Content != "Hello there" || len(models) != 2 || models[1] != "gemini-3.5-flash-lite" {
+			t.Fatalf("%d: %v %+v %v", status, err, resp, models)
+		}
+	}
+	// A rejected key is not retried with another model.
+	calls := 0
+	p := compat(t, openai.Gemini, func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		w.WriteHeader(401)
+	})
+	req := request()
+	req.Credential = keyFor("gemini")
+	if _, err := p.Generate(context.Background(), req); err == nil || calls != 1 {
+		t.Fatalf("401: %v, %d calls", err, calls)
 	}
 }

@@ -58,6 +58,10 @@ type Spec struct {
 	// endpoint as an input_audio part with an instruction to write it down
 	// (Gemini).
 	TranscribeWithChat bool
+	// FallbackModel is tried once when the API says the requested model is
+	// not available to this key (HTTP 404, e.g. a legacy model) or is
+	// overloaded (HTTP 503); "" never falls back.
+	FallbackModel string
 }
 
 // OpenAI is the OpenAI API.
@@ -77,16 +81,19 @@ var OpenAI = Spec{
 
 // Gemini is the Gemini API through its OpenAI-compatible endpoint. Its free
 // tier (an API key from Google AI Studio, no card) covers the Flash models,
-// with low rate limits.
+// with low rate limits. The 2.5 models are legacy: Google serves them only
+// to keys that used them before, so new keys get HTTP 404 for them.
 var Gemini = Spec{
 	Name: "gemini", Label: "Google Gemini (free)", BaseURL: "https://generativelanguage.googleapis.com/v1beta/openai",
-	MaxTokensField: "max_tokens", TruncateEmbeddings: true, TranscribeWithChat: true,
-	TranscriptionModels: []llm.Model{{ID: "gemini-2.5-flash", Label: "Gemini 2.5 Flash (free)"}, {ID: "gemini-2.5-flash-lite", Label: "Gemini 2.5 Flash-Lite (free, fastest)"}},
+	MaxTokensField: "max_tokens", TruncateEmbeddings: true, TranscribeWithChat: true, FallbackModel: "gemini-3.5-flash-lite",
+	TranscriptionModels: []llm.Model{{ID: "gemini-3.5-flash-lite", Label: "Gemini 3.5 Flash-Lite (free)"}, {ID: "gemini-3.8-flash", Label: "Gemini 3.8 Flash (free)"}},
 	Models: []llm.Model{
-		{ID: "gemini-2.5-flash", Label: "Gemini 2.5 Flash (free)"},
-		{ID: "gemini-2.5-flash-lite", Label: "Gemini 2.5 Flash-Lite (free, fastest)"},
-		{ID: "gemini-3-flash-preview", Label: "Gemini 3 Flash preview (free)"},
-		{ID: "gemini-2.5-pro", Label: "Gemini 2.5 Pro (may need billing)"},
+		{ID: "gemini-3.5-flash-lite", Label: "Gemini 3.5 Flash-Lite (free, fast)"},
+		{ID: "gemini-3.8-flash", Label: "Gemini 3.8 Flash (free, smartest; sometimes busy)"},
+		{ID: "gemini-3.6-flash", Label: "Gemini 3.6 Flash (free)"},
+		{ID: "gemini-3.1-flash-lite", Label: "Gemini 3.1 Flash-Lite (free)"},
+		{ID: "gemini-3.1-pro-preview", Label: "Gemini 3.1 Pro preview (may need billing)"},
+		{ID: "gemini-2.5-flash", Label: "Gemini 2.5 Flash (legacy: only keys that used it before)"},
 	},
 }
 
@@ -243,11 +250,30 @@ func (p *Provider) Generate(ctx context.Context, req llm.Request) (llm.Response,
 	if strings.TrimSpace(req.Model) == "" {
 		return llm.Response{}, &llm.Error{Provider: p.name, Code: llm.CodeInvalidRequest, Message: "model is required"}
 	}
-	body, err := json.Marshal(p.toChatRequest(req))
+	return p.send(ctx, cred, req.Model, func(model string) any {
+		r := req
+		r.Model = model
+		return p.toChatRequest(r)
+	})
+}
+
+// send encodes the request for model and completes it. When the API says
+// the model is not available to this key or is overloaded, the spec's
+// FallbackModel is tried once.
+func (p *Provider) send(ctx context.Context, cred credential.ResolvedCredential, model string, request func(model string) any) (llm.Response, error) {
+	body, err := json.Marshal(request(model))
 	if err != nil {
 		return llm.Response{}, &llm.Error{Provider: p.name, Code: llm.CodeInvalidRequest, Message: "request could not be encoded"}
 	}
-	return p.complete(ctx, cred, body)
+	resp, err := p.complete(ctx, cred, body)
+	var e *llm.Error
+	fallback := p.spec.FallbackModel
+	if err != nil && fallback != "" && model != fallback && errors.As(err, &e) && (e.StatusCode == http.StatusNotFound || e.StatusCode == http.StatusServiceUnavailable) {
+		if body, err2 := json.Marshal(request(fallback)); err2 == nil {
+			return p.complete(ctx, cred, body)
+		}
+	}
+	return resp, err
 }
 
 // complete sends an encoded chat request and reads the answer.

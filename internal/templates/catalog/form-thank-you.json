@@ -44,7 +44,7 @@
         },
         "config": {
           "provider": "gemini",
-          "model": "gemini-2.5-flash",
+          "model": "gemini-3.5-flash-lite",
           "temperature": 0.6,
           "prompt": "Someone just filled in our form. Write a short, warm thank-you email that mentions what they told us. Reply with the email body only.\n\nTheir answers:\n{{response}}"
         }

@@ -42,7 +42,7 @@
         },
         "config": {
           "provider": "gemini",
-          "model": "gemini-2.5-flash",
+          "model": "gemini-3.5-flash-lite",
           "temperature": 0.5,
           "prompt": "Rewrite the text below so it sounds {{tone}}. Keep its meaning. Reply with the rewritten text only.\n\n{{text}}"
         }
