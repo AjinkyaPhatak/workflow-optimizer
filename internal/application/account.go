@@ -31,11 +31,14 @@ type AccountService struct {
 	store  AccountStore
 	usage  usage.Repository
 	now    func() time.Time
+	// attempts limits wrong current passwords (a stolen session must not
+	// be able to guess the password).
+	attempts *attemptGuard
 }
 
 // NewAccountService wires the service.
 func NewAccountService(access *Access, store AccountStore, reports usage.Repository) *AccountService {
-	return &AccountService{access: access, store: store, usage: reports, now: time.Now}
+	return &AccountService{access: access, store: store, usage: reports, now: time.Now, attempts: newAttemptGuard()}
 }
 
 // MaxNameLength bounds a user's and a workspace's name.
@@ -73,9 +76,15 @@ func (s *AccountService) ChangePassword(ctx context.Context, user uuid.UUID, cur
 	if err != nil {
 		return err
 	}
+	key := "password:" + user.String()
+	if s.attempts.locked(key) {
+		return ErrTooManyAttempts
+	}
 	if !auth.CheckPassword(u.PasswordHash, current) {
+		s.attempts.fail(key)
 		return &InvalidError{Message: "the current password is not correct"}
 	}
+	s.attempts.reset(key)
 	if current == next {
 		return &InvalidError{Message: "the new password must be different"}
 	}

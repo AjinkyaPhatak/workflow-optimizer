@@ -1,6 +1,7 @@
 package phasee
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -87,5 +88,22 @@ func TestAccountSettingsAndUsage(t *testing.T) {
 	}
 	if r := e.call(grace.token, "GET", "/api/v1/workspaces/"+ada.workspace+"/usage", nil); r.status != 404 {
 		t.Fatalf("other workspace usage: %d", r.status)
+	}
+}
+
+// Ten wrong passwords lock the email for a while, even for the right one.
+func TestRepeatedWrongPasswordsLockSignIn(t *testing.T) {
+	e := newEnv(t)
+	e.register("lin")
+	me := e.must(e.call(e.register("kim").token, "GET", "/api/v1/auth/me", nil), 200)
+	email := me["user"].(map[string]any)["email"].(string)
+	for i := 0; i < 10; i++ {
+		if r := e.call("", "POST", "/api/v1/auth/login", map[string]any{"email": email, "password": "wrong-password"}); r.status != 401 {
+			t.Fatalf("attempt %d: %d", i+1, r.status)
+		}
+	}
+	r := e.call("", "POST", "/api/v1/auth/login", map[string]any{"email": email, "password": "password-kim"})
+	if r.status != 429 || !strings.Contains(string(r.body), "15 minutes") {
+		t.Fatalf("locked: %d %s", r.status, r.body)
 	}
 }

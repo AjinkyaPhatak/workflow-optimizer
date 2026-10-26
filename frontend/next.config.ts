@@ -14,6 +14,21 @@ const config: NextConfig = {
     // file uploads go up to 20 MB (Phase D1).
     proxyClientMaxBodySize: 25 * 1024 * 1024,
   },
+  // Standard browser protections on every page: never framed by another
+  // site (clickjacking), no content-type guessing, no full URLs leaked to
+  // other sites, and no camera/microphone/location access.
+  async headers() {
+    return [{
+      source: "/:path*",
+      headers: [
+        { key: "X-Frame-Options", value: "DENY" },
+        { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
+        { key: "X-Content-Type-Options", value: "nosniff" },
+        { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+        { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+      ],
+    }];
+  },
   async rewrites() {
     return [{ source: "/api/v1/:path*", destination: `${backend}/api/v1/:path*` }];
   },

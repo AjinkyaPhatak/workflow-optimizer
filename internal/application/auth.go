@@ -23,11 +23,13 @@ type IdentityStore interface {
 type AuthService struct {
 	identities IdentityStore
 	tokens     auth.TokenService
+	// attempts locks an email after repeated wrong passwords.
+	attempts *attemptGuard
 }
 
 // NewAuthService wires the identity store and the token service.
 func NewAuthService(identities IdentityStore, tokens auth.TokenService) *AuthService {
-	return &AuthService{identities: identities, tokens: tokens}
+	return &AuthService{identities: identities, tokens: tokens, attempts: newAttemptGuard()}
 }
 
 // Session is an issued bearer token.
@@ -73,18 +75,28 @@ func (s *AuthService) Register(ctx context.Context, in RegisterInput) (Session, 
 
 // Login checks the password and issues a token. Unknown emails and wrong
 // passwords fail identically (ErrInvalidCredentials) and take as long.
+// After MaxFailedAttempts failures for an email within AttemptWindow, it is
+// locked (ErrTooManyAttempts) until the window passes, so passwords cannot
+// be guessed; unknown emails are counted the same way.
 func (s *AuthService) Login(ctx context.Context, email, password string) (Session, error) {
+	key := "login:" + NormalizeEmail(email)
+	if s.attempts.locked(key) {
+		return Session{}, ErrTooManyAttempts
+	}
 	u, err := s.identities.FindByEmail(ctx, NormalizeEmail(email))
 	if errors.Is(err, auth.ErrUserNotFound) {
 		auth.CheckPasswordAgainstNothing(password)
+		s.attempts.fail(key)
 		return Session{}, ErrInvalidCredentials
 	}
 	if err != nil {
 		return Session{}, err
 	}
 	if !auth.CheckPassword(u.PasswordHash, password) {
+		s.attempts.fail(key)
 		return Session{}, ErrInvalidCredentials
 	}
+	s.attempts.reset(key)
 	return s.issue(ctx, u)
 }
 
