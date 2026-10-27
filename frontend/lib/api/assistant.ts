@@ -25,7 +25,7 @@ export const assistantApi = {
   message: (id: string, revision: number, text: string, signal?: AbortSignal) => request<AssistantSession>("POST", sessionPath(id) + "/messages", { body: { revision, text }, signal }),
   edit: (id: string, revision: number, plan: Plan) => request<AssistantSession>("PUT", sessionPath(id) + "/plan", { body: { revision, plan } }),
   repair: (id: string, revision: number, signal?: AbortSignal) => request<AssistantSession>("POST", sessionPath(id) + "/repair", { body: { revision }, signal }),
-  answer: (id: string, revision: number, question: string, value: unknown) => request<AssistantSession>("POST", sessionPath(id) + "/answers", { body: { revision, question_id: question, value } }),
+  answer: (id: string, revision: number, question: string, value: unknown, signal?: AbortSignal) => request<AssistantSession>("POST", sessionPath(id) + "/answers", { body: { revision, question_id: question, value }, signal }),
   start: (id: string, revision: number, fresh = false) => request<AutomationRun>("POST", sessionPath(id) + "/runs", { body: { revision, ...(fresh ? { request_id: crypto.randomUUID() } : {}) } }),
   runs: (workspace: string) => request<{ items: AutomationRun[] }>("GET", "/automation-runs", { query: { workspace_id: workspace } }),
   run: (id: string) => request<AutomationRun>("GET", runPath(id)),

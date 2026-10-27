@@ -9,6 +9,7 @@ import "./workspace.css";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { CommitStrategy, useScribe } from "@elevenlabs/react";
 import { useAssistant, materializePlan } from "@/features/assistant/useAssistant";
+import { PushToTalk, type TalkPhase } from "@/features/assistant/pushToTalk";
 import { voiceErrorMessage } from "@/features/assistant/voiceErrors";
 import { assistantApi } from "@/lib/api/assistant";
 import { download } from "@/lib/api/client";
@@ -84,7 +85,10 @@ export function AssistantHome({ workflowId }: { workflowId?: string } = {}) {
 
   const [text, setText] = useState("");
   const [speakReplies, setSpeakReplies] = useState(true);
-  const [voiceTokenPending, setVoiceTokenPending] = useState(false);
+  const [talkPhase, setTalkPhase] = useState<TalkPhase>("idle");
+  const [voiceReplyTurn, setVoiceReplyTurn] = useState(0);
+  const talkRef = useRef<PushToTalk | null>(null);
+  const heldInput = useRef<string | number | null>(null);
   const [voiceError, setVoiceError] = useState<unknown>(null);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [selectedStep, setSelectedStep] = useState("");
@@ -96,70 +100,99 @@ export function AssistantHome({ workflowId }: { workflowId?: string } = {}) {
   const audioURL = useRef("");
   const speech = useRef<AbortController | null>(null);
   const spoken = useRef("");
-  const voiceRequest = useRef<AbortController | null>(null);
-  const liveQuestion = s.run?.question ?? s.session?.compilation?.plan.questions.find(q => !Object.hasOwn(s.session?.answers ?? {}, q.id));
+  const liveQuestion = s.run?.question ?? s.session?.compilation?.plan.questions.find(q => q.purpose === "intent" || !Object.hasOwn(s.session?.answers ?? {}, q.id));
   // The SDK installs callbacks once per connection. Read the current draft and
   // question when a transcript arrives, including after a previous voice turn.
   const voiceContext = useRef({ s, liveQuestion });
   useEffect(() => { voiceContext.current = { s, liveQuestion }; });
-  function stopSpeech() {
+  const stopSpeech = useCallback(() => {
     speech.current?.abort(); audio.current?.pause(); audio.current = null;
     if (audioURL.current) URL.revokeObjectURL(audioURL.current); audioURL.current = "";
+  }, []);
+  function submitVoice(committed: string) {
+    setVoiceReplyTurn(turn => turn + 1);
+    if (!committed.trim()) return;
+    const { s, liveQuestion } = voiceContext.current;
+    stopSpeech();
+    if (/^(stop|cancel|stop working|cancel that)[.! ]*$/i.test(committed.trim())) {
+      s.interrupt();
+      if (s.run && !["COMPLETED", "FAILED", "CANCELLED"].includes(s.run.status))
+        void assistantApi.control(s.run.id, "cancel").catch(s.setError);
+      return;
+    }
+    if (s.building) { setText(current => [current, committed].filter(Boolean).join("\n")); return; }
+    if (liveQuestion) {
+      let answer: unknown = committed.trim();
+      if (liveQuestion.kind === "number") answer = Number(committed.replace(/,/g, ""));
+      if (liveQuestion.kind === "boolean") {
+        if (/^(yes|true|sure|correct)[.! ]*$/i.test(committed)) answer = true;
+        else if (/^(no|false|incorrect)[.! ]*$/i.test(committed)) answer = false;
+      }
+      const match = liveQuestion.options?.find(option => option.label.toLowerCase() === committed.trim().toLowerCase() || option.value === committed.trim());
+      if (match) answer = match.value;
+      void flush().then(() => voiceContext.current.s.answer(liveQuestion.id, answer)).catch(error => { s.setError(error); setText(current => [current, committed].filter(Boolean).join("\n")); });
+    } else {
+      if (s.run && !["COMPLETED", "FAILED", "CANCELLED"].includes(s.run.status))
+        void assistantApi.control(s.run.id, "pause").catch(s.setError);
+      void flush().then(() => voiceContext.current.s.send(committed)).then(sent => { if (!sent) setText(current => [current, committed].filter(Boolean).join("\n")); }).catch(error => { s.setError(error); setText(current => [current, committed].filter(Boolean).join("\n")); });
+    }
   }
   const scribe = useScribe({
-    modelId: "scribe_v2_realtime", commitStrategy: CommitStrategy.VAD, vadSilenceThresholdSecs: 1.5,
+    modelId: "scribe_v2_realtime", commitStrategy: CommitStrategy.MANUAL,
     microphone: { echoCancellation: true, noiseSuppression: true },
-    onPartialTranscript: ({ text: partial }) => {
-      if (partial.trim()) { stopSpeech(); /* Editing is locked while AI works; do not interrupt its draft. */ }
-    },
-    onCommittedTranscript: ({ text: committed }) => {
-      if (!committed.trim()) return;
-      const { s, liveQuestion } = voiceContext.current;
-      stopSpeech();
-      if (/^(stop|cancel|stop working|cancel that)[.! ]*$/i.test(committed.trim())) {
-        s.interrupt();
-        if (s.run && !["COMPLETED", "FAILED", "CANCELLED"].includes(s.run.status))
-          void assistantApi.control(s.run.id, "cancel").catch(s.setError);
-        return;
-      }
-      if (s.building) { setText(current => [current, committed].filter(Boolean).join("\n")); return; }
-      if (liveQuestion) {
-        let answer: unknown = committed.trim();
-        if (liveQuestion.kind === "number") answer = Number(committed.replace(/,/g, ""));
-        if (liveQuestion.kind === "boolean") {
-          if (/^(yes|true|sure|correct)[.! ]*$/i.test(committed)) answer = true;
-          else if (/^(no|false|incorrect)[.! ]*$/i.test(committed)) answer = false;
-        }
-        const match = liveQuestion.options?.find(option => option.label.toLowerCase() === committed.trim().toLowerCase() || option.value === committed.trim());
-        if (match) answer = match.value;
-        void flush().then(() => voiceContext.current.s.answer(liveQuestion.id, answer)).catch(s.setError);
-      } else {
-        if (s.run && !["COMPLETED", "FAILED", "CANCELLED"].includes(s.run.status))
-          void assistantApi.control(s.run.id, "pause").catch(s.setError);
-        void flush().then(() => voiceContext.current.s.send(committed)).then(sent => { if (!sent) setText(current => [current, committed].filter(Boolean).join("\n")); }).catch(error => { s.setError(error); setText(current => [current, committed].filter(Boolean).join("\n")); });
-      }
-    },
+    onPartialTranscript: ({ text: partial }) => { talkRef.current?.updatePartial(partial); },
+    onCommittedTranscript: ({ text: committed }) => talkRef.current?.committed(committed),
     onError: error => failVoice(voiceErrorMessage(error)),
     onAuthError: () => failVoice("ElevenLabs rejected the voice connection. Check the ElevenLabs API key, or continue by typing."),
     onQuotaExceededError: () => failVoice("ElevenLabs voice credits have run out. You can continue by typing."),
     onRateLimitedError: () => failVoice("ElevenLabs is handling too many voice requests. Try again shortly, or type below."),
     onResourceExhaustedError: () => failVoice("ElevenLabs is busy. Try again shortly, or continue by typing."),
     onUnacceptedTermsError: () => failVoice("Accept the speech-to-text terms in your ElevenLabs account, then try voice again. You can still type below."),
-    onDisconnect: stopSpeech,
+    onDisconnect: () => talkRef.current?.disconnected(),
   });
-  const voiceActive = scribe.isConnected || scribe.isTranscribing;
-  const voiceStarting = voiceTokenPending || scribe.status === "connecting";
-  const { status: voiceStatus, disconnect: disconnectVoice } = scribe;
-  function failVoice(message: string) { setVoiceError((previous: unknown) => previous ?? new Error(message)); scribe.disconnect(); stopSpeech(); }
+  const voiceActive = talkPhase === "listening";
+  const voiceStarting = talkPhase === "starting";
+  const voiceDraining = talkPhase === "draining";
+  const voiceIO = useRef({ scribe, submitVoice, workspaceId: s.workspaceId });
+  useEffect(() => { voiceIO.current = { scribe, submitVoice, workspaceId: s.workspaceId }; });
   useEffect(() => {
-    if (voiceStatus !== "connecting") return;
-    const timer = setTimeout(() => {
-      setVoiceError(new Error("The voice connection timed out. Try again or continue by typing.")); disconnectVoice();
-    }, 20_000);
-    return () => clearTimeout(timer);
-  }, [voiceStatus, disconnectVoice]);
+    const talk = new PushToTalk({
+      start: async signal => {
+        setVoiceError(null); stopSpeech();
+        if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia)
+          throw new Error("The browser cannot access a microphone here. Open this app on localhost or HTTPS, or continue by typing.");
+        let token;
+        try { token = await assistantApi.voiceToken(voiceIO.current.workspaceId, signal); }
+        catch (error) { throw new Error(voiceErrorMessage(error)); }
+        if (signal.aborted) return;
+        voiceIO.current.scribe.clearTranscripts();
+        await voiceIO.current.scribe.connect({ token: token.token });
+        if (signal.aborted) voiceIO.current.scribe.disconnect();
+      },
+      mute: () => voiceIO.current.scribe.mute(),
+      commit: () => voiceIO.current.scribe.commit(),
+      close: () => { heldInput.current = null; voiceIO.current.scribe.disconnect(); },
+      changed: setTalkPhase,
+      transcript: committed => voiceIO.current.submitVoice(committed),
+      recover: partial => setText(current => [current, partial].filter(Boolean).join("\n")),
+      error: error => setVoiceError(error instanceof Error ? error : new Error(voiceErrorMessage(error))),
+    });
+    talkRef.current = talk;
+    return () => { talk.cancel(); talkRef.current = null; };
+  }, [stopSpeech]);
+  function failVoice(message: string) { talkRef.current?.fail(new Error(message)); }
+  useEffect(() => { if (scribe.isConnected) talkRef.current?.ready(); }, [scribe.isConnected]);
   useEffect(() => {
-    if (!voiceActive || !speakReplies || !s.workspaceId) return;
+    if (s.building || !canEdit) talkRef.current?.cancel();
+  }, [s.building, canEdit]);
+  useEffect(() => {
+    const cancel = () => { if (heldInput.current !== null) { heldInput.current = null; talkRef.current?.cancel(); } };
+    const escape = (event: KeyboardEvent) => { if (event.key === "Escape") cancel(); };
+    window.addEventListener("blur", cancel); window.addEventListener("keydown", escape);
+    return () => { window.removeEventListener("blur", cancel); window.removeEventListener("keydown", escape); cancel(); };
+  }, []);
+  useEffect(() => {
+    if (!voiceReplyTurn || talkPhase !== "idle" || !speakReplies || !s.workspaceId || s.building) return;
     const message = liveQuestion?.prompt ?? s.session?.messages.filter(m => m.role === "assistant").at(-1)?.text ?? "";
     const key = liveQuestion?.id ?? (s.session?.id + ":" + s.session?.revision);
     if (!message || spoken.current === key) return;
@@ -172,22 +205,8 @@ export function AssistantHome({ workflowId }: { workflowId?: string } = {}) {
       return audio.current.play();
     }).catch(err => { if ((err as Error).name !== "AbortError") setVoiceError(new Error("The spoken reply is unavailable. The full reply is shown here.")); });
     return () => controller.abort();
-  }, [liveQuestion?.id, liveQuestion?.prompt, s.session?.id, s.session?.revision, s.session?.messages, voiceActive, speakReplies, s.workspaceId]);
-  useEffect(() => () => { voiceRequest.current?.abort(); speech.current?.abort(); audio.current?.pause(); if (audioURL.current) URL.revokeObjectURL(audioURL.current); }, []);
-  async function toggleVoice() {
-    if (voiceActive) { scribe.disconnect(); stopSpeech(); return; }
-    if (!s.workspaceId || voiceRequest.current || voiceStarting) return;
-    setVoiceError(null);
-    if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
-      setVoiceError(new Error("The browser cannot access a microphone here. Open this app on localhost or HTTPS, or continue by typing.")); return;
-    }
-    const controller = new AbortController(); voiceRequest.current = controller; setVoiceTokenPending(true);
-    try {
-      const token = await assistantApi.voiceToken(s.workspaceId, controller.signal);
-      if (!controller.signal.aborted) await scribe.connect({ token: token.token });
-    } catch (error) { if (!controller.signal.aborted) failVoice(voiceErrorMessage(error)); }
-    finally { if (voiceRequest.current === controller) { voiceRequest.current = null; setVoiceTokenPending(false); } }
-  }
+  }, [liveQuestion?.id, liveQuestion?.prompt, s.session?.id, s.session?.revision, s.session?.messages, voiceReplyTurn, talkPhase, speakReplies, s.workspaceId, s.building]);
+  useEffect(() => () => { speech.current?.abort(); audio.current?.pause(); if (audioURL.current) URL.revokeObjectURL(audioURL.current); }, []);
   async function submit(e: FormEvent) {
     e.preventDefault();
     if (!s.workspaceId || !text.trim() || s.building) return;
@@ -273,12 +292,19 @@ export function AssistantHome({ workflowId }: { workflowId?: string } = {}) {
         {!conversationOpen && (s.busy || !!s.doctorFailure || !!s.error) && <div className="small" role="status">{s.doctorFailure || (s.repairing ? "Checking and fixing your workflow…" : s.busy ? "Shaping your workflow…" : "A request needs attention.")} <button type="button" className="link" onClick={() => setConversationOpen(true)}>Open conversation</button></div>}
         {!!s.workspaceError && <div role="status"><ErrorBanner error={s.workspaceError} /><button type="button" disabled={s.loading} onClick={s.reloadWorkspace}>Retry loading workspace</button></div>}
         {s.loading && !s.workspaceId && <p className="hint" role="status">Loading your workspace. You can write your request while you wait.</p>}
-        {voiceActive && <div className="live-transcript" role="status"><span className="listening-dot" />{scribe.partialTranscript || "Listening. You can interrupt me anytime."}</div>}
+        {voiceActive && <div className="live-transcript" role="status"><span className="listening-dot" />{scribe.partialTranscript || "Listening. Release to send."}</div>}
         <textarea aria-label="What would you like to do?" placeholder="Tell me what you’d like to get done…" value={text} onChange={e => setText(e.target.value)} rows={2}
           onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); if (text.trim() && s.workspaceId) e.currentTarget.form?.requestSubmit(); } }} />
-        <div className="composer-toolbar"><button type="button" disabled={!canEdit || !s.workspaceId || voiceStarting || (s.building && !voiceActive)} className={"mic-button " + (voiceActive ? "listening" : "")} aria-label={voiceStarting ? "Connecting microphone" : voiceActive ? "Stop microphone" : "Start microphone"} aria-pressed={voiceActive} onClick={() => void toggleVoice()}>
+        <div className="composer-toolbar"><button type="button" disabled={!canEdit || !s.workspaceId || s.building} aria-disabled={voiceDraining} className={"mic-button " + (voiceActive ? "listening" : "")} aria-label={voiceStarting ? "Connecting microphone. Release to cancel" : voiceActive ? "Release to send" : voiceDraining ? "Finishing transcript" : "Hold to speak"} aria-pressed={voiceActive || voiceStarting} aria-describedby="microphone-instructions" style={{ touchAction: "none" }}
+          onPointerDown={e => { if (e.button !== 0 || heldInput.current !== null || voiceDraining) return; e.preventDefault(); e.currentTarget.focus(); e.currentTarget.setPointerCapture(e.pointerId); heldInput.current = e.pointerId; talkRef.current?.press(); }}
+          onPointerUp={e => { if (heldInput.current !== e.pointerId) return; heldInput.current = null; talkRef.current?.release(); if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId); }}
+          onPointerCancel={() => { heldInput.current = null; talkRef.current?.cancel(); }}
+          onLostPointerCapture={() => { if (heldInput.current !== null) { heldInput.current = null; talkRef.current?.cancel(); } }}
+          onKeyDown={e => { if (e.key !== " " && e.key !== "Enter") return; e.preventDefault(); if (e.repeat || heldInput.current !== null || voiceDraining) return; heldInput.current = e.key; talkRef.current?.press(); }}
+          onKeyUp={e => { if (e.key !== " " && e.key !== "Enter") return; e.preventDefault(); if (heldInput.current !== e.key) return; heldInput.current = null; talkRef.current?.release(); }}
+          onBlur={() => { if (heldInput.current !== null) { heldInput.current = null; talkRef.current?.cancel(); } }}>
           <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="9" y="2" width="6" height="12" rx="3" /><path d="M5 10v2a7 7 0 0014 0v-2M12 19v3M8 22h8" /></svg>
-        </button><span className="hint">{voiceStarting ? "Connecting…" : voiceActive ? "Tap to stop" : "Talk it through"}</span><span className="spacer" />
+        </button><span className="hint" id="microphone-instructions">{voiceStarting ? "Keep holding while connecting. Release to cancel." : voiceActive ? "Release to send · Escape to cancel" : voiceDraining ? "Finishing transcript…" : "Hold to speak · Space or Enter also works"}</span><span className="spacer" />
           <button className="primary send-button" type="submit" disabled={!canEdit || !text.trim() || !s.workspaceId || s.building}>Make it happen ↑</button>
         </div>
         <div className="composer-settings"><label><input type="checkbox" checked={s.autoExecute} onChange={e => s.setAutoExecute(e.target.checked)} /> Run when ready</label>

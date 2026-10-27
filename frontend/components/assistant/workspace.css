@@ -24,6 +24,9 @@
 .workspace-stage .send-button { background:var(--accent); }
 .workspace-stage .mic-button.listening { background:var(--accent-weak); }
 .composer-question { text-align:left; width:100%; margin-bottom:6px; }
+.clarification-context { border-left:2px solid var(--accent); padding:8px 10px; margin:8px 0 12px; background:var(--subtle); font-size:12px; line-height:1.6; }
+.clarification-context p { margin:0; }
+.clarification-card textarea { width:100%; min-height:80px; resize:vertical; }
 .workspace-conversation .run-card,.workspace-stage .run-card { padding:22px; }
 @media(max-width:1100px) { .workspace-conversation { width:275px; flex-basis:275px; } }
 @media(max-width:800px) { .workspace-conversation { position:absolute; z-index:20; top:52px; bottom:0; left:0; width:min(340px,90vw); box-shadow:var(--shadow-md); } .workspace-stage>.voice-composer { padding:10px 12px 8px; } .canvas-workspace .editor-header { overflow-x:auto; flex-shrink:0; } }

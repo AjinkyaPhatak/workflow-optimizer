@@ -31,6 +31,18 @@ describe("Assistant text and clarification", () => {
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     expect(answer).toHaveBeenCalledWith("Another person");
   });
+  it("shows the email step and purpose before accepting guidance to update the workflow", async () => {
+    const answer = vi.fn().mockResolvedValue(undefined);
+    render(<ClarificationCard question={{ ...question, kind: "text", purpose: "intent", prompt: "What should the recipient learn from this email?",
+      step_name: "Email qualifying Nifty gainers", field_label: "Message content", context: "The email only sends if a gainer rose by more than 0.7%.", options: [] }} onAnswer={answer} />);
+    expect(screen.getByTestId("clarification-location").textContent).toContain("Email qualifying Nifty gainers");
+    expect(screen.getByText("The email only sends if a gainer rose by more than 0.7%.")).toBeTruthy();
+    const input = screen.getByLabelText("What should the recipient learn from this email?");
+    expect(input.tagName).toBe("TEXTAREA");
+    fireEvent.change(input, { target: { value: "Summarize the qualifying companies and include the source links." } });
+    fireEvent.click(screen.getByRole("button", { name: "Update workflow" }));
+    expect(answer).toHaveBeenCalledWith("Summarize the qualifying companies and include the source links.");
+  });
   it("keeps the rest of a template when freezing answers for scheduling", () => {
     const plan = { schema_version: 2, questions: [{ ...question, id: "message_0" }], steps: [{ id: "message", inputs: [{ name: "text", source: "template", ref: "message", value_json: JSON.stringify("Hello [name]") }], children: [], otherwise: [] }] } as unknown as Plan;
     const frozen = materializePlan(plan, { message_0: "Ajinkya" });

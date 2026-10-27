@@ -166,9 +166,10 @@ export function useAssistant(workflowId?: string) {
     if (!active || buildingRef.current) return;
     const current = ++turn.current;
     request.current?.abort(); autoRunAfterDoctor.current = null;
+    const controller = new AbortController(); request.current = controller;
     setBusy(true); setBuilding(true); setRepairing(false); setDoctorFailure(null);
     try {
-      const next = await assistantApi.answer(active.id, active.revision, id, value);
+      const next = await assistantApi.answer(active.id, active.revision, id, value, controller.signal);
       if (current !== turn.current) return;
       remember(next);
       const policy = executionPolicy.current;

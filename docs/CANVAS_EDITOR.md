@@ -34,6 +34,21 @@ attempts and no repair button. Questions ask for missing user facts. New request
 and answers may run automatically when Run when ready is enabled; opening,
 restoring, arranging and manually editing never submit a run.
 
+The microphone uses push-to-talk: hold with a pointer, or hold Space/Enter while
+the button has focus, then release to send one utterance. Releasing during startup
+cancels; Escape or losing focus while holding cancels. After release the microphone
+is muted while the final transcript finishes, then its connection closes. Failed
+partials remain in the typed composer. Spoken replies can play after release.
+
+Clarification cards identify the step, field and relevant context. Internal
+`{{step.output}}` references are compiler wiring, never questions for the person.
+Embedded references become explicit data-only fill steps; invalid references stay
+blocked for automatic repair. Existing genuine fact answers retain their IDs.
+When the email's purpose is unclear, an intent answer replans the content rather
+than becoming literal outgoing copy. Replanning preserves recipients, conditions
+and budgets. A missing report source blocks generation, and the Text tool emits
+its configured template instead of returning an empty result.
+
 ## Saved workflows and API
 
 Workflow IDs equal their assistant session IDs. Separate `automation_workflows`,

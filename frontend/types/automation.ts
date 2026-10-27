@@ -1,6 +1,8 @@
 export interface Binding { name: string; source: "literal" | "step" | "answer" | "template" | "item" | "event"; ref: string; value_json: string }
 export interface Condition { left: Binding; op: string; right: Binding }
 export interface Question {
+  purpose?: "" | "value" | "intent";
+  context?: string; step_name?: string; field_label?: string;
   id: string; prompt: string; kind: "text" | "number" | "boolean" | "date" | "choice" | "contact" | "file";
   required: boolean; allow_other: boolean; options: { label: string; value: string }[] | null;
   example: string; min: number | null; max: number | null; step_id: string; input: string;
