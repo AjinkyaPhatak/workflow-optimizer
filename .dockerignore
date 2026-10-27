@@ -1,0 +1,15 @@
+.git
+.env
+.env.*
+**/.env
+**/.env.*
+.local
+bin
+frontend/node_modules
+frontend/.next
+frontend/out
+frontend/test-results
+frontend/playwright-report
+frontend/*.tsbuildinfo
+.go-cache
+.go-mod-cache
