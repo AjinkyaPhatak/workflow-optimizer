@@ -4,6 +4,7 @@ import "@xyflow/react/dist/style.css";
 import "./globals.css";
 import "./styles/theme.css";
 import "./styles/motifs.css";
+import "./styles/workflows.css";
 
 export const metadata: Metadata = {
   title: "Workflow Optimizer",
