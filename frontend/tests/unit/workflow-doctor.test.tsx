@@ -3,6 +3,7 @@ import { StrictMode } from "react";
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useAssistant } from "@/features/assistant/useAssistant";
+import { ApiError } from "@/lib/api/client";
 import type { AssistantSession } from "@/types/automation";
 
 const api = vi.hoisted(() => Object.fromEntries([
@@ -33,6 +34,19 @@ function mount(saved: AssistantSession) {
 }
 
 describe("automatic workflow doctor", () => {
+  it.each(["session", "run"])("opens an empty canvas for a removed %s without treating the workspace as broken", async kind => {
+    api.get.mockRejectedValue(new ApiError(404, "NOT_FOUND", "Unavailable", null));
+    api.run.mockRejectedValue(new ApiError(404, "NOT_FOUND", "Unavailable", null));
+    window.history.replaceState(null, "", "/home?" + kind + "=removed");
+    const view = renderHook(() => useAssistant(), { wrapper: StrictMode });
+    await waitFor(() => expect(view.result.current.loading).toBe(false));
+    expect(view.result.current.workspaceId).toBe("workspace");
+    expect(view.result.current.workspaceError).toBeNull();
+    expect(view.result.current.session).toBeNull();
+    expect(view.result.current.run).toBeNull();
+    expect(window.location.pathname + window.location.search).toBe("/home");
+    expect(api.start).not.toHaveBeenCalled();
+  });
   it("runs the latest saved revision even through a callback captured before autosave", async () => {
     const initial = draft("latest-save", 1, false);
     const view = mount(initial);

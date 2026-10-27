@@ -51,13 +51,25 @@ export function useAssistant(workflowId?: string) {
       if (!me.workspaces.length) throw new Error("Your account has no workspace. Ask the workspace owner to add you.");
       const id = workflowId ?? new URL(window.location.href).searchParams.get("session");
       if (id) {
-        const saved = await assistantApi.get(id);
-        if (live) { setWorkspaceId(saved.workspace_id); setCurrentSession(saved); }
+        try {
+          const saved = await assistantApi.get(id);
+          if (live) { setWorkspaceId(saved.workspace_id); setCurrentSession(saved); }
+        } catch (err) {
+          if (workflowId || !(err instanceof ApiError) || err.status !== 404) throw err;
+          // A removed draft is not a broken workspace. Old home bookmarks
+          // return to the empty canvas with the same signed-in account.
+          if (live) { setCurrentSession(null); window.history.replaceState(null, "", "/home"); }
+        }
       }
       const runId = new URL(window.location.href).searchParams.get("run");
       if (runId) {
-        const saved = await assistantApi.run(runId);
-        if (live) { setWorkspaceId(saved.workspace_id); setRun(saved); }
+        try {
+          const saved = await assistantApi.run(runId);
+          if (live) { setWorkspaceId(saved.workspace_id); setRun(saved); }
+        } catch (err) {
+          if (!(err instanceof ApiError) || err.status !== 404) throw err;
+          if (live) { setRun(null); window.history.replaceState(null, "", "/home"); }
+        }
       }
     }).catch(err => live && setWorkspaceError(err)).finally(() => live && setLoading(false));
     return () => { live = false; request.current?.abort(); };
