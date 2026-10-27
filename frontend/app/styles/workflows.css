@@ -90,3 +90,95 @@
 .wf-page.textured::before { width: 340px; height: 340px; left: -190px; top: 52%; border: 2px dashed rgba(42, 157, 143, .35); box-shadow: inset 0 0 0 40px rgba(233, 196, 106, .07); }
 .wf-page.textured::after { width: 280px; height: 280px; right: -150px; top: 82%; border: 26px solid rgba(231, 111, 81, .12); }
 .wf-page.textured > section { position: relative; z-index: 1; }
+
+/* --- Recent: a slim rail on the left that slides open on hover ------------------- */
+.wf-rail { position: fixed; z-index: 30; left: 16px; top: 76px; bottom: 16px; width: 72px; overflow: hidden; border-radius: 22px;
+  background: rgba(255, 255, 255, .78); backdrop-filter: blur(8px); border: 1px solid rgba(38, 70, 83, .08);
+  box-shadow: 0 1px 2px rgba(18, 24, 27, .05), 0 14px 34px -22px rgba(18, 24, 27, .35);
+  transition: width .42s cubic-bezier(.2, .8, .2, 1) .25s, background .25s .25s, box-shadow .25s .25s; }
+
+/* Closed: chevron, count, the word Recent on its side and a stack of tiles. */
+.wf-rail-closed { position: absolute; inset: 0; width: 72px; display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 14px 0;
+  min-height: 0; border: none; border-radius: 0; background: none; box-shadow: none; color: var(--text); cursor: pointer; transition: opacity .2s .3s; }
+.wf-rail-closed:hover:not(:disabled) { background: none; }
+.wf-rail-closed:focus-visible { outline: 2px solid var(--accent); outline-offset: -4px; border-radius: 22px; }
+.wf-rail-label { writing-mode: vertical-rl; transform: rotate(180deg); font-size: 13px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--charcoal); }
+.wf-stack { display: flex; flex-direction: column; align-items: center; padding-top: 12px; }
+.wf-mini { width: 38px; height: 38px; border-radius: 12px; margin-top: -12px; display: grid; place-items: center; border: 2px solid #fff; flex: none;
+  box-shadow: 0 6px 12px -6px rgba(18, 24, 27, .45); }
+.wf-mini.motif::after { display: none; }
+.wf-mini:nth-child(odd) { transform: rotate(-6deg); } .wf-mini:nth-child(even) { transform: rotate(5deg); }
+.wf-mini-icon { width: 22px; height: 22px; border-radius: 7px; background: #fff; display: grid; place-items: center; }
+.wf-mini-empty { background: var(--subtle); color: var(--primary); font-size: 20px; border-style: dashed; border-color: var(--border-strong); }
+.wf-count { min-width: 22px; height: 22px; padding: 0 7px; border-radius: 999px; background: var(--charcoal); color: #fff; font-size: 12px; font-weight: 650;
+  display: inline-grid; place-items: center; }
+.wf-chevron { width: 32px; height: 32px; flex: none; border-radius: 50%; display: grid; place-items: center; background: var(--tuscan); color: var(--charcoal); }
+.wf-rail-closed:hover .wf-chevron { background: var(--verdigris); color: #fff; }
+
+/* Open: the list. */
+.wf-rail-panel { position: absolute; top: 0; bottom: 0; left: 0; width: 340px; display: flex; flex-direction: column; opacity: 0; translate: -10px 0; pointer-events: none;
+  transition: opacity .18s, translate .18s; }
+.wf-rail-head { padding: 16px 16px 12px; display: flex; flex-direction: column; gap: 4px; border-bottom: 1.5px dashed rgba(42, 157, 143, .35); }
+.wf-rail-title { display: flex; align-items: center; justify-content: space-between; }
+.wf-recents-title { display: inline-flex; align-items: center; gap: 8px; font-size: 17px; font-weight: 700; }
+.wf-pin { min-height: 0; padding: 4px 10px; border: 1px solid var(--border); border-radius: 999px; background: none; box-shadow: none; font-size: 12px; font-weight: 600; color: var(--accent); }
+.wf-pin.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.wf-pin.on:hover:not(:disabled) { background: var(--accent-hover); }
+.wf-recents-sub { font-size: 12.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wf-recents-sub b { color: var(--text); font-weight: 600; }
+.wf-recents-controls { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.wf-recents-controls:empty { display: none; }
+.wf-rail .wf-search, .wf-rail .wf-select { width: 100%; }
+.wf-rail-list { flex: 1; min-height: 0; overflow-y: auto; padding: 10px 10px 16px; scrollbar-width: thin; }
+
+/* Workflow cards become compact rows inside the rail. */
+.wf-rail .wf-grid { display: flex; flex-direction: column; gap: 4px; }
+.wf-rail .wf-card { flex-direction: row; align-items: center; gap: 12px; min-height: 0; padding: 8px; border-radius: 14px; background: transparent; box-shadow: none; }
+.wf-rail .wf-card:hover, .wf-rail .wf-card.menu-open { transform: none; background: #fff; box-shadow: 0 1px 2px rgba(18, 24, 27, .05), 0 8px 18px -12px rgba(18, 24, 27, .3); }
+.wf-rail .wf-band { width: 48px; height: 48px; flex: none; border-radius: 13px; }
+.wf-rail .wf-band::after { display: none; }
+.wf-rail .wf-step:not(:first-child) { display: none; }
+.wf-rail .wf-icon { width: 30px; height: 30px; border-radius: 9px; }
+.wf-rail .wf-body { padding: 0; gap: 2px; flex: 1; }
+.wf-rail .wf-name { font-size: 14px; padding-right: 30px; }
+.wf-rail .wf-status { font-size: 12px; min-width: 0; }
+.wf-rail .wf-more { right: 8px; bottom: auto; top: 50%; margin-top: -15px; }
+.wf-rail .wf-menu { right: 8px; bottom: auto; top: calc(100% - 6px); }
+.wf-rail .wf-card:nth-last-child(-n+2):not(:nth-child(-n+3)) .wf-menu { top: auto; bottom: calc(100% - 6px); }
+.wf-rail .wf-empty-tile { flex-direction: row; justify-content: flex-start; gap: 12px; margin-top: 6px; min-height: 0; padding: 8px; }
+.wf-rail .wf-plus { width: 48px; height: 48px; border-radius: 13px; }
+.wf-rail .wf-skeleton { min-height: 64px; }
+.wf-rail-list .wf-grid > * { opacity: 0; translate: -8px 0; --d: 0s; --t: .15s;
+  transition: opacity var(--t) var(--d), translate var(--t) var(--d), transform .18s, box-shadow .18s, background .15s, border-color .15s; }
+.wf-rail-list .wf-grid > :nth-child(2) { --d: .03s; } .wf-rail-list .wf-grid > :nth-child(3) { --d: .06s; } .wf-rail-list .wf-grid > :nth-child(4) { --d: .09s; }
+.wf-rail-list .wf-grid > :nth-child(5) { --d: .12s; } .wf-rail-list .wf-grid > :nth-child(n+6) { --d: .15s; }
+
+/* What opens it: pinned or searching, focus inside, or a real pointer hovering. */
+.wf-rail.open, .wf-rail:has(.wf-rail-panel :focus-within) {
+  width: 340px; background: rgba(255, 255, 255, .94); box-shadow: 0 2px 4px rgba(18, 24, 27, .05), 0 24px 50px -24px rgba(18, 24, 27, .45); transition-delay: 0s; }
+.wf-rail.open .wf-rail-closed, .wf-rail:has(.wf-rail-panel :focus-within) .wf-rail-closed { opacity: 0; pointer-events: none; transition-delay: 0s; transition-duration: .12s; }
+.wf-rail.open .wf-rail-panel, .wf-rail:has(.wf-rail-panel :focus-within) .wf-rail-panel { opacity: 1; translate: 0 0; pointer-events: auto; transition: opacity .25s .12s, translate .3s .12s; }
+.wf-rail.open .wf-grid > *, .wf-rail:has(.wf-rail-panel :focus-within) .wf-grid > * { opacity: 1; translate: 0 0; --t: .3s; }
+@media (hover: hover) and (min-width: 901px) {
+  .wf-rail:hover { width: 340px; background: rgba(255, 255, 255, .94); box-shadow: 0 2px 4px rgba(18, 24, 27, .05), 0 24px 50px -24px rgba(18, 24, 27, .45); transition-delay: .06s; }
+  .wf-rail:hover .wf-rail-closed { opacity: 0; pointer-events: none; transition-delay: 0s; transition-duration: .12s; }
+  .wf-rail:hover .wf-rail-panel { opacity: 1; translate: 0 0; pointer-events: auto; transition: opacity .25s .16s, translate .3s .16s; }
+  .wf-rail:hover .wf-grid > * { opacity: 1; translate: 0 0; --t: .3s; }
+}
+
+/* Small screens: an ordinary block under the header, tapped open and closed. */
+@media (max-width: 900px) {
+  .wf-rail, .wf-rail.open, .wf-rail:has(.wf-rail-panel :focus-within) { position: relative; left: auto; top: auto; bottom: auto; width: auto; margin-top: 8px; transition: none; }
+  .wf-rail-closed { position: relative; width: 100%; flex-direction: row; justify-content: flex-start; padding: 12px 14px; }
+  .wf-rail-label { writing-mode: horizontal-tb; transform: none; }
+  .wf-stack { flex-direction: row; padding: 0 0 0 12px; margin-left: auto; }
+  .wf-mini { margin: 0 0 0 -12px; }
+  .wf-rail.open .wf-rail-closed { display: none; }
+  .wf-rail-panel { position: relative; width: auto; display: none; opacity: 1; translate: 0 0; pointer-events: auto; }
+  .wf-rail.open .wf-rail-panel { display: flex; }
+  .wf-rail-list { overflow: visible; }
+  .wf-rail-list .wf-grid > * { opacity: 1; translate: 0 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wf-rail, .wf-rail *, .wf-rail-list .wf-grid > * { transition: none !important; }
+}

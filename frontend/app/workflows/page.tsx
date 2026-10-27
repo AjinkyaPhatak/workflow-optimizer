@@ -8,6 +8,7 @@ import { ErrorBanner } from "@/components/ui/ErrorBanner";
 import { NodeIcon } from "@/components/ui/NodeIcon";
 import { TopBar } from "@/components/ui/TopBar";
 import { NewWorkflow } from "@/components/workflow/NewWorkflow";
+import { RecentWorkflows } from "@/components/workflow/RecentWorkflows";
 import { WorkflowCard } from "@/components/workflow/WorkflowCard";
 import { useProviders } from "@/features/connected-accounts/useProviders";
 import { useWorkflowCards } from "@/features/workflows/useWorkflowCards";
@@ -78,21 +79,21 @@ function Dashboard() {
 
         <section className="wf-list">
           <ErrorBanner error={d.error} />
-          <div className="wf-list-head">
-            <h2>Recent</h2>
-            {!d.loading && <span className="muted">{workflows.length} {workflows.length === 1 ? "workflow" : "workflows"}</span>}
-            <span className="spacer" />
-            {d.workspaces.length > 1 && (
-              <select aria-label="Workspace" className="wf-select" value={d.workspace?.id ?? ""} onChange={(e) => d.setWorkspaceId(e.target.value)}>
-                {d.workspaces.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
-              </select>
-            )}
-            {workflows.length > 0 && (
-              <input type="search" className="wf-search" aria-label="Search workflows" placeholder="Search" value={query}
-                onChange={(e) => setQuery(e.target.value)} />
-            )}
-          </div>
-
+          <RecentWorkflows workflows={workflows} details={cards.details} catalog={cards.catalog} loading={d.loading}
+            forceOpen={Boolean(q)}
+            controls={(
+              <>
+                {d.workspaces.length > 1 && (
+                  <select aria-label="Workspace" className="wf-select" value={d.workspace?.id ?? ""} onChange={(e) => d.setWorkspaceId(e.target.value)}>
+                    {d.workspaces.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+                  </select>
+                )}
+                {workflows.length > 0 && (
+                  <input type="search" className="wf-search" aria-label="Search workflows" placeholder="Search" value={query}
+                    onChange={(e) => setQuery(e.target.value)} />
+                )}
+              </>
+            )}>
           {d.loading ? (
             <div className="wf-grid">
               {[0, 1, 2].map((i) => <div key={i} className="wf-card wf-skeleton" aria-hidden />)}
@@ -119,6 +120,7 @@ function Dashboard() {
               {q && shown.length === 0 && <p className="muted">No workflows match &ldquo;{query}&rdquo;.</p>}
             </div>
           )}
+          </RecentWorkflows>
         </section>
       </main>
 
