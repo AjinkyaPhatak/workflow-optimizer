@@ -5,6 +5,7 @@ import "./globals.css";
 import "./styles/theme.css";
 import "./styles/motifs.css";
 import "./styles/workflows.css";
+import "./styles/templates.css";
 
 export const metadata: Metadata = {
   title: "Workflow Optimizer",

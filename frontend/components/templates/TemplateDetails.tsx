@@ -9,8 +9,9 @@ import { useState, type FormEvent } from "react";
 import { Spinner } from "@/components/ui/BrandMark";
 import { ErrorBanner } from "@/components/ui/ErrorBanner";
 import { NodeIcon } from "@/components/ui/NodeIcon";
+import { motifOf } from "@/components/ui/Backdrop";
 import { friendlyNodeName } from "@/lib/workflow/labels";
-import { requirements } from "@/lib/workflow/requirements";
+import { appsOf, requirements } from "@/lib/workflow/requirements";
 import type { ConnectedAccount, Credential, NodeDefinition, WorkflowTemplate } from "@/types/api";
 
 export function TemplateDetails({ template, catalog, have, canCreate, onClose, onUse, onDelete }: {
@@ -47,6 +48,10 @@ export function TemplateDetails({ template, catalog, have, canCreate, onClose, o
     <div className="run-overlay" role="dialog" aria-modal="true" aria-labelledby="template-title" data-testid="template-details"
       onMouseDown={(ev) => ev.target === ev.currentTarget && onClose()}>
       <form className="run-card template-details" onSubmit={submit}>
+        <div className={`tpl-band motif ${motifOf(template.id)}`} aria-hidden>
+          {appsOf(template.node_types, catalog).slice(0, 3).map((a) => <span key={a.id} className="wf-icon"><NodeIcon integrationId={a.id} size={20} /></span>)}
+          {template.node_types.some((t) => t === "llm" || t === "transcribe_audio") && <span className="wf-icon"><NodeIcon def={{ type: "llm", category: "ai" }} size={20} /></span>}
+        </div>
         <div className="run-head">
           <h2 id="template-title">{template.name}</h2>
           <span className="spacer" />
