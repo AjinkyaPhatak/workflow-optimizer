@@ -117,6 +117,40 @@ function authHeaders(): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
+/** Authenticated SSE, including split UTF-8 characters and multiline data. */
+export async function stream(path: string, onEvent: (kind: string, data: unknown, id: string) => void, signal: AbortSignal): Promise<void> {
+  const res = await fetch(buildUrl(path), { headers: { ...authHeaders(), Accept: "text/event-stream" }, cache: "no-store", signal });
+  if (!res.ok) throw await failure(res);
+  if (!res.body) throw new ApiError(0, "STREAM_UNAVAILABLE", "Live updates are unavailable", null);
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      buffer += decoder.decode(value, { stream: !done }).replace(/\r\n/g, "\n");
+      let end: number;
+      while ((end = buffer.indexOf("\n\n")) !== -1) {
+        const block = buffer.slice(0, end); buffer = buffer.slice(end + 2);
+        const lines = block.split("\n");
+        const kind = lines.find(line => line.startsWith("event:"))?.slice(6).trim() ?? "message";
+        const id = lines.find(line => line.startsWith("id:"))?.slice(3).trim() ?? "";
+        const data = lines.filter(line => line.startsWith("data:")).map(line => line.slice(5).trimStart()).join("\n");
+        if (data) {
+          try { onEvent(kind, JSON.parse(data) as unknown, id); } catch { /* Ignore incomplete/malformed event, reconnect from the last accepted ID. */ }
+        }
+      }
+      if (done) break;
+    }
+  } finally { reader.releaseLock(); }
+}
+
+export async function binaryPost(path: string, body: unknown, signal?: AbortSignal): Promise<Blob> {
+  const res = await fetch(buildUrl(path), { method: "POST", headers: { ...authHeaders(), "Content-Type": "application/json" }, body: JSON.stringify(body), signal });
+  if (!res.ok) throw await failure(res);
+  return res.blob();
+}
+
 /** Posts multipart/form-data (file uploads, Phase D1); the browser sets the
  * boundary. */
 export async function upload<T>(path: string, form: FormData, fetchImpl: typeof fetch = fetch): Promise<T> {

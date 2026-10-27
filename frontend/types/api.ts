@@ -442,7 +442,7 @@ export type KnowledgeDocumentStatus = "INDEXING" | "READY" | "FAILED";
 export interface KnowledgeDocument {
   id: UUID;
   title: string;
-  source: "file" | "text";
+  source: "file" | "text" | "url";
   file_id: UUID | null;
   status: KnowledgeDocumentStatus;
   error?: string;

@@ -14,10 +14,13 @@ import { connect } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import pg from "pg";
+import { mockResponse } from "./assistant-fixture";
 
 export const API_PORT = Number(process.env.E2E_API_PORT ?? 18180);
 export const MOCK_OPENAI_PORT = Number(process.env.E2E_OPENAI_PORT ?? 18190);
 export const MOCK_REPLY_PREFIX = "Mock answer to: ";
+/** Delays a planner response beyond Next.js's default 30-second proxy timeout. */
+export const MOCK_SLOW_PLANNER = "__slow_planner_32s__";
 /** Prompts containing this fail once with 503 (a retryable provider error). */
 export const MOCK_FAIL_ONCE = "flaky";
 /** Prompts containing this are answered with MOCK_JSON_REPLY. */
@@ -82,7 +85,12 @@ interface MockCall {
 
 function startMockOpenAI(expectedKey: string): Promise<Server> {
   const calls: MockCall[] = [];
+  const whatsappCalls: unknown[] = [];
   const server = createServer((req, res) => {
+    if (req.method === "GET" && req.url === "/__whatsapp_calls") { res.setHeader("Content-Type", "application/json");res.end(JSON.stringify(whatsappCalls));return; }
+    if (req.method === "GET" && req.url?.endsWith("/contacts")) {
+      res.setHeader("Content-Type", "application/json");res.end(JSON.stringify([{ id: "phatak1@s.whatsapp.net", name: "Ajinkya Phatak" }, { id: "phatak2@s.whatsapp.net", name: "Other Phatak" }]));return;
+    }
     if (req.method === "GET" && req.url === "/__calls") {
       res.setHeader("Content-Type", "application/json");
       res.end(JSON.stringify(calls));
@@ -91,11 +99,20 @@ function startMockOpenAI(expectedKey: string): Promise<Server> {
     let body = "";
     req.on("data", (c) => (body += c));
     req.on("end", () => {
-      const parsed = JSON.parse(body || "{}") as { model?: string; messages?: { role: string; content: string }[] };
+      const parsed = JSON.parse(body || "{}") as { model?: string; messages?: { role: string; content: string }[]; tools?: unknown[]; text?: { format?: { name?: string } } };
       const prompt = parsed.messages?.filter((m) => m.role === "user").map((m) => m.content).join("\n") ?? "";
       const authorized = req.headers.authorization === `Bearer ${expectedKey}`;
       calls.push({ authorized, model: parsed.model ?? "", prompt });
       res.setHeader("Content-Type", "application/json");
+      if (req.url?.endsWith("/send") && authorized) { whatsappCalls.push(JSON.parse(body));res.end(JSON.stringify({ id: "fixture-message-" + whatsappCalls.length, status: "sent" }));return; }
+      if (req.url?.endsWith("/responses") && authorized) {
+        const reply = () => res.end(JSON.stringify(mockResponse(parsed)));
+        if (parsed.text?.format?.name === "workflow_plan" && body.includes(MOCK_SLOW_PLANNER)) {
+          const timer = setTimeout(reply, 32_000);
+          res.once("close", () => clearTimeout(timer));
+        } else reply();
+        return;
+      }
       if (prompt.includes(MOCK_FAIL_ONCE) && calls.filter((c) => c.prompt === prompt).length === 1) {
         res.statusCode = 503;
         res.end(JSON.stringify({ error: { type: "server_error", code: "overloaded" } }));
@@ -199,10 +216,17 @@ export async function startStack(): Promise<{ seed: Seed; stop: () => Promise<vo
     const exe = process.platform === "win32" ? ".exe" : "";
     goBuild("./cmd/api", `${bin}-api${exe}`);
     goBuild("./cmd/worker", `${bin}-worker${exe}`);
+    goBuild("./cmd/orchestrator", bin + "-orchestrator" + exe);
     const u = new URL(databaseUrl);
     u.searchParams.set("search_path", schema);
     const env = {
       ...process.env,
+      // Test accounts never use the developer's live OAuth or voice providers.
+      ...Object.fromEntries(["GOOGLE", "NOTION", "AIRTABLE", "DISCORD"].flatMap(prefix =>
+        ["CLIENT_ID", "CLIENT_SECRET", "OAUTH_REDIRECT_URI"].map(key => [prefix + "_" + key, ""]))),
+      DISCORD_BOT_TOKEN: "",
+      ELEVENLABS_API_KEY: "",
+      ELEVENLABS_VOICE_ID: "",
       DATABASE_URL: u.toString(),
       REDIS_URL: redisUrl,
       REDIS_QUEUE_NAME: `${prefix}:executions`,
@@ -212,9 +236,13 @@ export async function startStack(): Promise<{ seed: Seed; stop: () => Promise<vo
       CREDENTIAL_ENCRYPTION_KEY: randomBytes(32).toString("base64"),
       OPENAI_BASE_URL: `http://127.0.0.1:${MOCK_OPENAI_PORT}/v1`,
       DEFAULT_MAX_ATTEMPTS: "1",
+      OPENAI_API_KEY: providerKey,
+      TEMPORAL_TASK_QUEUE: prefix + ":v2",
+      WHATSAPP_CONNECTOR_URL: "http://127.0.0.1:" + MOCK_OPENAI_PORT,
+      CONNECTOR_SERVICE_TOKEN: providerKey,
       MODEL_PRICING: JSON.stringify(MODEL_PRICING),
     };
-    for (const name of ["api", "worker"]) {
+    for (const name of ["api", "worker", "orchestrator"]) {
       const c = spawn(`${bin}-${name}${exe}`, [], { env, stdio: process.env.E2E_VERBOSE ? "inherit" : "ignore" });
       children.push(c);
     }
