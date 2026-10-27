@@ -21,6 +21,7 @@ Execute only the user's requested actions. Ask before proposing an additional ac
 Use explicit input references and conversions. Never stringify a document or table blindly.
 Use branches for decisions, parallel for independent work, map for lists, repeat with a limit,
 workflow for saved version-pinned plans, wait for events/delays, ask for human decisions.
+For a linked workflow, use an exact ref from the supplied workflows list; never invent a version ID.
 Use continuous mode only when explicitly requested, with the user's explicit budgets.
 Fresh facts require web search. Keep citations and dates. Do not fabricate market data.
 For Nifty 50, verify the constituent universe and trading session, use published sources,
@@ -50,6 +51,7 @@ var stepID = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_-]{0,79}$`)
 func HasPlaceholder(s string) bool { return placeholder.MatchString(s) }
 
 type PlanRequest struct {
+	Workflows   []WorkflowChoice `json:"workflows,omitempty"`
 	Repair      bool             `json:"repair"`
 	Messages    []Message        `json:"messages"`
 	Tools       []ToolDescriptor `json:"tools"`
@@ -61,8 +63,9 @@ type Planner interface {
 	Generate(context.Context, PlanRequest) (Plan, error)
 }
 type Compiler struct {
-	Planner Planner
-	Tools   []ToolDescriptor
+	Planner    Planner
+	Tools      []ToolDescriptor
+	OnProgress func(phase string, pass int, plan *Plan)
 }
 
 // Compile uses a bounded Eino graph. It cannot dispatch actions.
@@ -76,6 +79,9 @@ func (c *Compiler) Compile(ctx context.Context, req PlanRequest) (Compilation, e
 		var out Compilation
 		previousFailure := ""
 		for pass := 0; pass < 3; pass++ {
+			if c.OnProgress != nil {
+				c.OnProgress("planning", pass+1, nil)
+			}
 			plan, err := c.Planner.Generate(ctx, request)
 			if err != nil {
 				return out, err
@@ -88,8 +94,14 @@ func (c *Compiler) Compile(ctx context.Context, req PlanRequest) (Compilation, e
 				out.Diagnostics = append(out.Diagnostics, Diagnostic{Code: "ACTION_CHANGE", Message: "The proposed repair changed an outgoing action. I’ve kept your original draft. Describe the change if you want a different action.", RepairHint: "Repair only the existing plan. Preserve the IDs and tools of all external actions; do not add or remove sends or writes."})
 				out.Ready = false
 			}
+			if c.OnProgress != nil {
+				c.OnProgress("checking", pass+1, &out.Plan)
+			}
 			if len(out.Diagnostics) == 0 {
 				return out, nil
+			}
+			if c.OnProgress != nil {
+				c.OnProgress("repairing", pass+1, &out.Plan)
 			}
 			failure, _ := json.Marshal(struct {
 				Steps       []Step
@@ -338,7 +350,7 @@ func Check(plan Plan, tools []ToolDescriptor) Compilation {
 							prompt = "Which account should I use for " + t.Name + "?"
 							kind = "choice"
 						}
-						out.Plan.Questions = append(out.Plan.Questions, Question{ID: id, Prompt: prompt, Kind: kind, Required: true, Options: f.Options, StepID: s.ID, Input: f.Name})
+						out.Plan.Questions = append(out.Plan.Questions, Question{ID: id, Prompt: prompt, Kind: kind, Required: true, AllowOther: f.AllowCustom, Min: f.Min, Max: f.Max, Options: f.Options, StepID: s.ID, Input: f.Name})
 						questions[id] = true
 					}
 					s.Inputs = append(s.Inputs, Binding{Name: f.Name, Source: "answer", Ref: id})
@@ -403,7 +415,7 @@ func Check(plan Plan, tools []ToolDescriptor) Compilation {
 				available[s.ID] = genericOutput()
 			case "workflow":
 				if _, err := uuidParseRef(s.WorkflowRef); err != nil {
-					add(s.ID, "WORKFLOW", "Choose a saved workflow run to reuse as an immutable plan.")
+					add(s.ID, "WORKFLOW", "Choose a published workflow version to run.")
 				}
 				available[s.ID] = genericOutput()
 			default:
@@ -415,7 +427,7 @@ func Check(plan Plan, tools []ToolDescriptor) Compilation {
 	if len(ids) > 500 {
 		add("", "SIZE", "Use at most 500 steps in one workflow.")
 	}
-	out.Ready = len(out.Diagnostics) == 0 && len(out.Plan.Questions) == 0
+	out.Ready = len(out.Plan.Steps) > 0 && len(out.Diagnostics) == 0 && len(out.Plan.Questions) == 0
 	return out
 }
 func copyCatalog(m map[string]ToolDescriptor) map[string]ToolDescriptor {
@@ -428,7 +440,9 @@ func copyCatalog(m map[string]ToolDescriptor) map[string]ToolDescriptor {
 func genericOutput() ToolDescriptor {
 	return ToolDescriptor{Outputs: []Field{{Name: "result", Type: "json"}}}
 }
-func uuidParseRef(ref string) (uuid.UUID, error) { return uuid.Parse(ref) }
+func uuidParseRef(ref string) (uuid.UUID, error) {
+	return uuid.Parse(strings.TrimPrefix(ref, "version:"))
+}
 func questionPrefix(id, input string) string {
 	prefix := id + "_" + strings.NewReplacer(".", "_", " ", "_").Replace(input)
 	if len(prefix) > 60 {
@@ -455,6 +469,6 @@ func CheckAnswered(plan Plan, tools []ToolDescriptor, answers map[string]any) Co
 			out.Diagnostics = append(out.Diagnostics, Diagnostic{StepID: q.StepID, Code: "ANSWER", Message: err.Error()})
 		}
 	}
-	out.Ready = len(out.Diagnostics) == 0 && pending == 0
+	out.Ready = len(out.Plan.Steps) > 0 && len(out.Diagnostics) == 0 && pending == 0
 	return out
 }

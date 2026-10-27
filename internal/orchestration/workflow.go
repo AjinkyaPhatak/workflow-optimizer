@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -549,13 +550,26 @@ func (a *Activities) Child(ctx context.Context, req ChildRequest) (Input, error)
 	if err != nil {
 		return Input{}, err
 	}
-	ref, err := uuid.Parse(req.Reference)
+	ref, err := uuid.Parse(strings.TrimPrefix(req.Reference, "version:"))
 	if err != nil {
 		return Input{}, err
 	}
-	source, err := a.Store.Run(ctx, ref)
-	if err != nil {
-		return Input{}, err
+	var source automation.Run
+	if strings.HasPrefix(req.Reference, "version:") {
+		versions, ok := a.Store.(automation.WorkflowStore)
+		if !ok {
+			return Input{}, automation.ErrUnavailable
+		}
+		version, e := versions.Version(ctx, ref)
+		if e != nil {
+			return Input{}, e
+		}
+		source = automation.Run{ID: version.ID, WorkspaceID: version.WorkspaceID, Plan: version.Plan, CredentialID: version.CredentialID}
+	} else {
+		source, err = a.Store.Run(ctx, ref)
+		if err != nil {
+			return Input{}, err
+		}
 	}
 	if source.WorkspaceID != parent.WorkspaceID {
 		return Input{}, automation.ErrNotFound

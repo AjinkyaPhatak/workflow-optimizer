@@ -28,7 +28,25 @@ func (h *Handlers) AssistantTools(w http.ResponseWriter, r *http.Request) {
 	if !h.assistantReady(w, r) {
 		return
 	}
-	httpx.WriteJSON(w, 200, map[string]any{"items": h.Assistant.Tools, "comparisons": automation.ComparisonOptions()})
+	var ws uuid.UUID
+	if r.URL.Query().Get("workspace_id") != "" {
+		var ok bool
+		ws, ok = h.queryID(w, r, "workspace_id")
+		if !ok {
+			return
+		}
+	}
+	items, err := h.Assistant.Catalog(r.Context(), user(r), ws)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	choices, err := h.Assistant.WorkflowChoices(r.Context(), user(r), ws)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	httpx.WriteJSON(w, 200, map[string]any{"workflows": choices, "items": items, "comparisons": automation.ComparisonOptions(), "controls": automation.ControlDescriptors(), "conversions": automation.ConversionRules})
 }
 func (h *Handlers) ImportLegacyWorkflow(w http.ResponseWriter, r *http.Request) {
 	if !h.assistantReady(w, r) {

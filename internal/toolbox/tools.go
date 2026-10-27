@@ -59,6 +59,8 @@ func field(name, kind, desc string, required bool) Field {
 }
 func (t *Toolbox) Catalog() []ToolDescriptor {
 	tools := []ToolDescriptor{
+		{ID: "value.bind", Name: "Fill a value", Description: "Fill one named value in a text or structured document without changing its type.", Inputs: []Field{field("template", "json", "Text or structure with a named slot", true), field("name", "string", "Slot name", true), field("value", "json", "Value for the slot", true)}, Outputs: []Field{field("result", "json", "Filled text or structure", true)}, Category: "logic", Icon: "braces"},
+		{ID: "value.json", Name: "Read JSON", Description: "Read structured input as JSON.", Inputs: []Field{field("text", "string", "JSON text", true)}, Outputs: []Field{field("result", "json", "Structured value", true)}, Category: "logic", Icon: "braces"},
 		{ID: "web.search", Name: "Search the web", Description: "Find fresh published information with source links and dates.", Inputs: []Field{field("query", "string", "What to research", true)}, Outputs: []Field{field("text", "string", "Research with citations", true), field("sources", "array", "Source URLs", true), field("observed_at", "string", "Research time", true)}},
 		{ID: "web.read", Name: "Read a web page", Description: "Read a public URL as source material; cannot submit forms or click actions.", Inputs: []Field{field("url", "string", "Public page URL", true)}, Outputs: []Field{field("text", "string", "Extracted page text", true), field("url", "string", "Source URL", true), field("fetched_at", "string", "Fetch time", true)}},
 		{ID: "ai.write", Name: "Write or explain", Inputs: []Field{field("instructions", "string", "What to produce", true), field("text", "string", "Source material", true)}, Outputs: []Field{field("text", "string", "Written result", true)}},
@@ -80,7 +82,20 @@ func (t *Toolbox) Catalog() []ToolDescriptor {
 			if d.Role != node.SemanticRoleNone || d.Type == "condition" || d.Type == "switch" || d.Type == "merge" {
 				continue
 			}
-			desc := ToolDescriptor{ID: "node." + d.Type, Name: d.Name, Description: d.Description, SideEffects: string(d.SideEffects), Inputs: []Field{}, Outputs: []Field{}}
+			desc := ToolDescriptor{ID: "node." + d.Type, Name: d.Name, Description: d.Description, SideEffects: string(d.SideEffects), Inputs: []Field{}, Outputs: []Field{}, Category: string(d.Category), Icon: d.Type}
+			if d.Integration != nil {
+				desc.Category = "apps"
+				desc.IntegrationID = d.Integration.ID
+			}
+			if desc.Category == "llm" {
+				desc.Category = "ai"
+			}
+			if desc.Category == "knowledge_base" {
+				desc.Category = "knowledge"
+			}
+			if desc.Category == "multimodal" {
+				desc.Category = "media"
+			}
 			if d.Auth != nil {
 				desc.Provider = d.Auth.Provider
 			}
@@ -89,6 +104,12 @@ func (t *Toolbox) Catalog() []ToolDescriptor {
 			}
 			for _, f := range d.Config {
 				entry := field("config."+f.Name, string(f.Type), f.Description, (f.Required && (f.Default == nil || f.Default == "")) || (d.Auth != nil && d.Auth.Required && f.Name == node.CredentialConfigField))
+				entry.Label = f.Label
+				entry.Default = f.Default
+				entry.Min = f.Min
+				entry.Max = f.Max
+				entry.Multiline = f.Multiline
+				entry.AllowCustom = f.AllowCustom
 				for _, o := range f.Options {
 					entry.Options = append(entry.Options, Option{Label: o.Label, Value: fmt.Sprint(o.Value)})
 				}
@@ -98,6 +119,37 @@ func (t *Toolbox) Catalog() []ToolDescriptor {
 				desc.Outputs = append(desc.Outputs, field(p.Name, string(p.Type), p.Description, p.Required))
 			}
 			tools = append(tools, desc)
+		}
+	}
+	for i := range tools {
+		t := &tools[i]
+		if t.Category == "" {
+			switch {
+			case strings.HasPrefix(t.ID, "ai."):
+				t.Category = "ai"
+				t.Icon = "ai"
+			case strings.HasPrefix(t.ID, "knowledge.") || strings.HasPrefix(t.ID, "artifact."):
+				t.Category = "knowledge"
+				t.Icon = "knowledge"
+			case strings.HasPrefix(t.ID, "whatsapp."):
+				t.Category = "apps"
+				t.IntegrationID = "whatsapp"
+			case strings.HasPrefix(t.ID, "web."):
+				t.Category = "basics"
+				t.Icon = "http"
+			default:
+				t.Category = "logic"
+				t.Icon = "transform"
+			}
+		}
+		for j := range t.Inputs {
+			f := &t.Inputs[j]
+			if f.Label == "" {
+				f.Label = strings.ReplaceAll(strings.TrimPrefix(strings.TrimPrefix(f.Name, "config."), "port."), "_", " ")
+			}
+			if f.Name == "text" || f.Name == "instructions" || f.Name == "code" {
+				f.Multiline = true
+			}
 		}
 	}
 	return automation.WithSchemas(automation.SortedTools(tools))
@@ -296,6 +348,18 @@ func (t *Toolbox) artifact(ctx context.Context, c ToolCall, name string, data []
 func (t *Toolbox) dispatch(ctx context.Context, c ToolCall) (ToolResult, error) {
 	result := func(out map[string]any) (ToolResult, error) { return ToolResult{Outputs: out}, nil }
 	switch c.Tool {
+	case "value.bind":
+		value, err := fillNamedValue(c.Inputs["template"], stringInput(c, "name"), c.Inputs["value"])
+		if err != nil {
+			return ToolResult{}, err
+		}
+		return result(map[string]any{"result": value})
+	case "value.json":
+		var value any
+		if err := json.Unmarshal([]byte(stringInput(c, "text")), &value); err != nil {
+			return ToolResult{}, errors.New("enter valid JSON")
+		}
+		return result(map[string]any{"result": value})
 	case "web.search", "ai.write", "table.extract", "decision.classify":
 		if c.Tool == "decision.classify" && c.Inputs["human_choice"] != nil {
 			choice, ok := c.Inputs["human_choice"].(string)

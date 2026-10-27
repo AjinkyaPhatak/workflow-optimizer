@@ -9,11 +9,11 @@ import (
 // ConversionRules is a small explicit catalog, also exposed to the planner/UI.
 // Every inserted conversion remains visible as a normal workflow step.
 type ConversionRule struct {
-	From   string
-	To     string
-	Tool   string
-	Input  string
-	Output string
+	From   string `json:"from"`
+	To     string `json:"to"`
+	Tool   string `json:"tool"`
+	Input  string `json:"input"`
+	Output string `json:"output"`
 }
 
 var ConversionRules = []ConversionRule{
@@ -216,7 +216,10 @@ func ValidateLiteral(b Binding, f Field) error {
 	if !LiteralType(v, f.Type) {
 		return fmt.Errorf("%s needs a %s value or an explicit conversion", f.Name, f.Type)
 	}
-	if len(f.Options) > 0 {
+	if n, ok := v.(float64); ok && ((f.Min != nil && n < *f.Min) || (f.Max != nil && n > *f.Max)) {
+		return fmt.Errorf("%s is outside the allowed range", f.Name)
+	}
+	if len(f.Options) > 0 && !f.AllowCustom {
 		for _, o := range f.Options {
 			if fmt.Sprint(v) == o.Value {
 				return nil

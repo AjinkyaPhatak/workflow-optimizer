@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -64,7 +65,12 @@ func buildAssistant(cfg config.Config, store *postgres.Store, access *applicatio
 		backend = &orchestration.Backend{Client: tc, Queue: cfg.Automation.TemporalTaskQueue}
 	}
 	tools := buildToolbox(cfg, store, engine, creds)
+	builtins, err := tools.BuiltinTemplates()
+	if err != nil {
+		return nil, tc, err
+	}
 	svc := &application.AssistantService{Access: access, Store: tools.Store, Backend: backend, Tools: tools.Catalog(),
+		BuiltinTemplates: builtins,
 		Planner: func(ctx context.Context, session automation.Session) (automation.Planner, error) {
 			key, err := modelKey(ctx, cfg, creds, session.WorkspaceID, session.CredentialID)
 			if err != nil {
@@ -78,11 +84,30 @@ func buildAssistant(cfg config.Config, store *postgres.Store, access *applicatio
 		if err != nil {
 			return nil, err
 		}
+		bases, err := postgres.NewKnowledgeRepository(store).ListBases(ctx, ws)
+		if err != nil {
+			return nil, err
+		}
+		files, err := postgres.NewFileRepository(store).List(ctx, ws)
+		if err != nil {
+			return nil, err
+		}
 		out := append([]automation.ToolDescriptor{}, catalog...)
 		for i := range out {
 			out[i].Inputs = append([]automation.Field{}, out[i].Inputs...)
 			for j := range out[i].Inputs {
 				field := &out[i].Inputs[j]
+				field.Options = append([]automation.Option{}, field.Options...)
+				switch strings.TrimPrefix(field.Name, "config.") {
+				case "base_id", "knowledge_base_id":
+					for _, base := range bases {
+						field.Options = append(field.Options, automation.Option{Label: base.Name, Value: base.ID.String()})
+					}
+				case "file_id":
+					for _, file := range files {
+						field.Options = append(field.Options, automation.Option{Label: file.Name, Value: file.ID.String()})
+					}
+				}
 				if field.Name != "config.credential_id" {
 					continue
 				}

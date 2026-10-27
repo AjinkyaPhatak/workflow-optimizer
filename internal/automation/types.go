@@ -81,6 +81,12 @@ type Plan struct {
 	Questions     []Question `json:"questions"`
 }
 type Field struct {
+	Label       string   `json:"label,omitempty"`
+	Default     any      `json:"default,omitempty"`
+	Min         *float64 `json:"min,omitempty"`
+	Max         *float64 `json:"max,omitempty"`
+	Multiline   bool     `json:"multiline,omitempty"`
+	AllowCustom bool     `json:"allow_custom,omitempty"`
 	Name        string   `json:"name"`
 	Type        string   `json:"type"`
 	Description string   `json:"description"`
@@ -88,15 +94,18 @@ type Field struct {
 	Options     []Option `json:"options,omitempty"`
 }
 type ToolDescriptor struct {
-	InputSchema  map[string]any `json:"input_schema"`
-	OutputSchema map[string]any `json:"output_schema"`
-	ID           string         `json:"id"`
-	Name         string         `json:"name"`
-	Description  string         `json:"description"`
-	Inputs       []Field        `json:"inputs"`
-	Outputs      []Field        `json:"outputs"`
-	SideEffects  string         `json:"side_effects"`
-	Provider     string         `json:"provider,omitempty"`
+	Category      string         `json:"category,omitempty"`
+	Icon          string         `json:"icon,omitempty"`
+	IntegrationID string         `json:"integration_id,omitempty"`
+	InputSchema   map[string]any `json:"input_schema"`
+	OutputSchema  map[string]any `json:"output_schema"`
+	ID            string         `json:"id"`
+	Name          string         `json:"name"`
+	Description   string         `json:"description"`
+	Inputs        []Field        `json:"inputs"`
+	Outputs       []Field        `json:"outputs"`
+	SideEffects   string         `json:"side_effects"`
+	Provider      string         `json:"provider,omitempty"`
 }
 type Diagnostic struct {
 	StepID     string `json:"step_id"`

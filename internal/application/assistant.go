@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -15,12 +16,15 @@ import (
 )
 
 type AssistantService struct {
-	Access      *Access
-	Store       automation.Store
-	Backend     automation.Backend
-	Tools       []automation.ToolDescriptor
-	Planner     func(context.Context, automation.Session) (automation.Planner, error)
-	ToolOptions func(context.Context, uuid.UUID, []automation.ToolDescriptor) ([]automation.ToolDescriptor, error)
+	buildMu          sync.Mutex
+	builds           map[uuid.UUID]automation.BuildProgress
+	BuiltinTemplates []automation.WorkflowTemplate
+	Access           *Access
+	Store            automation.Store
+	Backend          automation.Backend
+	Tools            []automation.ToolDescriptor
+	Planner          func(context.Context, automation.Session) (automation.Planner, error)
+	ToolOptions      func(context.Context, uuid.UUID, []automation.ToolDescriptor) ([]automation.ToolDescriptor, error)
 }
 
 func assistantError(err error) error {
@@ -58,7 +62,12 @@ func (s *AssistantService) Get(ctx context.Context, user, id uuid.UUID) (automat
 	if session.Compilation != nil {
 		// Recheck old drafts against the current contract without writing a revision
 		// or starting any actions. Existing comparison aliases are repaired locally.
-		compiled := automation.CheckAnswered(automation.InsertConversions(session.Compilation.Plan, s.Tools), s.Tools, session.Answers)
+		tools, err := s.Catalog(ctx, user, session.WorkspaceID)
+		if err != nil {
+			return session, err
+		}
+		plan := automation.RefreshQuestionOptions(session.Compilation.Plan, tools)
+		compiled := automation.CheckAnswered(automation.InsertConversions(plan, tools), tools, session.Answers)
 		session.Compilation = &compiled
 	}
 	return session, nil
@@ -87,6 +96,17 @@ func (s *AssistantService) Message(ctx context.Context, user, id uuid.UUID, revi
 	if len(session.Messages) > 100 {
 		return session, &InvalidError{Message: "Start a new conversation to keep this workflow focused."}
 	}
+	buildToken := s.beginBuild(id, revision)
+	buildDone := false
+	defer func() {
+		if !buildDone {
+			status := "failed"
+			if ctx.Err() != nil {
+				status = "cancelled"
+			}
+			s.finishBuild(id, buildToken, status)
+		}
+	}()
 	planner, err := s.Planner(ctx, session)
 	if err != nil {
 		return session, assistantError(err)
@@ -103,12 +123,18 @@ func (s *AssistantService) Message(ctx context.Context, user, id uuid.UUID, revi
 			return session, err
 		}
 	}
-	compiler := automation.Compiler{Planner: planner, Tools: tools}
-	compiled, err := compiler.Compile(ctx, automation.PlanRequest{Messages: session.Messages, Previous: previous, Answers: session.Answers})
+	compiler := automation.Compiler{Planner: planner, Tools: tools, OnProgress: func(phase string, pass int, plan *automation.Plan) {
+		s.buildProgress(id, buildToken, phase, pass, plan)
+	}}
+	choices, err := s.WorkflowChoices(ctx, user, session.WorkspaceID)
+	if err != nil {
+		return session, err
+	}
+	compiled, err := compiler.Compile(ctx, automation.PlanRequest{Workflows: choices, Messages: session.Messages, Previous: previous, Answers: session.Answers})
 	if err != nil {
 		return session, &InvalidError{Message: err.Error()}
 	}
-	compiled = automation.CheckAnswered(compiled.Plan, s.Tools, session.Answers)
+	compiled = automation.CheckAnswered(automation.RefreshQuestionOptions(compiled.Plan, tools), tools, session.Answers)
 	session.Compilation = &compiled
 	session.Revision++
 	message := compiled.Plan.Summary
@@ -116,7 +142,16 @@ func (s *AssistantService) Message(ctx context.Context, user, id uuid.UUID, revi
 		message = "The draft needs another check before it can run. Your request and answers are saved."
 	}
 	session.Messages = append(session.Messages, automation.Message{Role: "assistant", Text: message, CreatedAt: time.Now().UTC()})
-	return session, assistantError(s.Store.SaveSession(ctx, session, revision))
+	if err := s.currentBuild(ctx, id, buildToken); err != nil {
+		return session, err
+	}
+	s.buildProgress(id, buildToken, "saving", 0, &compiled.Plan)
+	if err := s.Store.SaveSession(ctx, session, revision); err != nil {
+		return session, assistantError(err)
+	}
+	buildDone = true
+	s.finishBuild(id, buildToken, "completed")
+	return session, nil
 }
 
 // Repair preserves the user's conversation and answers; it never executes actions.
@@ -135,6 +170,18 @@ func (s *AssistantService) Repair(ctx context.Context, user, id uuid.UUID, revis
 	if session.Compilation == nil {
 		return session, &InvalidError{Message: "Describe a workflow first."}
 	}
+	buildToken := s.beginBuild(id, revision)
+	buildDone := false
+	defer func() {
+		if !buildDone {
+			status := "failed"
+			if ctx.Err() != nil {
+				status = "cancelled"
+			}
+			s.finishBuild(id, buildToken, status)
+		}
+	}()
+	s.buildProgress(id, buildToken, "checking", 1, &session.Compilation.Plan)
 	tools := s.Tools
 	if s.ToolOptions != nil {
 		tools, err = s.ToolOptions(ctx, session.WorkspaceID, tools)
@@ -148,8 +195,14 @@ func (s *AssistantService) Repair(ctx context.Context, user, id uuid.UUID, revis
 		if err != nil {
 			return session, assistantError(err)
 		}
-		compiler := automation.Compiler{Planner: planner, Tools: tools}
-		compiled, err = compiler.Compile(ctx, automation.PlanRequest{Repair: true, Messages: session.Messages, Previous: &compiled.Plan, Answers: session.Answers, Diagnostics: compiled.Diagnostics})
+		compiler := automation.Compiler{Planner: planner, Tools: tools, OnProgress: func(phase string, pass int, plan *automation.Plan) {
+			s.buildProgress(id, buildToken, phase, pass, plan)
+		}}
+		choices, err := s.WorkflowChoices(ctx, user, session.WorkspaceID)
+		if err != nil {
+			return session, err
+		}
+		compiled, err = compiler.Compile(ctx, automation.PlanRequest{Workflows: choices, Repair: true, Messages: session.Messages, Previous: &compiled.Plan, Answers: session.Answers, Diagnostics: compiled.Diagnostics})
 		if err != nil {
 			return session, &InvalidError{Message: "I couldn’t finish the repair. Your draft and answers are saved; try again or describe the change you want."}
 		}
@@ -171,7 +224,16 @@ func (s *AssistantService) Repair(ctx context.Context, user, id uuid.UUID, revis
 		message = "The workflow is checked. I need the details in the questions below before it can run."
 	}
 	session.Messages = append(session.Messages, automation.Message{Role: "assistant", Text: message, CreatedAt: time.Now().UTC()})
-	return session, assistantError(s.Store.SaveSession(ctx, session, revision))
+	if err := s.currentBuild(ctx, id, buildToken); err != nil {
+		return session, err
+	}
+	s.buildProgress(id, buildToken, "saving", 0, &compiled.Plan)
+	if err := s.Store.SaveSession(ctx, session, revision); err != nil {
+		return session, assistantError(err)
+	}
+	buildDone = true
+	s.finishBuild(id, buildToken, "completed")
+	return session, nil
 }
 func (s *AssistantService) Edit(ctx context.Context, user, id uuid.UUID, revision int, plan automation.Plan) (automation.Session, error) {
 	session, err := s.Get(ctx, user, id)
@@ -184,7 +246,11 @@ func (s *AssistantService) Edit(ctx context.Context, user, id uuid.UUID, revisio
 	if session.Revision != revision {
 		return session, assistantError(automation.ErrConflict)
 	}
-	compiled := automation.CheckAnswered(plan, s.Tools, session.Answers)
+	tools, err := s.Catalog(ctx, user, session.WorkspaceID)
+	if err != nil {
+		return session, err
+	}
+	compiled := automation.CheckAnswered(automation.InsertConversions(automation.RefreshQuestionOptions(plan, tools), tools), tools, session.Answers)
 	session.Compilation = &compiled
 	session.Revision++
 	return session, assistantError(s.Store.SaveSession(ctx, session, revision))
@@ -221,7 +287,11 @@ func (s *AssistantService) AnswerDraft(ctx context.Context, user, id uuid.UUID, 
 		session.Answers = map[string]any{}
 	}
 	session.Answers[questionID] = value
-	compiled := automation.CheckAnswered(session.Compilation.Plan, s.Tools, session.Answers)
+	tools, err := s.Catalog(ctx, user, session.WorkspaceID)
+	if err != nil {
+		return session, err
+	}
+	compiled := automation.CheckAnswered(session.Compilation.Plan, tools, session.Answers)
 	session.Compilation = &compiled
 	session.Revision++
 	return session, assistantError(s.Store.SaveSession(ctx, session, revision))
@@ -240,7 +310,7 @@ func (s *AssistantService) Start(ctx context.Context, user, id uuid.UUID, revisi
 	if session.Compilation == nil {
 		return automation.Run{}, &InvalidError{Message: "Describe a workflow first."}
 	}
-	check := automation.CheckAnswered(session.Compilation.Plan, s.Tools, session.Answers)
+	check := *session.Compilation // Get already checked the current workspace catalog.
 	if !check.Ready {
 		return automation.Run{}, &InvalidError{Message: "Answer the remaining questions and fix the highlighted steps first."}
 	}

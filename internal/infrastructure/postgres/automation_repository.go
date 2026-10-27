@@ -29,8 +29,22 @@ func (s *AutomationRepository) CreateSession(ctx context.Context, v automation.S
 	if err != nil {
 		return err
 	}
-	_, err = s.pool.Exec(ctx, `INSERT INTO assistant_sessions(id,workspace_id,user_id,revision,body) VALUES($1,$2,$3,$4,$5)`, v.ID, v.WorkspaceID, v.UserID, v.Revision, b)
-	return err
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	if _, err = tx.Exec(ctx, `INSERT INTO assistant_sessions(id,workspace_id,user_id,revision,body) VALUES($1,$2,$3,$4,$5)`, v.ID, v.WorkspaceID, v.UserID, v.Revision, b); err != nil {
+		return err
+	}
+	name := "New workflow"
+	if v.Compilation != nil && v.Compilation.Plan.Name != "" {
+		name = v.Compilation.Plan.Name
+	}
+	if _, err = tx.Exec(ctx, `INSERT INTO automation_workflows(id,workspace_id,name) VALUES($1,$2,$3)`, v.ID, v.WorkspaceID, name); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 func (s *AutomationRepository) Session(ctx context.Context, id uuid.UUID) (automation.Session, error) {
 	var v automation.Session
@@ -48,11 +62,24 @@ func (s *AutomationRepository) SaveSession(ctx context.Context, v automation.Ses
 	if err != nil {
 		return err
 	}
-	tag, err := s.pool.Exec(ctx, `UPDATE assistant_sessions SET body=$2,revision=$3,updated_at=now() WHERE id=$1 AND revision=$4`, v.ID, b, v.Revision, expected)
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	tag, err := tx.Exec(ctx, `UPDATE assistant_sessions SET body=$2,revision=$3,updated_at=now() WHERE id=$1 AND revision=$4`, v.ID, b, v.Revision, expected)
 	if err == nil && tag.RowsAffected() == 0 {
 		return automation.ErrConflict
 	}
-	return err
+	if err != nil {
+		return err
+	}
+	if v.Compilation != nil && v.Compilation.Plan.Name != "" {
+		if _, err = tx.Exec(ctx, `UPDATE automation_workflows SET name=$2,updated_at=now() WHERE id=$1`, v.ID, v.Compilation.Plan.Name); err != nil {
+			return err
+		}
+	}
+	return tx.Commit(ctx)
 }
 func (s *AutomationRepository) ListSessions(ctx context.Context, ws uuid.UUID) ([]automation.Session, error) {
 	rows, err := s.pool.Query(ctx, `SELECT body FROM assistant_sessions WHERE workspace_id=$1 ORDER BY updated_at DESC LIMIT 50`, ws)
