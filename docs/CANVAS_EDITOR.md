@@ -102,3 +102,34 @@ removed draft/run bookmark recovery. Production Go/Next.js builds passed.
 The authorized local reset completed with a fresh private backup. Every protected
 record hash was unchanged and workflow state was empty afterward. Backup and
 verification artifacts remain under ignored `.local/`; they are never source files.
+
+## Clarification planning and interrupted responses
+
+An all-question draft is an unfinished planning scaffold. Resolving its intent
+question may create the requested analysis and outgoing-action steps; its empty
+action graph is not a repair baseline. Existing executable drafts retain the
+stricter content-repair protections. An unset scaffold budget can acquire normal
+limits, while existing mode and explicit budgets remain protected. If the person
+delegates an ordinary methodological default, choose and disclose an assumption
+instead of asking the same question again or claiming a universal standard.
+
+Planning requests share a six-minute cancellation budget, a further fifteen-second
+write allowance and a seven-minute Next.js proxy timeout. Exhaustion returns
+`504 PLANNING_TIMEOUT` before the connection closes. After a lost response, the
+browser reads the saved revision once and offers it for review; it does not repeat
+the mutation, doctor or execution. Submitted text is cleared only when its exact
+user message appears in the recovered state.
+
+The planner receives control-node input/output contracts alongside tools. Repair
+diagnostics name the exact available outputs. Proven sequential `value.bind`
+chains normalize named curly slots to runtime `$(slot)` syntax while unknown
+references and branches retain validation. The Python sandbox exposes both the
+original JSON `rows` and the pandas `df`.
+
+Pearson recovery verification: the affected saved draft was rebuilt and reread
+with 13 steps, zero questions/diagnostics, both intent answers preserved, and no
+execution submitted. Its analysis code passed synthetic strong, weak, constant
+and missing-data cases in the network-disabled Docker sandbox. Targeted Go
+integration/race checks, 204 frontend unit tests, TypeScript, lint, browser repair,
+input and interrupted-response flows, and production builds passed. Live market
+retrieval and email delivery were not exercised by this recovery.

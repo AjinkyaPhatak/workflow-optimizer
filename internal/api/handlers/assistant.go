@@ -60,9 +60,10 @@ func (h *Handlers) ImportLegacyWorkflow(w http.ResponseWriter, r *http.Request) 
 	if !h.decode(w, r, &in) {
 		return
 	}
-	_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(4 * time.Minute))
-	session, err := h.Assistant.ImportLegacy(r.Context(), user(r), in.WorkflowID, in.VersionID, in.CredentialID, h.Workflows)
-	if err != nil {
+	ctx, cancel := beginAssistantPlanning(w, r)
+	defer cancel()
+	session, err := h.Assistant.ImportLegacy(ctx, user(r), in.WorkflowID, in.VersionID, in.CredentialID, h.Workflows)
+	if err = assistantPlanningError(ctx, err); err != nil {
 		h.fail(w, r, err)
 		return
 	}
@@ -131,9 +132,10 @@ func (h *Handlers) AssistantMessage(w http.ResponseWriter, r *http.Request) {
 	if !h.decode(w, r, &in) {
 		return
 	}
-	_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(4 * time.Minute))
-	out, err := h.Assistant.Message(r.Context(), user(r), id, in.Revision, in.Text)
-	if err != nil {
+	ctx, cancel := beginAssistantPlanning(w, r)
+	defer cancel()
+	out, err := h.Assistant.Message(ctx, user(r), id, in.Revision, in.Text)
+	if err = assistantPlanningError(ctx, err); err != nil {
 		h.fail(w, r, err)
 		return
 	}
@@ -176,9 +178,10 @@ func (h *Handlers) RepairAssistantPlan(w http.ResponseWriter, r *http.Request) {
 	if !h.decode(w, r, &in) {
 		return
 	}
-	_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(4 * time.Minute))
-	out, err := h.Assistant.Repair(r.Context(), user(r), id, in.Revision)
-	if err != nil {
+	ctx, cancel := beginAssistantPlanning(w, r)
+	defer cancel()
+	out, err := h.Assistant.Repair(ctx, user(r), id, in.Revision)
+	if err = assistantPlanningError(ctx, err); err != nil {
 		h.fail(w, r, err)
 		return
 	}
@@ -201,9 +204,10 @@ func (h *Handlers) AnswerAssistantDraft(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	// Intent answers can invoke the planner, just like a new message or repair.
-	_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(4 * time.Minute))
-	out, err := h.Assistant.AnswerDraft(r.Context(), user(r), id, in.Revision, in.QuestionID, in.Value)
-	if err != nil {
+	ctx, cancel := beginAssistantPlanning(w, r)
+	defer cancel()
+	out, err := h.Assistant.AnswerDraft(ctx, user(r), id, in.Revision, in.QuestionID, in.Value)
+	if err = assistantPlanningError(ctx, err); err != nil {
 		h.fail(w, r, err)
 		return
 	}

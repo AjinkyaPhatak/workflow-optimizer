@@ -81,7 +81,7 @@ these entire files without reviewing the behaviors below.
   Wait for actual microphone/SDK readiness, prevent duplicate starts, retain the
   current conversation in callbacks and distinguish permission/provider failures.
   Typed input remains available after voice failure. Keep spoken replies optional.
-- Keep `next.config.ts`'s five-minute proxy timeout for planning requests and
+- Keep `next.config.ts`'s seven-minute proxy timeout for planning requests and
   `microphone=(self)` permission policy alongside the existing security headers.
 - Render AI prose through `AiMarkdown`, including its readable fallback. Keep
   technical JSON literal. Treat the backend plan as authoritative; the canvas is
@@ -115,3 +115,22 @@ do not establish physical microphone, live WhatsApp pairing or CUDA coverage.
 
 See [OVERHAUL.md](OVERHAUL.md) for implementation details and the verification
 record, including the recovered local-data incident and remaining live checks.
+
+## Upstream branch audit (2026-10-27)
+
+The committed backend checkpoint was pushed to the original repository as
+`backend-overhaul` at `0c6e875`; `frontend-overhaul` was at `4b4c446` and `main`
+at `8f782c7`. Backend/frontend shared ancestor was `290b95c`. At that checkpoint,
+backend had 14 unique commits and frontend had 13. Later Pearson planning fixes
+are a separate follow-up so they can be applied after integration.
+
+A `git merge-tree` simulation confirmed six content conflicts: the Files,
+Knowledge, login and root routes, the Knowledge settings component, and TopBar.
+Global styles changed on both branches but merged textually in the simulation.
+No integration branch or working-tree merge was performed here.
+
+The frontend branch combines files and retrieval at `/library`, while this
+backend checkpoint uses `/knowledge` and `/knowledge/files`. Reconcile navigation
+and retain URL ingestion alongside the frontend's exported Library building
+blocks. Preserve the assistant API/state contracts, revision checks, push-to-talk,
+contextual questions, and the planning timeout ordering above.

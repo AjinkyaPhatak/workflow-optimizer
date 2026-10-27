@@ -72,6 +72,30 @@ test("home keeps the canvas and bottom composer available when conversation is h
   await expect(composer).toHaveValue("Keep this request while I inspect the canvas.");
 });
 
+test("a lost planning response loads committed state without retrying or running it", async ({ page, request }) => {
+  const { headers, workspace } = await signIn(page, request);
+  const document = await createNumberWorkflow(request, headers, workspace);
+  await page.goto("/workflows/" + document.workflow.id + "/editor");
+  await page.getByLabel("Run when ready").check();
+  let messages = 0;
+  await page.route("**/api/v1/assistant/sessions/" + document.session.id + "/messages", async route => {
+    messages++;
+    // The actual backend commits the new revision; only its delivery is lost.
+    const result = await route.fetch();
+    expect(result.status()).toBe(200);
+    await route.fulfill({ status: 503, json: { error: { code: "SERVICE_UNAVAILABLE", message: "Response interrupted" } } });
+  });
+  await page.getByLabel("What would you like to do?").fill("Create a fresh report using the supplied results.");
+  await page.getByRole("button", { name: /Make it happen/ }).click();
+  await expect(page.getByLabel("Workflow name")).toHaveValue("Nifty 50 daily report");
+  await expect(page.getByRole("alert").filter({ hasText: "The response was interrupted" })).toContainText("latest saved workflow has been loaded");
+  await expect(page.getByLabel("What would you like to do?")).toHaveValue("");
+  await expect(page.getByRole("button", { name: "Run workflow", exact: true })).toBeEnabled();
+  expect(messages).toBe(1);
+  const runs = await (await request.get("/api/v1/automation-runs?workspace_id=" + workspace, { headers })).json() as { items: { session_id: string }[] };
+  expect(runs.items.filter(run => run.session_id === document.session.id)).toHaveLength(0);
+});
+
 test("canvas edits autosave, layout stays separate, and published versions and templates are reusable", async ({ page, request }) => {
   const { headers, workspace } = await signIn(page, request);
   const runsURL = "/api/v1/automation-runs?workspace_id=" + workspace;

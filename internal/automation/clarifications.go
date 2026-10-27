@@ -43,10 +43,40 @@ func normalizeReferences(plan Plan, tools []ToolDescriptor) Plan {
 	}
 	plan.Questions = keep
 	used := map[string]bool{}
+	references := map[string]int{}
+	countReference := func(b Binding) {
+		if q, ok := technical[b.Ref]; ok && b.Source == "answer" {
+			b.Source = "literal"
+			raw, _ := json.Marshal(q.Example)
+			b.ValueJSON = string(raw)
+		}
+		if b.Source == "step" {
+			id, _, _ := strings.Cut(b.Ref, ".")
+			references[id]++
+		}
+		if b.Source == "literal" || b.Source == "template" {
+			var text string
+			if json.Unmarshal([]byte(b.ValueJSON), &text) != nil {
+				return
+			}
+			for _, match := range internalReference.FindAllStringSubmatch(text, -1) {
+				if id, _, ok := strings.Cut(strings.TrimSpace(match[1]), "."); ok {
+					references[id]++
+				}
+			}
+		}
+	}
 	var collect func([]Step)
 	collect = func(steps []Step) {
 		for _, s := range steps {
 			used[s.ID] = true
+			for _, b := range s.Inputs {
+				countReference(b)
+			}
+			if s.Condition != nil {
+				countReference(s.Condition.Left)
+				countReference(s.Condition.Right)
+			}
 			collect(s.Children)
 			collect(s.Otherwise)
 		}
@@ -81,7 +111,9 @@ func normalizeReferences(plan Plan, tools []ToolDescriptor) Plan {
 	var walk func([]Step, map[string]ToolDescriptor) []Step
 	walk = func(steps []Step, available map[string]ToolDescriptor) []Step {
 		out := []Step{}
-		for _, s := range steps {
+		slots := chainedNamedSlots(steps, references)
+		for index, s := range steps {
+			normalizeNamedSlots(&s, slots[index])
 			for i, b := range s.Inputs {
 				if q, ok := technical[b.Ref]; ok && b.Source == "answer" {
 					b.Source = "literal"
@@ -202,6 +234,91 @@ func normalizeReferences(plan Plan, tools []ToolDescriptor) Plan {
 	return plan
 }
 
+func literalSlotName(s Step) string {
+	if s.Kind != "tool" || s.Tool != "value.bind" {
+		return ""
+	}
+	name := ""
+	for _, b := range s.Inputs {
+		if b.Name == "name" && b.Source == "literal" {
+			if json.Unmarshal([]byte(b.ValueJSON), &name) != nil {
+				return ""
+			}
+			break
+		}
+	}
+	return name
+}
+
+// Later binds may fill other slots carried through earlier results. Propagate
+// their names backwards only along a single-consumer result/template chain in
+// this sequential scope. A branch or another consumer cannot establish that the
+// slot will be filled before the value is used. Dotted tokens remain workflow
+// references unless explicitly named by the current bind itself.
+func chainedNamedSlots(steps []Step, references map[string]int) map[int]map[string]bool {
+	byID := map[string]int{}
+	for i, s := range steps {
+		byID[s.ID] = i
+	}
+	slots := map[int]map[string]bool{}
+	for i := len(steps) - 1; i >= 0; i-- {
+		s := steps[i]
+		name := literalSlotName(s)
+		if name == "" {
+			continue
+		}
+		if slots[i] == nil {
+			slots[i] = map[string]bool{}
+		}
+		slots[i][name] = true
+		for _, b := range s.Inputs {
+			if b.Name != "template" || b.Source != "step" {
+				continue
+			}
+			id, port, _ := strings.Cut(b.Ref, ".")
+			previous, ok := byID[id]
+			if !ok || previous >= i || port != "result" || references[id] != 1 || literalSlotName(steps[previous]) == "" {
+				continue
+			}
+			if slots[previous] == nil {
+				slots[previous] = map[string]bool{}
+			}
+			for slot := range slots[i] {
+				if !strings.Contains(slot, ".") {
+					slots[previous][slot] = true
+				}
+			}
+		}
+	}
+	return slots
+}
+
+// Convert proven interpolation slots to runtime syntax before repairing actual
+// workflow references. Value inputs and all unrelated tokens remain checked.
+func normalizeNamedSlots(s *Step, slots map[string]bool) {
+	if len(slots) == 0 {
+		return
+	}
+	for i, b := range s.Inputs {
+		if b.Name != "template" || b.Source != "literal" {
+			continue
+		}
+		var text string
+		if json.Unmarshal([]byte(b.ValueJSON), &text) != nil {
+			continue
+		}
+		text = internalReference.ReplaceAllStringFunc(text, func(token string) string {
+			name := strings.TrimSpace(internalReference.FindStringSubmatch(token)[1])
+			if slots[name] {
+				return "$(" + name + ")"
+			}
+			return token
+		})
+		raw, _ := json.Marshal(text)
+		s.Inputs[i].ValueJSON = string(raw)
+	}
+}
+
 func fieldLabel(name string, t ToolDescriptor) string {
 	for _, f := range t.Inputs {
 		if f.Name == name && f.Label != "" {
@@ -295,6 +412,24 @@ func decorateQuestions(plan *Plan, catalog map[string]ToolDescriptor) {
 	}
 }
 
+// IsPlanningClarification identifies an unfinished planning scaffold. A question
+// about an existing tool's content remains a repair of that executable draft.
+func IsPlanningClarification(plan Plan, question Question) bool {
+	if question.Purpose != "intent" || len(plan.Steps) == 0 {
+		return false
+	}
+	found := false
+	for _, s := range plan.Steps {
+		if s.Kind != "ask" || len(s.Children) != 0 || len(s.Otherwise) != 0 || s.Condition != nil || len(s.Inputs) != 0 || s.Tool != "" {
+			return false
+		}
+		if s.ID == question.StepID && s.Question != nil && s.Question.ID == question.ID {
+			found = true
+		}
+	}
+	return found
+}
+
 // checkIntentReplan keeps a clarification from becoming sendable copy, and
 // preserves the user's existing decision rules and known destinations.
 func checkIntentReplan(out *Compilation, req PlanRequest, tools []ToolDescriptor) {
@@ -337,7 +472,11 @@ func checkIntentReplan(out *Compilation, req PlanRequest, tools []ToolDescriptor
 	if req.Previous == nil {
 		return
 	}
-	if req.Previous.Mode != out.Plan.Mode || req.Previous.Budget != out.Plan.Budget {
+	// An all-ask scaffold can carry an unset budget. Initial planning may fill
+	// ordinary limits; an existing executable draft keeps its exact budget.
+	budgetChanged := req.Previous.Budget != out.Plan.Budget
+	initialDefaults := IsPlanningClarification(*req.Previous, *q) && req.Previous.Budget == (Budget{}) && out.Plan.Budget.Valid()
+	if req.Previous.Mode != out.Plan.Mode || budgetChanged && !initialDefaults {
 		fail("", "INTENT_BUDGET", "Preserve the existing execution mode and budgets when applying a content clarification.")
 	}
 	external := map[string]bool{}
