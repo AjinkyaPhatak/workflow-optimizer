@@ -87,7 +87,7 @@ export function Showcase() {
         <div className="lp-show-sticky">
           <div className="lp-show-panel">
             {SCENARIOS.map((sc, i) => (
-              <div key={sc.tab} className={`lp-show-bg${i === active ? " is-on" : ""}`} style={{ background: sc.gradient }} aria-hidden />
+              <div key={sc.tab} className={`lp-show-bg lp-scene lp-scene-${i}${i === active ? " is-on" : ""}`} aria-hidden><span className="lp-scene-a" /><span className="lp-scene-b" /></div>
             ))}
             <div className="lp-show-grain" aria-hidden />
             <div className="lp-result" key={active}>

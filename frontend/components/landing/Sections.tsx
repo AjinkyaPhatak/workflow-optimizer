@@ -30,7 +30,7 @@ export function Personas() {
           </div>
         ))}
         <article className="lp-persona-card">
-          <div className="lp-persona-art" style={{ background: p.gradient }}>
+          <div className={`lp-persona-art motif ${p.motif}`}>
             <span className="lp-persona-side">WORKFLOW OPTIMIZER</span>
             <span className="lp-persona-logo"><AppLogo app={p.app} size={64} mono="#fff" /></span>
             <span className="lp-persona-rings" aria-hidden />
@@ -81,7 +81,7 @@ export function Steps() {
             <ul>
               {s.points.map((x) => <li key={x}><span aria-hidden>✓</span>{x}</li>)}
             </ul>
-            <Link className={`lp-btn ${i === 2 ? "lp-btn-gradient" : "lp-btn-primary"}`} href={s.href}>{s.cta}</Link>
+            <Link className={`lp-btn ${i === 2 ? "lp-btn-dark" : "lp-btn-primary"}`} href={s.href}>{s.cta}</Link>
           </article>
         ))}
       </div>

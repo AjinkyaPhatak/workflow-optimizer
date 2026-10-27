@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { BrandMark } from "@/components/ui/BrandMark";
+import { SECTIONS } from "@/components/ui/TopBar";
 import { useSession } from "@/lib/auth/session";
 import { Apps } from "./Apps";
 import { Hero } from "./Hero";
@@ -16,9 +17,10 @@ function Nav({ signedIn }: { signedIn: boolean }) {
       <nav className="lp-nav" aria-label="Main">
         <Link href="/" className="lp-logo"><BrandMark size={22} /> Workflow Optimizer</Link>
         <div className={`lp-nav-links${open ? " is-open" : ""}`}>
-          <a href="#how" onClick={() => setOpen(false)}>How it works</a>
-          <Link href="/templates">Templates</Link>
-          <Link href="/workflows">Workflows</Link>
+          {SECTIONS.map((s) => (
+            <Link key={s.href} href={s.href} className={s.href === "/" ? "is-on" : undefined} aria-current={s.href === "/" ? "page" : undefined}
+              onClick={() => setOpen(false)}>{s.label}</Link>
+          ))}
           <a href="#faq" onClick={() => setOpen(false)}>FAQ</a>
         </div>
         <span className="lp-spacer" />
@@ -26,7 +28,7 @@ function Nav({ signedIn }: { signedIn: boolean }) {
           <Link className="lp-btn lp-btn-primary lp-btn-sm" href="/workflows">Open app</Link>
         ) : (
           <>
-            <Link className="lp-btn lp-btn-lime lp-btn-sm" href="/login">Sign in</Link>
+            <Link className="lp-btn lp-btn-sun lp-btn-sm" href="/login">Sign in</Link>
             <Link className="lp-btn lp-btn-primary lp-btn-sm lp-hide-sm" href="/login">Start for free</Link>
           </>
         )}
@@ -34,10 +36,6 @@ function Nav({ signedIn }: { signedIn: boolean }) {
           <span /><span />
         </button>
       </nav>
-      <div className="lp-announce">
-        <span>New: <b>26 ready-made templates</b> for email, meetings and reports</span>
-        <Link className="lp-chip lp-chip-dark" href="/templates">Browse templates</Link>
-      </div>
     </header>
   );
 }

@@ -52,28 +52,27 @@ export type ArcCard =
   | { kind: "stat"; big: string; label: string; tone: string };
 
 export const ARC_CARDS: ArcCard[] = [
-  { kind: "app", app: "gmail", label: "Summarize my unread email", tone: "t-rose" },
+  { kind: "app", app: "gmail", label: "Summarize my unread email", tone: "t-peach" },
   { kind: "note", title: "Inbox digest", lines: ["3 emails need a reply", "Invoice from Acme is due Friday", "Team lunch moved to 1 pm"], tone: "t-paper" },
   { kind: "flow", steps: ["calendar", "gemini", "docs"], label: "Brief me on today's meetings", tone: "t-ink" },
-  { kind: "app", app: "sheets", label: "Weekly report from a sheet", tone: "t-lime" },
-  { kind: "stat", big: "26", label: "ready-made templates", tone: "t-violet" },
-  { kind: "app", app: "meet", label: "Schedule a meeting with a Meet link", tone: "t-sky" },
+  { kind: "app", app: "sheets", label: "Weekly report from a sheet", tone: "t-sun" },
+  { kind: "stat", big: "26", label: "ready-made templates", tone: "t-teal" },
+  { kind: "app", app: "meet", label: "Schedule a meeting with a Meet link", tone: "t-charcoal" },
   { kind: "note", title: "Draft reply", lines: ["Hi Sam,", "Thanks for the update. Thursday at 3 works for me.", "Best, Alex"], tone: "t-paper" },
   { kind: "flow", steps: ["forms", "gemini", "gmail"], label: "Thank people who fill in a form", tone: "t-ink" },
-  { kind: "app", app: "docs", label: "Prepare a company brief", tone: "t-amber" },
-  { kind: "stat", big: "0", label: "lines of code", tone: "t-lime" },
-  { kind: "app", app: "gemini", label: "Free AI with Gemini", tone: "t-violet" },
+  { kind: "app", app: "docs", label: "Prepare a company brief", tone: "t-sandy" },
+  { kind: "stat", big: "0", label: "lines of code", tone: "t-sun" },
+  { kind: "app", app: "gemini", label: "Free AI with Gemini", tone: "t-teal" },
   { kind: "note", title: "Meeting notes", lines: ["Decisions: ship on Monday", "Action: Priya sends the deck", "Open: pricing page copy"], tone: "t-paper" },
   { kind: "flow", steps: ["gmail", "gemini", "sheets"], label: "Log receipts from email in a sheet", tone: "t-ink" },
-  { kind: "app", app: "forms", label: "Copy form responses to a sheet", tone: "t-rose" },
-  { kind: "app", app: "calendar", label: "Today's agenda", tone: "t-sky" },
+  { kind: "app", app: "forms", label: "Copy form responses to a sheet", tone: "t-peach" },
+  { kind: "app", app: "calendar", label: "Today's agenda", tone: "t-charcoal" },
 ];
 
 /** The sticky showcase: one scenario per tab. */
 export interface Scenario {
   tab: string;
   prompt: string;
-  gradient: string;
   result: { title: string; lines: string[] };
   nodes: { app: AppKey | "input" | "output" | "mic"; label: string; tag: string; x: number; y: number }[];
   wires: [number, number][];
@@ -83,7 +82,6 @@ export const SCENARIOS: Scenario[] = [
   {
     tab: "Email",
     prompt: "Summarize my unread email and tell me what needs a reply",
-    gradient: "linear-gradient(135deg, #6d5bff 0%, #c64bff 45%, #ff7a59 100%)",
     result: { title: "Inbox digest", lines: ["3 emails need a reply today", "Acme invoice due Friday", "Design review moved to 4 pm"] },
     nodes: [
       { app: "gmail", label: "Search unread", tag: "Gmail", x: 6, y: 18 },
@@ -95,7 +93,6 @@ export const SCENARIOS: Scenario[] = [
   {
     tab: "Meetings",
     prompt: "Brief me on today's meetings before my first call",
-    gradient: "linear-gradient(135deg, #1fb6ff 0%, #4f6bff 50%, #8a5cff 100%)",
     result: { title: "Today, 3 meetings", lines: ["10:00 Design review, bring the mockups", "13:00 Lunch with Sam", "16:30 Weekly sync, 2 open items"] },
     nodes: [
       { app: "calendar", label: "Today's events", tag: "Calendar", x: 6, y: 52 },
@@ -107,7 +104,6 @@ export const SCENARIOS: Scenario[] = [
   {
     tab: "Reports",
     prompt: "Turn my sales sheet into a weekly report",
-    gradient: "linear-gradient(135deg, #00c389 0%, #21b8a6 45%, #d4ff3a 100%)",
     result: { title: "Week 43 report", lines: ["Revenue up 12% on last week", "Top product: Starter plan", "2 deals waiting on a reply"] },
     nodes: [
       { app: "sheets", label: "Read rows", tag: "Sheets", x: 6, y: 22 },
@@ -119,7 +115,6 @@ export const SCENARIOS: Scenario[] = [
   {
     tab: "Sales",
     prompt: "When someone fills in my form, thank them and log them in a sheet",
-    gradient: "linear-gradient(135deg, #ff4f8b 0%, #ff7a59 50%, #ffc542 100%)",
     result: { title: "Thank-you draft", lines: ["Hi Jordan,", "Thanks for signing up for the workshop!", "We'll send details on Monday."] },
     nodes: [
       { app: "forms", label: "New responses", tag: "Forms", x: 6, y: 40 },
@@ -132,7 +127,6 @@ export const SCENARIOS: Scenario[] = [
   {
     tab: "Content",
     prompt: "Turn my meeting recording into notes in a Google Doc",
-    gradient: "linear-gradient(135deg, #8a5cff 0%, #ff4fd8 50%, #ff9a3c 100%)",
     result: { title: "Meeting notes", lines: ["Summary: launch moves to May", "Decision: keep the free plan", "Action: Priya updates the site"] },
     nodes: [
       { app: "mic", label: "Recording", tag: "Upload", x: 6, y: 20 },
@@ -149,7 +143,7 @@ export interface Persona {
   tab: string;
   title: string;
   text: string;
-  gradient: string;
+  motif: string;
   app: AppKey;
   picks: { name: string; app: AppKey }[];
 }
@@ -158,7 +152,7 @@ export const PERSONAS: Persona[] = [
   {
     tab: "Founders", title: "Founders",
     text: "Start the day knowing what matters. Your inbox, calendar and numbers, summed up before your first coffee.",
-    gradient: "linear-gradient(160deg, #6d5bff, #c64bff 60%, #ff7a59)", app: "gmail",
+    motif: "motif-teal", app: "gmail",
     picks: [
       { name: "Summarize my unread email", app: "gmail" }, { name: "Brief me on today's meetings", app: "calendar" },
       { name: "Weekly report from a sheet", app: "sheets" }, { name: "Prepare a company brief", app: "docs" },
@@ -167,7 +161,7 @@ export const PERSONAS: Persona[] = [
   {
     tab: "Sales", title: "Sales teams",
     text: "Follow up faster. Every form response logged, every lead thanked, every meeting booked with a link.",
-    gradient: "linear-gradient(160deg, #ff4f8b, #ff7a59 60%, #ffc542)", app: "forms",
+    motif: "motif-peach", app: "forms",
     picks: [
       { name: "Copy form responses to a sheet", app: "sheets" }, { name: "Thank people who fill in a form", app: "forms" },
       { name: "Schedule a meeting with a Meet link", app: "meet" }, { name: "Draft a reply to my latest email", app: "gmail" },
@@ -176,7 +170,7 @@ export const PERSONAS: Persona[] = [
   {
     tab: "Operations", title: "Operations",
     text: "Take the copy-paste out of the week. Receipts, documents and recordings turned into tidy records.",
-    gradient: "linear-gradient(160deg, #00c389, #21b8a6 60%, #d4ff3a)", app: "sheets",
+    motif: "motif-charcoal", app: "sheets",
     picks: [
       { name: "Log receipts from email in a sheet", app: "sheets" }, { name: "Summarize a document", app: "docs" },
       { name: "Meeting notes from a recording", app: "meet" }, { name: "Ask questions about a Google Doc", app: "docs" },
@@ -185,7 +179,7 @@ export const PERSONAS: Persona[] = [
   {
     tab: "Creators", title: "Creators",
     text: "Go from idea to draft in one click. Blog posts, social posts and rewrites in the tone you want.",
-    gradient: "linear-gradient(160deg, #8a5cff, #ff4fd8 60%, #ff9a3c)", app: "gemini",
+    motif: "motif-sun", app: "gemini",
     picks: [
       { name: "Write a blog post", app: "gemini" }, { name: "Social media posts from an idea", app: "gemini" },
       { name: "Rewrite text in a different tone", app: "gemini" }, { name: "Translate text", app: "gemini" },

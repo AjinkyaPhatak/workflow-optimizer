@@ -1,9 +1,13 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { AppLogo } from "./Brand";
 import { ARC_CARDS, HERO_WORDS, type ArcCard } from "./data";
+
+/** Flat colours the headline's word takes in turn. */
+const WORD_COLORS = ["#2a9d8f", "#e76f51", "#264653", "#d9822b"];
+const wordColor = (i: number) => WORD_COLORS[Math.max(0, i) % WORD_COLORS.length];
 
 const reducedMotion = () => typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -33,14 +37,11 @@ function PixelWord({ words }: { words: string[] }) {
       if ("letterSpacing" in target) target.letterSpacing = spacing;
     };
 
-    const paint = (target: CanvasRenderingContext2D, word: string, w: number) => {
-      const g = target.createLinearGradient(0, 0, w, 0);
-      g.addColorStop(0, "#6d5bff");
-      g.addColorStop(0.55, "#c64bff");
-      g.addColorStop(1, "#ff7a59");
+    // Each word in its own flat theme colour.
+    const paint = (target: CanvasRenderingContext2D, word: string) => {
       setFont(target);
       target.textBaseline = "alphabetic";
-      target.fillStyle = g;
+      target.fillStyle = wordColor(words.indexOf(word));
       target.fillText(word, 0, height * 0.78);
     };
 
@@ -50,7 +51,7 @@ function PixelWord({ words }: { words: string[] }) {
       c.height = Math.ceil(height * dpr);
       const x = c.getContext("2d")!;
       x.scale(dpr, dpr);
-      paint(x, word, w);
+      paint(x, word);
       return c;
     };
 
@@ -69,7 +70,7 @@ function PixelWord({ words }: { words: string[] }) {
       cv.style.height = `${height}px`;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, max, height);
-      paint(ctx, words[current], max);
+      paint(ctx, words[current]);
       setWidth(widths[current]);
     };
 
@@ -104,7 +105,7 @@ function PixelWord({ words }: { words: string[] }) {
           } else if (t > p) {
             ctx.drawImage(a, sx * dpr, sy * dpr, block * dpr, block * dpr, sx, sy, block, block);
           } else if (inkA[i] || inkB[i]) {
-            ctx.fillStyle = (q + r) % 3 === 0 ? "#d4ff3a" : "#14131a";
+            ctx.fillStyle = (q + r) % 3 === 0 ? "#e9c46a" : "#0e1316";
             ctx.fillRect(sx, sy, block, block);
           }
         }
@@ -153,6 +154,9 @@ function PixelWord({ words }: { words: string[] }) {
     <span ref={wrap} className="lp-word" style={width ? { width } : undefined}>
       <span className="lp-sr">{words[index]}</span>
       <canvas ref={canvas} aria-hidden />
+      <svg key={index} className="lp-squiggle" viewBox="0 0 200 16" preserveAspectRatio="none" aria-hidden style={{ color: wordColor(index) }}>
+        <path d="M2 10 C 20 3, 34 15, 52 9 S 86 3, 104 9 S 138 15, 156 8 S 186 4, 198 9" />
+      </svg>
     </span>
   );
 }
