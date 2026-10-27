@@ -33,12 +33,18 @@ const GLYPHS: Record<string, string> = {
   braces: "M9 4H8a2 2 0 00-2 2v3l-2 3 2 3v3a2 2 0 002 2h1M15 4h1a2 2 0 012 2v3l2 3-2 3v3a2 2 0 01-2 2h-1",
   globe: "M12 3a9 9 0 100 18 9 9 0 000-18zM3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18",
   plug: "M9 3v5M15 3v5M7 8h10v4a5 5 0 01-10 0zM12 17v4",
+  loop: "M5 8h12l-3-3M19 16H7l3 3M19 8v4M5 16v-4",
+  clock: "M12 3a9 9 0 100 18 9 9 0 000-18zM12 7v5l3 2",
+  ask: "M8 8a4 4 0 118 0c0 3-4 3-4 6M12 18v1",
 };
 
 const GLYPH_BY_TYPE: Record<string, string> = {
   input: "input", output: "output", text: "text", llm: "ai", prompt: "ai", structured_output: "ai",
   knowledge_search: "knowledge", knowledge_add: "knowledge", extract_text: "file", transcribe_audio: "mic",
   condition: "branch", switch: "branch", merge: "merge", transform: "braces", json: "braces", http: "globe",
+  branch: "branch", map: "loop", repeat: "loop", parallel: "merge", ask: "ask", wait: "clock", delay: "clock", workflow: "braces",
+  "ai.write": "ai", "table.extract": "ai", "decision.classify": "branch", "web.search": "globe", "web.read": "globe",
+  "analysis.python": "braces", "analysis.describe": "braces", "table.csv": "file", "artifact.save": "file", "artifact.text": "file",
 };
 
 /** The brand of an integration ID, if it has a logo. */

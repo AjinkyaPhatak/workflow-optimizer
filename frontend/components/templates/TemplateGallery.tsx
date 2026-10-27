@@ -32,6 +32,7 @@ const CATEGORY_LOOK: Record<string, { glyph: string; tone: string }> = {
   Writing: { glyph: "M4 20l4-1 11-11-3-3L5 16zM14 6l3 3", tone: "tone-sun" },
   "Sales & customers": { glyph: "M9 11a3 3 0 100-6 3 3 0 000 6zM3 20c0-3 3-5 6-5s6 2 6 5M16 5a3 3 0 010 6M21 20c0-2-1.5-4-4-4.5", tone: "tone-sandy" },
   "Team & projects": { glyph: "M4 8h16v11H4zM9 8V5h6v3M4 13h16", tone: "tone-charcoal" },
+  Workflows: { glyph: "M5 5h5v5H5zM14 14h5v5h-5zM10 7h7v7M7 10v7h7", tone: "tone-teal" },
   [SAVED]: { glyph: "M7 4h10v16l-5-4-5 4z", tone: "tone-teal" },
   [ADVANCED]: { glyph: "M9 8l-4 4 4 4M15 8l4 4-4 4", tone: "tone-gray" },
 };
@@ -71,7 +72,8 @@ export function filterTemplates(list: WorkflowTemplate[], category: string, quer
   });
 }
 
-const usesAI = (t: WorkflowTemplate) => t.node_types.some((x) => x === "llm" || x === "transcribe_audio");
+const usesAI = (t: WorkflowTemplate) => t.node_types.some((x) => ["llm", "transcribe_audio", "ai.write", "web.search", "table.extract", "decision.classify"].includes(x));
+const representativeType = (t: WorkflowTemplate) => t.node_types.find(type => type !== "input" && type !== "output") ?? t.node_types[0] ?? "text";
 
 /** What a template needs, in a word or two each: "Google", "AI key". */
 function needsOf(t: WorkflowTemplate, catalog: Map<string, NodeDefinition>): string[] {
@@ -89,7 +91,7 @@ function TemplateIcons({ template, catalog, size }: { template: WorkflowTemplate
   const apps = appsOf(template.node_types, catalog);
   const icons = [...apps.map((a) => <NodeIcon key={a.id} integrationId={a.id} size={size} />)];
   if (usesAI(template)) icons.splice(Math.min(1, icons.length), 0, <NodeIcon key="ai" def={{ type: "llm", category: "ai" }} size={size} />);
-  if (icons.length === 0) icons.push(<NodeIcon key="x" def={{ type: template.node_types[1] ?? "text", category: "" }} size={size} />);
+  if (icons.length === 0) icons.push(<NodeIcon key="x" def={{ type: representativeType(template), category: "" }} size={size} />);
   return <>{icons.slice(0, 3).map((ic, i) => <span key={i} className="tpl-step">{i > 0 && <span className="wf-link" aria-hidden />}<span className="wf-icon">{ic}</span></span>)}</>;
 }
 
@@ -97,6 +99,7 @@ function TemplateIcons({ template, catalog, size }: { template: WorkflowTemplate
 function StepIcons({ template, catalog }: { template: WorkflowTemplate; catalog: Map<string, NodeDefinition> }) {
   const keys: { key: string; node: ReactNode }[] = appsOf(template.node_types, catalog).map((a) => ({ key: a.id, node: <NodeIcon integrationId={a.id} size={13} /> }));
   if (usesAI(template)) keys.splice(Math.min(1, keys.length), 0, { key: "ai", node: <NodeIcon def={{ type: "llm", category: "ai" }} size={13} /> });
+  if (keys.length === 0) keys.push({ key: "step", node: <NodeIcon def={{ type: representativeType(template), category: "" }} size={13} /> });
   return (
     <span className="tpl-steps" aria-hidden>
       {keys.slice(0, 4).map((k, i) => <span key={k.key} className="tpl-mini-step">{i > 0 && <span className="tpl-mini-link" />}<span className="tpl-mini">{k.node}</span></span>)}
