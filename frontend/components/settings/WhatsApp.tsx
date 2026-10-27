@@ -5,6 +5,7 @@ import QRCode from "qrcode";
 import { authApi } from "@/lib/api";
 import { assistantApi } from "@/lib/api/assistant";
 import { ErrorBanner } from "@/components/ui/ErrorBanner";
+import { Backdrop } from "@/components/ui/Backdrop";
 import type { WorkspaceRef } from "@/types/api";
 import type { WhatsAppStatus } from "@/types/automation";
 export function WhatsAppSettings() {
@@ -28,8 +29,12 @@ export function WhatsAppSettings() {
     return () => { live = false; };
   }, [status.qr]);
   const canConnect = ["owner", "admin"].includes(workspaces.find(w => w.id === workspace)?.role ?? "");
-  return <main className="dashboard stack">
-    <h1>WhatsApp</h1><p className="muted">Connect your personal account to send messages and files from your workflows.</p>
+  return <main className="dashboard stack whatsapp-page">
+    <header className="workspace-page-head">
+      <Backdrop apps={["whatsapp", "google_sheets", "gmail", "google_calendar"]} />
+      <span className="workspace-page-mark motif motif-teal" aria-hidden>↗</span>
+      <h1>WhatsApp</h1><p className="muted">Connect your personal account to send messages and files from your workflows.</p>
+    </header>
     {workspaces.length > 1 && <select aria-label="Workspace" value={workspace} onChange={e => { setWorkspace(e.target.value); setStatus({ state: "disconnected" }); }}>{workspaces.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}</select>}
     <ErrorBanner error={error} />
     <section className="card whatsapp-card stack">

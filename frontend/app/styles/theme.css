@@ -8,6 +8,7 @@
    Placed last so it refines everything above through the same tokens.
    ========================================================================== */
 :root {
+  --topbar-h: 60px;
   --charcoal: #264653;
   --verdigris: #2a9d8f;
   --tuscan: #e9c46a;
@@ -74,7 +75,7 @@ button.link, .link-button { box-shadow: none; }
 .badge.published { background: var(--ok-weak); color: var(--ok); }
 
 /* top bar */
-.topbar { height: 60px; gap: 28px; padding: 0 28px; background: linear-gradient(90deg, #0e1316 0%, #172a32 55%, #264653 100%); border-bottom: none;
+.topbar { height: var(--topbar-h); gap: 28px; padding: 0 28px; background: var(--charcoal); border-bottom: none;
   box-shadow: 0 4px 16px rgba(14, 19, 22, .2); position: sticky; top: 0; z-index: 40; }
 .topbar .brand { color: #fff; font-size: 15px; letter-spacing: -.01em; }
 .topbar .brand:hover { text-decoration: none; }
@@ -106,7 +107,7 @@ button.account-item.signout:hover:not(:disabled) { background: var(--danger-weak
   .topbar { gap: 12px; padding: 0 14px; }
   .topbar .brand { font-size: 0; gap: 0; }
   .account-name { display: none; }
-  .topbar-nav { position: absolute; top: 60px; left: 0; right: 0; flex-direction: column; gap: 2px; padding: 8px; background: #0e1316; box-shadow: var(--shadow-lg); display: none; }
+  .topbar-nav { position: absolute; top: var(--topbar-h); left: 0; right: 0; flex-direction: column; gap: 2px; padding: 8px; background: #0e1316; box-shadow: var(--shadow-lg); display: none; }
   .topbar-nav.open { display: flex; }
   .topbar-link.active::after { display: none; }
   .topbar-menu { display: inline-flex; flex-direction: column; justify-content: space-between; width: 36px; height: 36px; padding: 11px 8px; background: transparent; border: none; box-shadow: none; }
@@ -122,6 +123,26 @@ button.account-item.signout:hover:not(:disabled) { background: var(--danger-weak
 .page-head p { margin: 6px 0 0; color: var(--muted); font-size: 14.5px; }
 .empty { padding: 44px 24px; }
 .empty b { color: var(--text); font-size: 15px; display: block; margin-bottom: 4px; }
+
+/* Assistant settings use the same decorated headers as the Library and gallery. */
+.workspace-page-head { position: relative; isolation: isolate; overflow: hidden; border: 1px solid var(--border); border-radius: 20px; padding: 32px; background: var(--subtle); }
+.workspace-page-head > .backdrop { opacity: .5; }
+.workspace-page-head .row { flex-wrap: wrap; gap: 12px; }
+.workspace-page-head p { max-width: 570px; margin: 10px 0 0; line-height: 1.7; }
+.workspace-page-mark { width: 48px; height: 48px; display: grid; place-items: center; border-radius: 14px; margin-bottom: 18px; font-size: 26px; font-weight: 600; color: var(--charcoal); }
+.workspace-page-mark.motif-teal { color: white; }
+.automation-page .automation-form,.whatsapp-page .whatsapp-card { position: relative; overflow: hidden; max-width: 720px; }
+.automation-page .automation-form::before,.whatsapp-page .whatsapp-card::before { content: ""; position: absolute; inset: 0 0 auto; height: 4px; background: var(--tuscan); }
+.whatsapp-page .whatsapp-card::before { background: var(--verdigris); }
+.automation-page .automation-row { border-left: 4px solid var(--verdigris); }
+.whatsapp-page .whatsapp-qr { align-self: flex-start; padding: 16px; border: 1px solid var(--border); border-radius: 16px; background: var(--panel); max-width: 100%; }
+.whatsapp-page .whatsapp-qr img { max-width: 100%; height: auto; }
+@media (max-width: 700px) {
+  .workspace-page-head { padding: 24px 20px; }
+  .automation-page .automation-row { flex-wrap: wrap; gap: 12px; }
+  .automation-page .automation-row > div { flex-basis: 100%; }
+  .whatsapp-page .whatsapp-card > .row { flex-wrap: wrap; }
+}
 
 /* workflows list */
 .workflow-list li { padding: 16px 20px; gap: 14px; }
@@ -174,4 +195,4 @@ button.account-item.signout:hover:not(:disabled) { background: var(--danger-weak
 .badge.soon-badge { background: #efebe3; color: var(--muted); }
 
 /* The editor sits under the shared top bar. */
-.editor { grid-template-rows: 60px 52px auto 1fr; }
+.editor { grid-template-rows: var(--topbar-h) 52px auto 1fr; }

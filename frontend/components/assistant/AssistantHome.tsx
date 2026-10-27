@@ -15,6 +15,7 @@ import { assistantApi } from "@/lib/api/assistant";
 import { download } from "@/lib/api/client";
 import { AiMarkdown, cleanAiText } from "@/components/ui/AiMarkdown";
 import { ErrorBanner } from "@/components/ui/ErrorBanner";
+import { Backdrop } from "@/components/ui/Backdrop";
 import { FriendlyValue } from "@/components/run/FriendlyValue";
 import { ClarificationCard } from "./ClarificationCard";
 import { WorkflowDraft } from "./WorkflowDraft";
@@ -274,6 +275,7 @@ export function AssistantHome({ workflowId }: { workflowId?: string } = {}) {
       </div>
     </aside>
     <section className="workspace-stage" aria-label="Canvas workspace">
+      <Backdrop />
       <WorkflowDraft plan={progress?.plan ?? compilation?.plan ?? s.run?.plan ?? null} tools={s.tools} comparisons={s.comparisons} controls={s.controls}
         sessionId={s.session?.id} revision={s.session?.revision} layout={layout.layout} onLayoutSave={layout.save}
         selectedStep={selectedStep} onSelectStep={setSelectedStep} busy={s.building} readOnly={!canEdit} onSave={s.edit} onManualEdit={s.beginManualEdit} onDirtyChange={dirty => { if (!dirty) s.endManualEdit(); }} onFlushReady={registerFlush}

@@ -5,6 +5,7 @@ import { authApi } from "@/lib/api";
 import { assistantApi } from "@/lib/api/assistant";
 import { materializePlan } from "@/features/assistant/useAssistant";
 import { ErrorBanner } from "@/components/ui/ErrorBanner";
+import { Backdrop } from "@/components/ui/Backdrop";
 import type { AssistantSession, Automation } from "@/types/automation";
 export function Automations() {
   const [workspace, setWorkspace] = useState("");
@@ -19,9 +20,14 @@ export function Automations() {
   const [busy, setBusy] = useState(false);
   const reload = async (ws: string) => { const [automations, drafts] = await Promise.all([assistantApi.automations(ws), assistantApi.sessions(ws)]); setItems(automations.items); setSessions(drafts.items); };
   useEffect(() => { authApi.me().then(async me => { const ws = me.workspaces[0]?.id; if (ws) { setWorkspace(ws); await reload(ws); } }).catch(setError); }, []);
-  return <main className="dashboard stack">
-    <div className="row"><h1>Schedules & triggers</h1><span className="spacer" /><Link href="/home">Build a workflow ↗</Link></div>
-    <p className="muted">Keep a workflow moving on a schedule or start it when an event arrives.</p><ErrorBanner error={error} />
+  return <main className="dashboard stack automation-page">
+    <header className="workspace-page-head">
+      <Backdrop />
+      <span className="workspace-page-mark motif motif-sun" aria-hidden>↻</span>
+      <div className="row"><h1>Schedules & triggers</h1><span className="spacer" /><Link href="/home">Build a workflow ↗</Link></div>
+      <p className="muted">Keep a workflow moving on a schedule or start it when an event arrives.</p>
+    </header>
+    <ErrorBanner error={error} />
     <form className="card automation-form stack" onSubmit={async e => {
       e.preventDefault(); const session = sessions.find(s => s.id === selected); if (!session?.compilation) return;
       setBusy(true); setError(null);
