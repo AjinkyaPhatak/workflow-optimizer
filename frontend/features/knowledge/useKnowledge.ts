@@ -26,6 +26,8 @@ export interface KnowledgeState {
   create: (name: string, description: string, credentialId: string) => Promise<boolean>;
   removeBase: (id: string) => Promise<void>;
   addText: (title: string, text: string) => Promise<boolean>;
+  addURL: (url: string) => Promise<boolean>;
+  copyLocal: () => Promise<void>;
   addFiles: (fileIds: string[]) => Promise<void>;
   uploadAndAdd: (files: File[]) => Promise<void>;
   removeDocument: (docId: string) => Promise<void>;
@@ -180,6 +182,8 @@ export function useKnowledge(): KnowledgeState {
 
   const workspace = workspaces.find((w) => w.id === workspaceId) ?? null;
   return {
+    addURL: async (url: string) => { if (!selectedId) return false; return run("add", () => knowledgeApi.addURL(selectedId, url)); },
+    copyLocal: async () => { if (!selectedId) return; await run("copy", async () => { const copy = await knowledgeApi.copyLocal(selectedId);select(copy.id); }); },
     loading, error, workspaces, workspace, setWorkspaceId: (id) => {
       setWorkspaceId(id);
       select(null);

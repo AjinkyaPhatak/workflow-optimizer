@@ -1,11 +1,11 @@
 "use client";
 
-import Link from "next/link";
 import { useRef, useState } from "react";
 import { ACCEPT, MAX_UPLOAD } from "@/components/settings/Files";
 import { ErrorBanner } from "@/components/ui/ErrorBanner";
 import type { KnowledgeState } from "@/features/knowledge/useKnowledge";
 import type { KnowledgeDocumentStatus, KnowledgeResult } from "@/types/api";
+import { AiMarkdown } from "@/components/ui/AiMarkdown";
 
 const STATUS: Record<KnowledgeDocumentStatus, { label: string; tone: string }> = {
   INDEXING: { label: "Indexing…", tone: "off" },
@@ -17,7 +17,7 @@ function CreateBase({ s }: { s: KnowledgeState }) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [credentialId, setCredentialId] = useState("");
-  const credential = credentialId || s.credentials[0]?.id || "";
+  const credential = credentialId;
   return (
     <section className="card stack" data-testid="create-base">
       <h2>New knowledge base</h2>
@@ -30,19 +30,16 @@ function CreateBase({ s }: { s: KnowledgeState }) {
         <input id="kb-desc" value={description} onChange={(e) => setDescription(e.target.value)} />
       </div>
       <div className="field">
-        <label htmlFor="kb-cred">AI key</label>
-        {s.credentials.length === 0 ? (
-          <div className="hint">Add a free Google Gemini key on the <Link href="/settings/credentials">Credentials</Link> page first.</div>
-        ) : (
+        <label htmlFor="kb-cred">Document search</label>
           <select id="kb-cred" value={credential} onChange={(e) => setCredentialId(e.target.value)}>
+            <option value="">Local search — no API key needed</option>
             {s.credentials.map((c) => <option key={c.id} value={c.id}>{c.name} ({c.provider === "gemini" ? "Gemini, free" : "OpenAI, paid"})</option>)}
           </select>
-        )}
-        <div className="field-help">Used to understand your documents so they can be searched by meaning. A Gemini key is free.</div>
+        <div className="field-help">Find documents by meaning. Local search uses available hardware automatically.</div>
       </div>
       <div className="row">
         <span className="spacer" />
-        <button type="button" className="primary" disabled={!name.trim() || !credential || s.busy === "create"}
+        <button type="button" className="primary" disabled={!name.trim() || s.busy === "create"}
           onClick={async () => {
             if (await s.create(name.trim(), description.trim(), credential)) {
               setName("");
@@ -57,6 +54,7 @@ function CreateBase({ s }: { s: KnowledgeState }) {
 }
 
 function AddDocuments({ s }: { s: KnowledgeState }) {
+  const [url, setUrl] = useState("");
   const [title, setTitle] = useState("");
   const [text, setText] = useState("");
   const [fileId, setFileId] = useState("");
@@ -65,6 +63,8 @@ function AddDocuments({ s }: { s: KnowledgeState }) {
   return (
     <section className="card stack" data-testid="add-documents">
       <h3>Add documents</h3>
+      <div className="row"><input aria-label="Web source URL" type="url" placeholder="https://… — add a public web page" value={url} onChange={e => setUrl(e.target.value)} />
+        <button disabled={!url.trim() || busy} onClick={async () => { if (await s.addURL(url.trim())) setUrl(""); }}>Add web page</button></div>
       <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
         <select aria-label="File to add" value={fileId} onChange={(e) => setFileId(e.target.value)} style={{ flex: 1, minWidth: 200 }}>
           <option value="">Choose an uploaded file…</option>
@@ -123,7 +123,7 @@ function TrySearch({ s }: { s: KnowledgeState }) {
           {results.map((r, i) => (
             <li key={i}>
               <div className="small muted">{r.document_title} · similarity {r.score.toFixed(2)}</div>
-              <div className="kb-passage">{r.text}</div>
+              <AiMarkdown className="kb-passage" text={r.text} />
             </li>
           ))}
         </ol>
@@ -179,6 +179,7 @@ export function Knowledge({ state, confirm = (m) => window.confirm(m) }: { state
                   <div className="row">
                     <h2>{kb.name}</h2>
                     <span className="spacer" />
+                    {canEdit && kb.embedding_model !== "intfloat/multilingual-e5-small" && <button disabled={s.busy === "copy"} onClick={() => void s.copyLocal()}>{s.busy === "copy" ? "Copying…" : "Copy to local search"}</button>}
                     {canEdit && (
                       <button type="button" disabled={s.busy === kb.id} onClick={() => {
                         if (confirm(`Delete ${kb.name} and its ${kb.items.length} documents? Workflows that search it will fail.`)) void s.removeBase(kb.id);
@@ -193,7 +194,7 @@ export function Knowledge({ state, confirm = (m) => window.confirm(m) }: { state
                           <div className="account-who">
                             <b>{d.title}</b>
                             <span className="muted small">
-                              {d.source === "file" ? "File" : "Text"} · {d.chars.toLocaleString()} characters
+                              {d.source === "file" ? "File" : d.source === "url" ? "Web page" : "Text"} · {d.chars.toLocaleString()} characters
                               {d.status === "READY" ? ` · ${d.chunks} passages` : ""}
                             </span>
                             {d.status === "FAILED" && d.error && <span className="field-error small">{d.error}</span>}

@@ -57,7 +57,8 @@ test("inspect a completed execution and a retried one in the execution debugger"
   await page.getByLabel("Email").fill(s.email);
   await page.getByLabel("Password").fill(s.password);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page).toHaveURL(/\/workflows$/);
+  await expect(page).toHaveURL(/\/home$/);
+  await page.goto("/workflows");
 
   // --- a completed execution -------------------------------------------------
   await runFromEditor(page, workflowId, "Explain observability");

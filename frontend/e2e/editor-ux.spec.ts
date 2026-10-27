@@ -55,7 +55,8 @@ test("hover info, configuration, variable picker and validation focus in the edi
   await page.getByRole("button", { name: "Hide" }).click();
   await expect(password).toHaveAttribute("type", "password");
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page).toHaveURL(/\/workflows$/);
+  await expect(page).toHaveURL(/\/home$/);
+  await page.goto("/workflows");
 
   // --- open the workflow: empty state ------------------------------------------
   await page.goto(`/workflows/${wf.id}/editor`);

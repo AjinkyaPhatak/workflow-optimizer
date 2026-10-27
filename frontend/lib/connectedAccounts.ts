@@ -1,4 +1,24 @@
-import type { ConnectedAccount, ConnectedAccountStatus } from "@/types/api";
+import type { ConnectedAccount, ConnectedAccountStatus, OAuthProvider } from "@/types/api";
+
+/** Setup metadata is public; OAuth secrets are configured only on the server. */
+export const ACCOUNT_PROVIDER_SETUP = [
+  { id: "google", name: "Google", description: "Gmail, Google Sheets, Calendar, Docs, Forms and Meet.", prefix: "GOOGLE" },
+  { id: "notion", name: "Notion", description: "Search pages and read or update your workspace's databases.", prefix: "NOTION" },
+  { id: "airtable", name: "Airtable", description: "Read and update records in your bases.", prefix: "AIRTABLE" },
+  { id: "discord", name: "Discord", description: "Read and send messages in your connected server.", prefix: "DISCORD" },
+];
+
+/** Keep supported apps and stored accounts visible when server configuration is missing. */
+export function accountProviderCards(configured: OAuthProvider[], accounts: ConnectedAccount[]): OAuthProvider[] {
+  const cards = new Map<string, OAuthProvider>(ACCOUNT_PROVIDER_SETUP.map(p => [p.id, { ...p, scopes: [] }]));
+  for (const account of accounts) {
+    if (!cards.has(account.provider)) cards.set(account.provider, {
+      id: account.provider, name: account.provider_name || account.provider, description: "", scopes: [],
+    });
+  }
+  for (const provider of configured) cards.set(provider.id, provider);
+  return [...cards.values()];
+}
 
 /** "Google — ada@example.com" */
 export function accountLabel(a: Pick<ConnectedAccount, "provider_name" | "email" | "display_name">): string {

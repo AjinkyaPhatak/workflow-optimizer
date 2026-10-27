@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { assistantApi } from "@/lib/api/assistant";
 import { useEditorContext } from "@/features/workflows/EditorContext";
 import { useShowDetails } from "@/stores/ui/details";
 import { useEditorStore, useIsDirty } from "@/stores/workflow-editor/store";
@@ -15,6 +17,9 @@ export function EditorHeader({ onRun }: { onRun: () => void }) {
   const { workflow, version, busy, notice, save, validate, publish, canPublish, refreshVersions } = useEditorContext();
   const [history, setHistory] = useState(false);
   const [saveTemplate, setSaveTemplate] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState("");
+  const router = useRouter();
   const details = useShowDetails();
   const dirty = useIsDirty();
   const readonly = useEditorStore((s) => s.mode === "readonly");
@@ -62,6 +67,12 @@ export function EditorHeader({ onRun }: { onRun: () => void }) {
         </span>
       )}
       <span className="spacer" />
+      {workflow && version && !dirty && <button disabled={importing} onClick={async () => {
+        setImporting(true);setImportError("");
+        try { const copy = await assistantApi.importLegacy(workflow.id, version.id);router.push("/home?session=" + encodeURIComponent(copy.id)); }
+        catch { setImportError("The copy could not be prepared. Check the platform AI connection.");setImporting(false); }
+      }}>{importing ? "Preparing copy…" : "Open in voice builder"}</button>}
+      {importError && <span role="alert" className="small">{importError}</span>}
       {notice && details && (
         <span className="small" role="status" style={{ color: notice.kind === "ok" ? "var(--ok)" : "var(--danger)" }}>
           {notice.text}

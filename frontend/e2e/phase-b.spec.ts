@@ -48,7 +48,8 @@ test("template, variables, prompt template, LLM, structured output, search and v
   await page.getByLabel("Email").fill(s.email);
   await page.getByLabel("Password").fill(s.password);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page).toHaveURL(/\/workflows$/);
+  await expect(page).toHaveURL(/\/home$/);
+  await page.goto("/workflows");
 
   // Phase K: templates live in the gallery (Advanced shows with technical
   // details on, as in this spec).
