@@ -2,8 +2,12 @@ package postgres
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -37,21 +41,21 @@ func knowledgeError(err error, what string) error {
 	return fmt.Errorf("%s: %w", what, err)
 }
 
-const baseColumns = `b.id, b.workspace_id, b.name, b.description, b.credential_id, b.embedding_model, b.dimensions, b.created_at, b.updated_at,
+const baseColumns = `b.id, b.workspace_id, b.name, b.description, COALESCE(b.credential_id,'00000000-0000-0000-0000-000000000000'::uuid), b.embedding_model, b.dimensions, b.created_at, b.updated_at, b.model_revision,
 	(SELECT count(*) FROM knowledge_documents d WHERE d.knowledge_base_id = b.id),
 	(SELECT count(*) FROM knowledge_chunks c WHERE c.knowledge_base_id = b.id)`
 
 func scanBase(row pgx.Row) (knowledge.Base, error) {
 	var b knowledge.Base
-	err := row.Scan(&b.ID, &b.WorkspaceID, &b.Name, &b.Description, &b.CredentialID, &b.Model, &b.Dimensions, &b.CreatedAt, &b.UpdatedAt,
+	err := row.Scan(&b.ID, &b.WorkspaceID, &b.Name, &b.Description, &b.CredentialID, &b.Model, &b.Dimensions, &b.CreatedAt, &b.UpdatedAt, &b.ModelRevision,
 		&b.Documents, &b.Chunks)
 	return b, err
 }
 
 // CreateBase stores a base.
 func (r *KnowledgeRepository) CreateBase(ctx context.Context, b knowledge.Base) (knowledge.Base, error) {
-	_, err := r.pool.Exec(ctx, `INSERT INTO knowledge_bases (id, workspace_id, name, description, credential_id, embedding_model, dimensions)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)`, b.ID, b.WorkspaceID, b.Name, b.Description, b.CredentialID, b.Model, b.Dimensions)
+	_, err := r.pool.Exec(ctx, `INSERT INTO knowledge_bases (id, workspace_id, name, description, credential_id, embedding_model, dimensions,model_revision)
+  VALUES ($1, $2, $3, $4, NULLIF($5::uuid,'00000000-0000-0000-0000-000000000000'::uuid), $6, $7,$8)`, b.ID, b.WorkspaceID, b.Name, b.Description, b.CredentialID, b.Model, b.Dimensions, b.ModelRevision)
 	if err != nil {
 		return knowledge.Base{}, knowledgeError(err, "create knowledge base")
 	}
@@ -114,7 +118,7 @@ func (r *KnowledgeRepository) DeleteBase(ctx context.Context, workspaceID, id uu
 	return tx.Commit(ctx)
 }
 
-const documentColumns = `id, knowledge_base_id, workspace_id, title, source, file_id, status, error, chunk_count, char_count, created_at, updated_at`
+const documentColumns = `id, knowledge_base_id, workspace_id, title, source, file_id, status, error, chunk_count, char_count, created_at, updated_at,source_url,content_hash,fetched_at,index_generation`
 
 // scanDocument reports an INDEXING document untouched for StaleAfter as
 // FAILED: its indexing process stopped.
@@ -124,7 +128,7 @@ func scanDocument(row pgx.Row, extra ...any) (knowledge.Document, error) {
 		status string
 	)
 	err := row.Scan(append([]any{&d.ID, &d.KnowledgeBaseID, &d.WorkspaceID, &d.Title, &d.Source, &d.FileID, &status, &d.Error, &d.Chunks, &d.Chars,
-		&d.CreatedAt, &d.UpdatedAt}, extra...)...)
+		&d.CreatedAt, &d.UpdatedAt, &d.SourceURL, &d.ContentHash, &d.FetchedAt, &d.Generation}, extra...)...)
 	d.Status = knowledge.Status(status)
 	if d.Status == knowledge.StatusIndexing && time.Since(d.UpdatedAt) > knowledge.StaleAfter {
 		d.Status, d.Error = knowledge.StatusFailed, "indexing was interrupted; retry"
@@ -135,9 +139,15 @@ func scanDocument(row pgx.Row, extra ...any) (knowledge.Document, error) {
 // CreateDocument inserts a document (INDEXING); an existing ID is returned
 // as is with created=false.
 func (r *KnowledgeRepository) CreateDocument(ctx context.Context, d knowledge.Document, text string) (knowledge.Document, bool, error) {
-	tag, err := r.pool.Exec(ctx, `INSERT INTO knowledge_documents (id, knowledge_base_id, workspace_id, title, source, file_id, status, content, char_count)
-		VALUES ($1, $2, $3, $4, $5, $6, 'INDEXING', $7, $8) ON CONFLICT (id) DO NOTHING`,
-		d.ID, d.KnowledgeBaseID, d.WorkspaceID, d.Title, d.Source, d.FileID, text, d.Chars)
+	sum := sha256.Sum256([]byte(text))
+	var fetched *time.Time
+	if d.SourceURL != "" {
+		now := time.Now().UTC()
+		fetched = &now
+	}
+	tag, err := r.pool.Exec(ctx, `INSERT INTO knowledge_documents (id, knowledge_base_id, workspace_id, title, source, file_id, status, content, char_count,source_url,content_hash,fetched_at)
+  VALUES ($1, $2, $3, $4, $5, $6, 'INDEXING', $7, $8,$9,$10,$11) ON CONFLICT (id) DO NOTHING`,
+		d.ID, d.KnowledgeBaseID, d.WorkspaceID, d.Title, d.Source, d.FileID, text, d.Chars, d.SourceURL, hex.EncodeToString(sum[:]), fetched)
 	if err != nil {
 		return knowledge.Document{}, false, knowledgeError(err, "create document")
 	}
@@ -195,7 +205,7 @@ func (r *KnowledgeRepository) DeleteDocument(ctx context.Context, workspaceID, i
 
 // SetIndexing marks a document INDEXING again.
 func (r *KnowledgeRepository) SetIndexing(ctx context.Context, workspaceID, id uuid.UUID) error {
-	tag, err := r.pool.Exec(ctx, `UPDATE knowledge_documents SET status = 'INDEXING', error = '', updated_at = now()
+	tag, err := r.pool.Exec(ctx, `UPDATE knowledge_documents SET status = 'INDEXING', error = '', index_generation=index_generation+1, updated_at = now()
 		WHERE id = $1 AND workspace_id = $2`, id, workspaceID)
 	if err != nil {
 		return knowledgeError(err, "update document")
@@ -209,15 +219,22 @@ func (r *KnowledgeRepository) SetIndexing(ctx context.Context, workspaceID, id u
 // FinishDocument replaces a document's chunks and marks it READY, in one
 // transaction (a search never sees half a document).
 func (r *KnowledgeRepository) FinishDocument(ctx context.Context, workspaceID, id uuid.UUID, chunks []knowledge.Chunk) error {
+	return r.FinishGeneration(ctx, workspaceID, id, 0, chunks)
+}
+func (r *KnowledgeRepository) FinishGeneration(ctx context.Context, workspaceID, id uuid.UUID, generation int, chunks []knowledge.Chunk) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	var baseID uuid.UUID
-	if err := tx.QueryRow(ctx, `SELECT knowledge_base_id FROM knowledge_documents WHERE id = $1 AND workspace_id = $2 FOR UPDATE`,
-		id, workspaceID).Scan(&baseID); err != nil {
+	var current int
+	if err := tx.QueryRow(ctx, `SELECT knowledge_base_id,index_generation FROM knowledge_documents WHERE id = $1 AND workspace_id = $2 FOR UPDATE`,
+		id, workspaceID).Scan(&baseID, &current); err != nil {
 		return knowledgeError(err, "finish document")
+	}
+	if generation > 0 && current != generation {
+		return fmt.Errorf("%w: a newer indexing job replaced this one", knowledge.ErrInvalid)
 	}
 	if _, err := tx.Exec(ctx, `DELETE FROM knowledge_chunks WHERE document_id = $1`, id); err != nil {
 		return knowledgeError(err, "finish document")
@@ -230,11 +247,51 @@ func (r *KnowledgeRepository) FinishDocument(ctx context.Context, workspaceID, i
 		[]string{"document_id", "knowledge_base_id", "workspace_id", "ordinal", "content", "embedding"}, pgx.CopyFromRows(rows)); err != nil {
 		return knowledgeError(err, "store chunks")
 	}
+	for _, c := range chunks {
+		if len(c.Vector) == 384 {
+			if _, err := tx.Exec(ctx, `UPDATE knowledge_chunks SET embedding_vector=$3::public.vector WHERE document_id=$1 AND ordinal=$2`, id, c.Ordinal, vectorLiteral(c.Vector)); err != nil {
+				return err
+			}
+		}
+	}
 	if _, err := tx.Exec(ctx, `UPDATE knowledge_documents SET status = 'READY', error = '', chunk_count = $2, updated_at = now() WHERE id = $1`,
 		id, len(chunks)); err != nil {
 		return knowledgeError(err, "finish document")
 	}
 	return tx.Commit(ctx)
+}
+func vectorLiteral(v []float32) string {
+	parts := make([]string, len(v))
+	for i, n := range v {
+		parts[i] = strconv.FormatFloat(float64(n), 'g', -1, 32)
+	}
+	return "[" + strings.Join(parts, ",") + "]"
+}
+
+func (r *KnowledgeRepository) SearchVectors(ctx context.Context, ws, base uuid.UUID, vector []float32, query string, k int, minScore float64) ([]knowledge.Result, error) {
+	rows, err := r.pool.Query(ctx, `WITH scoped AS MATERIALIZED (
+ SELECT c.document_id,d.title,c.ordinal,c.content,c.embedding_vector FROM knowledge_chunks c
+ JOIN knowledge_documents d ON d.id=c.document_id
+ WHERE c.workspace_id=$1 AND c.knowledge_base_id=$2 AND c.embedding_vector IS NOT NULL
+ ), ranked AS (
+ SELECT document_id,title,ordinal,content,
+  0.85*(1-(embedding_vector OPERATOR(public.<=>) $3::public.vector))+
+  0.15*ts_rank_cd(to_tsvector('simple',content),plainto_tsquery('simple',$4)) AS score FROM scoped)
+ SELECT document_id,title,ordinal,content,score FROM ranked WHERE score >= $5 ORDER BY score DESC,document_id,ordinal LIMIT $6`,
+		ws, base, vectorLiteral(vector), query, minScore, k)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []knowledge.Result{}
+	for rows.Next() {
+		var p knowledge.Result
+		if err := rows.Scan(&p.DocumentID, &p.DocumentTitle, &p.Ordinal, &p.Content, &p.Score); err != nil {
+			return nil, err
+		}
+		out = append(out, p)
+	}
+	return out, rows.Err()
 }
 
 // FailDocument marks a document FAILED.

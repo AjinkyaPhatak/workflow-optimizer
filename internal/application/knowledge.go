@@ -12,6 +12,7 @@ import (
 
 	"workflow-optimizer/internal/knowledge"
 	"workflow-optimizer/internal/provider/llm"
+	"workflow-optimizer/internal/webingest"
 	"workflow-optimizer/internal/workspace"
 )
 
@@ -23,6 +24,9 @@ const indexTimeout = 15 * time.Minute
 // and searches. Documents added here are indexed in the background: the
 // request returns at once with the document INDEXING.
 type KnowledgeService struct {
+	indexer interface {
+		SubmitIndex(context.Context, uuid.UUID, uuid.UUID) error
+	}
 	access *Access
 	svc    *knowledge.Service
 	logger *slog.Logger
@@ -30,6 +34,13 @@ type KnowledgeService struct {
 	// ctx is cancelled by Close: background indexing stops.
 	ctx    context.Context
 	cancel context.CancelFunc
+}
+
+func (s *KnowledgeService) WithIndexer(indexer interface {
+	SubmitIndex(context.Context, uuid.UUID, uuid.UUID) error
+}) *KnowledgeService {
+	s.indexer = indexer
+	return s
 }
 
 // NewKnowledgeService wires the service. svc may be nil (not configured).
@@ -134,7 +145,16 @@ func (s *KnowledgeService) Delete(ctx context.Context, user, id uuid.UUID) error
 }
 
 // index runs Index in the background, detached from the request.
-func (s *KnowledgeService) index(b knowledge.Base, d knowledge.Document, text string) {
+func (s *KnowledgeService) index(b knowledge.Base, d knowledge.Document, text string) error {
+	if s.indexer != nil {
+		ctx, cancel := context.WithTimeout(s.ctx, 15*time.Second)
+		defer cancel()
+		if err := s.indexer.SubmitIndex(ctx, b.WorkspaceID, d.ID); err != nil {
+			_ = s.svc.Repository().FailDocument(ctx, b.WorkspaceID, d.ID, "The indexing service is unavailable. Retry when it is connected.")
+			return &InvalidError{Message: "The source was saved, but indexing could not start. Retry when the execution service is connected."}
+		}
+		return nil
+	}
 	s.wg.Add(1)
 	go func() {
 		defer s.wg.Done()
@@ -145,6 +165,7 @@ func (s *KnowledgeService) index(b knowledge.Base, d knowledge.Document, text st
 				"knowledge_base_id", b.ID.String(), "document_id", d.ID.String(), "reason", knowledge.FailureMessage(err))
 		}
 	}()
+	return nil
 }
 
 // AddText adds a text document.
@@ -157,8 +178,7 @@ func (s *KnowledgeService) AddText(ctx context.Context, user, baseID uuid.UUID, 
 	if err != nil {
 		return knowledge.Document{}, knowledgeError(err, "knowledge base")
 	}
-	s.index(b, d, strings.TrimSpace(text))
-	return d, nil
+	return d, s.index(b, d, strings.TrimSpace(text))
 }
 
 // AddFile adds a workspace file's text.
@@ -175,8 +195,7 @@ func (s *KnowledgeService) AddFile(ctx context.Context, user, baseID, fileID uui
 	if err != nil {
 		return knowledge.Document{}, knowledgeError(err, "knowledge base")
 	}
-	s.index(b, d, strings.TrimSpace(text))
-	return d, nil
+	return d, s.index(b, d, strings.TrimSpace(text))
 }
 
 func (s *KnowledgeService) document(ctx context.Context, user, baseID, docID uuid.UUID) (knowledge.Base, knowledge.Document, error) {
@@ -210,8 +229,26 @@ func (s *KnowledgeService) Reindex(ctx context.Context, user, baseID, docID uuid
 	if err != nil {
 		return knowledge.Document{}, knowledgeError(err, "document")
 	}
-	s.index(b, d, text)
-	return d, nil
+	return d, s.index(b, d, text)
+}
+func (s *KnowledgeService) AddURL(ctx context.Context, user, baseID uuid.UUID, url string) (knowledge.Document, error) {
+	b, err := s.base(ctx, user, baseID, workspace.ActionWrite)
+	if err != nil {
+		return knowledge.Document{}, err
+	}
+	page, err := webingest.Fetch(ctx, url)
+	if err != nil {
+		return knowledge.Document{}, &InvalidError{Message: err.Error()}
+	}
+	id := knowledge.DocumentID(baseID, "url:"+page.URL+":"+page.Text)
+	_, doc, created, err := s.svc.Begin(ctx, knowledge.AddInput{WorkspaceID: b.WorkspaceID, BaseID: b.ID, ID: id, Title: page.URL, Text: page.Text, Source: "url", SourceURL: page.URL})
+	if err != nil {
+		return doc, knowledgeError(err, "knowledge base")
+	}
+	if !created && doc.Status == knowledge.StatusReady {
+		return doc, nil
+	}
+	return doc, s.index(b, doc, page.Text)
 }
 
 // Search tries a query against a base (the Knowledge page's test box).

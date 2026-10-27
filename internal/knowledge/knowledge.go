@@ -33,6 +33,7 @@ type EmbeddingSpec struct {
 // vectors to 768, OpenAI's to 512 (a fraction of the storage, nearly the
 // same quality). A base keeps the model it was created with.
 var EmbeddingSpecs = []EmbeddingSpec{
+	{Provider: "local", Model: "intfloat/multilingual-e5-small", Dimensions: 384},
 	{Provider: "gemini", Model: "gemini-embedding-001", Dimensions: 768},
 	{Provider: "openai", Model: "text-embedding-3-small", Dimensions: 512},
 }
@@ -77,15 +78,16 @@ var (
 
 // Base is a knowledge base.
 type Base struct {
-	ID           uuid.UUID
-	WorkspaceID  uuid.UUID
-	Name         string
-	Description  string
-	CredentialID uuid.UUID
-	Model        string
-	Dimensions   int
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
+	ID            uuid.UUID
+	WorkspaceID   uuid.UUID
+	Name          string
+	Description   string
+	CredentialID  uuid.UUID
+	Model         string
+	Dimensions    int
+	ModelRevision string
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
 	// Counts (filled by List and Get).
 	Documents int
 	Chunks    int
@@ -105,6 +107,10 @@ type Document struct {
 	Chars           int
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
+	SourceURL       string
+	ContentHash     string
+	FetchedAt       *time.Time
+	Generation      int
 }
 
 // Chunk is a stored passage with its vector.
@@ -157,4 +163,12 @@ type Repository interface {
 	Vectors(ctx context.Context, workspaceID, baseID uuid.UUID) ([]ScoredID, error)
 	// Passages returns the chunks with these IDs (any order).
 	Passages(ctx context.Context, workspaceID uuid.UUID, ids []int64) (map[int64]Result, error)
+}
+
+// VectorRepository provides tenant-scoped database retrieval for local embeddings.
+type VectorRepository interface {
+	SearchVectors(context.Context, uuid.UUID, uuid.UUID, []float32, string, int, float64) ([]Result, error)
+}
+type GenerationRepository interface {
+	FinishGeneration(context.Context, uuid.UUID, uuid.UUID, int, []Chunk) error
 }
