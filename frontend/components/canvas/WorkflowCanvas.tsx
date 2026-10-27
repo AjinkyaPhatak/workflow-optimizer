@@ -38,7 +38,7 @@ export const GRID = 16;
  * the canvas quiet). */
 const HOVER_DELAY_MS = 450;
 
-const EDGE_COLOR = { normal: "#98a2b3", selected: "#3b5bdb", invalid: "#c92a2a" };
+const EDGE_COLOR = { normal: "#9aa6a8", selected: "#2a9d8f", invalid: "#c4442a" };
 
 /** Green while the dragged edge would be accepted, red otherwise. */
 function ConnectionLine({ fromX, fromY, toX, toY, fromPosition, toPosition, connectionStatus }: ConnectionLineComponentProps) {
@@ -279,7 +279,7 @@ export function WorkflowCanvas({ onAdd }: { onAdd: (def: NodeDefinition) => void
           maxZoom={2}
           proOptions={{ hideAttribution: true }}
         >
-          <Background variant={BackgroundVariant.Dots} gap={GRID} size={1} color="#cfd4dc" />
+          <Background variant={BackgroundVariant.Dots} gap={GRID} size={1} color="#d6cfc2" />
           <Controls showInteractive={false} fitViewOptions={{ maxZoom: 1, padding: 0.2 }} />
           <MiniMap
             pannable
