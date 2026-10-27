@@ -1,6 +1,6 @@
 # Migrations
 
-Twelve ordered up/down migration pairs currently define the application schema.
+Thirteen ordered up/down migration pairs currently define the application schema.
 The API and worker do not migrate on startup. After starting PostgreSQL, run:
 
 ```sh

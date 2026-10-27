@@ -2,11 +2,12 @@
 
 AI workflow orchestration platform with a Go modular monolith, a Next.js visual editor, PostgreSQL persistence, and Redis job delivery.
 
-The new authenticated home is a voice conversation with an editable workflow
-builder. V2 runs use Temporal, typed clarification cards, schedules and event
+The authenticated home is a full canvas with a bottom text/voice composer,
+collapsible conversation, and compiler-aware editing. V2 runs use Temporal, typed clarification cards, schedules and event
 triggers; knowledge supports local CPU/CUDA embeddings, and personal WhatsApp
 connects by QR. See [docs/OVERHAUL.md](docs/OVERHAUL.md) for setup, configuration,
-runtime boundaries and the new API.
+runtime boundaries and the new API. [Canvas editor details](docs/CANVAS_EDITOR.md)
+cover autosave, versions, templates, layout and build progress.
 
 The application includes workflow execution, retries and recovery, authentication, encrypted credentials, third-party integrations, files, knowledge bases, templates, and execution debugging. The phase sections below record how these capabilities were introduced; use the implementation and tests for current behavior.
 

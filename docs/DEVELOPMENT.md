@@ -1,6 +1,8 @@
 # Development guide
 
 The v2 voice/runtime overhaul is documented in [OVERHAUL.md](OVERHAUL.md).
+The unified canvas, compiler editor and saved-workflow API are documented in
+[CANVAS_EDITOR.md](CANVAS_EDITOR.md).
 The repository audit and initial verification sections retain the pre-overhaul
 baseline. See [FRONTEND_MERGE.md](FRONTEND_MERGE.md) when merging a frontend redesign.
 

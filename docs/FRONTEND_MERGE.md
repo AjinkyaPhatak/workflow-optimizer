@@ -1,5 +1,12 @@
 # Merging a frontend overhaul
 
+The current canvas update is documented in [CANVAS_EDITOR.md](CANVAS_EDITOR.md).
+Its additional commits are `4104b54` (backend/editor contracts), `0964482`
+(shared node shell), `774ea4c` (compiler canvas and request state), `55fc401`
+(explicit local reset), and `2350056` (removed-bookmark recovery). Preserve the
+independent layout revision, build mutation locks, real progress previews and
+workflow/version/template APIs when reconciling a further frontend redesign.
+
 This checkpoint separates backend/runtime, local tooling, frontend contracts and
 state, and frontend presentation. Merge the complete series into the redesign
 branch, then resolve presentation conflicts while retaining the contracts below.

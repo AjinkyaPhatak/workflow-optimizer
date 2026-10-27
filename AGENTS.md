@@ -81,6 +81,10 @@ Next.js proxies `/api/v1/*`; keep `BACKEND_URL` aligned with the API address.
   is authoritative; the canvas is derived presentation, not another execution engine.
 - Existing draft versions are mutable through the draft endpoint; published
   versions remain immutable. Assistant drafts use optimistic revision checks.
+- Compiler workflows share their session IDs. Semantic plan edits and canvas
+  layout use independent revisions. During AI builds, lock mutations and show
+  real build checkpoints; previews must never autosave or execute. Flush pending
+  edits before new requests or actions. Keep the legacy editor adapter working.
 - AI prose uses components/ui/AiMarkdown, including readable fallback. Technical
   JSON stays literal. Voice credentials are minted server-side, never persisted
   in the browser. Files are under Knowledge; authenticated landing is /home.
