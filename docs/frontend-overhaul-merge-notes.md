@@ -17,8 +17,12 @@ Each commit typechecks on its own, and the stylesheets each one imports exist in
 | 6 | Templates page | `components/templates/TemplateGallery.tsx`, `components/templates/TemplateDetails.tsx`, `app/styles/templates.css` |
 | 7 | Library | `components/library/Library.tsx`, `app/library/page.tsx`, `app/files/page.tsx` and `app/knowledge/page.tsx` (now redirects), `components/settings/Knowledge.tsx` (exports), `components/ui/TopBar.tsx` (Library tab), `components/run/RunDialog.tsx` (link), `app/styles/library.css` |
 | 8 | Copy (backend files) | `internal/node/{extract,input,kb,llm,transcribe}/*.go` descriptions, `internal/templates/catalog/{answer-from-knowledge,meeting-recording-notes,recording-to-doc,summarize-a-file}.json` setup notes |
+| 9 | Docs | this file |
+| 10 | Workflows: Recent rail | `components/workflow/RecentWorkflows.tsx` (new), `app/workflows/page.tsx`, `app/styles/workflows.css` (appended `wf-rail` block) |
+| 11 | Favicon | `app/icon.svg` (new; Next.js adds the icon link from the file convention) |
+| 12 | Docs | this file (rows 9–12) |
 
-All paths above are under `frontend/` except commit 8.
+All paths above are under `frontend/` except commit 8. Commits 10 and 11 are frontend-only and touch no API.
 
 ## The backend contract this branch relies on
 
