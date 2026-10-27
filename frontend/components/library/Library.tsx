@@ -57,12 +57,13 @@ function FileTile({ f, kn, canEdit, files, onAdded }: {
   f: WorkspaceFile; kn: KnowledgeState; canEdit: boolean; files: FilesState; onAdded: (baseId: string) => void;
 }) {
   const [menu, setMenu] = useState<"" | "add">("");
+  const [error, setError] = useState<unknown>(null);
   const look = lookOf(f);
   const canIndex = !isAudio(f);
   return (
     <div className={`lib-file${menu ? " menu-open" : ""}`} data-testid={`file-${f.id}`}>
       <span className={`lib-type ${look.tone}`}><Glyph d={look.glyph} /></span>
-      <span className="lib-file-text">
+      <div className="lib-file-text">
         <b title={f.name}>{f.name}</b>
         <span className="muted">{look.kind} · {formatSize(f.size)} · {new Date(f.created_at).toLocaleDateString()}</span>
         <span className="lib-actions">
@@ -76,14 +77,20 @@ function FileTile({ f, kn, canEdit, files, onAdded }: {
             }}>Delete</button>
           )}
         </span>
-      </span>
+        <ErrorBanner error={error} />
+      </div>
       {menu === "add" && (
         <div className="wf-menu lib-menu" role="menu">
           {kn.bases.map((b) => (
             <button key={b.id} type="button" role="menuitem" onClick={async () => {
               setMenu("");
-              await knowledgeApi.addFile(b.id, f.id);
-              onAdded(b.id);
+              setError(null);
+              try {
+                await knowledgeApi.addFile(b.id, f.id);
+                onAdded(b.id);
+              } catch (e) {
+                setError(e);
+              }
             }}>{b.name}</button>
           ))}
         </div>
@@ -110,6 +117,11 @@ function BasePanel({ kn, files, canEdit, onClose }: { kn: KnowledgeState; files:
               <div className="row">
                 <h2>{kb.name}</h2>
                 <span className="spacer" />
+                {canEdit && kb.embedding_model !== "intfloat/multilingual-e5-small" && (
+                  <button type="button" disabled={s.busy === "copy"} onClick={() => void s.copyLocal()}>
+                    {s.busy === "copy" ? "Copying…" : "Copy to local search"}
+                  </button>
+                )}
                 {canEdit && (
                   <button type="button" disabled={kn.busy === kb.id} onClick={() => {
                     if (window.confirm(`Delete ${kb.name} and its ${kb.items.length} documents? Workflows that search it will fail.`)) {
@@ -127,7 +139,7 @@ function BasePanel({ kn, files, canEdit, onClose }: { kn: KnowledgeState; files:
                       <span className="lib-file-text">
                         <b>{d.title}</b>
                         <span className="muted small">
-                          {d.source === "file" ? "File" : "Text"} · {d.chars.toLocaleString()} characters{d.status === "READY" ? ` · ${d.chunks} passages` : ""}
+                          {d.source === "file" ? "File" : d.source === "url" ? "Web page" : "Text"} · {d.chars.toLocaleString()} characters{d.status === "READY" ? ` · ${d.chunks} passages` : ""}
                         </span>
                         {d.status === "FAILED" && d.error && <span className="field-error small">{d.error}</span>}
                       </span>
