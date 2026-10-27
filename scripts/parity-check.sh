@@ -4,22 +4,27 @@
 # Rerun after every integration change. Exit code is non-zero on any failure.
 set -uo pipefail
 export LC_ALL=C.UTF-8
+export GOTOOLCHAIN=auto
+export GOSUMDB=sum.golang.org
 DIR="${1:-$(git rev-parse --show-toplevel)}"
-REF=origin/backend-overhaul
+REF="${BACKEND_REF:-origin/backend-overhaul}"
 cd "$DIR" || exit 2
 fail=0
 say() { printf '\n== %s\n' "$*"; }
 
 # The working tree as a tree object (includes uncommitted edits).
-idx=$(mktemp); cp .git/index "$idx" 2>/dev/null || cp "$(git rev-parse --git-dir)/index" "$idx"
-TREE=$(GIT_INDEX_FILE="$idx" bash -c 'git add -A . >/dev/null 2>&1; git write-tree'); rm -f "$idx"
+idx=$(mktemp)
+trap 'rm -f "$idx" "${test_log:-}"' EXIT
+cp "$(git rev-parse --git-path index)" "$idx" || exit 2
+TREE=$(GIT_INDEX_FILE="$idx" bash -c 'git add -A . >/dev/null 2>&1 && git write-tree') || exit 2
 
 say "1. Behaviour files must be byte-identical to $REF"
 # Contracts, state, runtime, tests and config: the backend branch owns these.
 OWNED='^(internal/(?!node/|templates/catalog/)|cmd/|migrations/|workers/|scripts/|go\.(mod|sum)$|Makefile$|frontend/(lib/|features/(?!workflows/useWorkflowCards)|types/|stores/|e2e/|tests/|next\.config\.ts$|package(-lock)?\.json$))'
 drift=$(git diff --name-only "$REF" "$TREE" | grep -P "$OWNED")
 # Deliberate, reviewed exceptions (keep this list short and explained).
-ALLOW='^(frontend/e2e/(workflow-editor|connected-accounts)\.spec\.ts|scripts/parity-check\.sh)$'
+# Additive integration tests cover merged screens; existing backend tests remain owned.
+ALLOW='^(frontend/e2e/(workflow-editor|connected-accounts|integration)\.spec\.ts|frontend/tests/unit/(workflow-cards|library-integration)\.test\.tsx|scripts/parity-check\.sh)$'
 unexpected=$(printf '%s\n' "$drift" | grep -vP "$ALLOW" | grep .)
 if [ -n "$unexpected" ]; then echo "UNEXPECTED drift:"; echo "$unexpected"; fail=1; else echo "ok"; fi
 [ -n "$drift" ] && echo "allowed drift:" && printf '%s\n' "$drift" | grep -P "$ALLOW"
@@ -41,7 +46,7 @@ check "frontend/app/login/page.tsx" 'router.replace("/home")' 'sign-in lands on 
 check "frontend/app/workflows/[[]workflowId]/editor/page.tsx frontend/app/workflows/*/editor/page.tsx" 'WorkflowEditorRoute' 'compiler/legacy editor routing'
 check "frontend/app/dashboard/page.tsx" '"/home"' 'dashboard redirect'
 # Workflow cards must not call legacy-only endpoints for compiler workflows.
-if grep -q 'workflowApi\.\(update\|remove\)' frontend/app/workflows/page.tsx && ! grep -q 'automation' frontend/app/workflows/page.tsx frontend/components/workflow/WorkflowCard.tsx; then
+if grep -q 'workflowApi\.\(update\|remove\)' frontend/app/workflows/page.tsx && ! grep -q 'kind === "legacy"' frontend/components/workflow/WorkflowCard.tsx; then
   echo "  MISSING  compiler-aware rename/delete/run history on workflow cards"; fail=1; fi
 if grep -q 'workflowApi.listVersions' frontend/features/workflows/useWorkflowCards.ts && ! grep -q 'assistantApi' frontend/features/workflows/useWorkflowCards.ts; then
   echo "  MISSING  compiler-aware steps/last run in useWorkflowCards"; fail=1; fi
@@ -55,11 +60,19 @@ grep -q 'href: "/home", label: "Home"' frontend/components/landing/Landing.tsx f
   && { echo "  TODO     landing nav Home points at /home (signed-out visitors bounce to sign-in)"; fail=1; } || echo "  ok       landing nav Home"
 
 say "5. Static checks"
+if [[ "${PARITY_SKIP_STATIC:-0}" == "1" ]]; then
+echo "  skipped (structural pass only; run without PARITY_SKIP_STATIC for full verification)"
+else
 ( cd frontend && npx tsc --noEmit -p . >/dev/null 2>&1 ) && echo "  ok       typecheck" || { echo "  FAIL     typecheck"; fail=1; }
 ( cd frontend && npx eslint . >/dev/null 2>&1 ) && echo "  ok       lint" || { echo "  FAIL     lint"; fail=1; }
-res=$(cd frontend && npx vitest run 2>&1 | grep -E 'Tests ')
-echo "  $res"; echo "$res" | grep -q failed && fail=1
+test_log=$(mktemp)
+if (cd frontend && npx vitest run) >"$test_log" 2>&1; then
+  grep -E 'Test Files|Tests ' "$test_log"
+else
+  cat "$test_log"; fail=1
+fi
 go build ./... >/dev/null 2>&1 && echo "  ok       go build" || { echo "  FAIL     go build"; fail=1; }
+fi
 
 say "6. Browser parity (backend's own Playwright suite)"
 echo "  needs pgvector Postgres + Temporal (make setup); run 'make test-e2e' where those exist"

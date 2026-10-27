@@ -26,6 +26,7 @@ test("account settings keep Google setup and existing settings accessible", asyn
   await page.reload();
   await expect(page.getByTestId("provider-google")).toBeVisible();
   await page.goto("/files");
-  await expect(page).toHaveURL(/\/knowledge\/files$/);
-  await expect(page.getByRole("navigation", { name: "Knowledge sections" }).getByRole("link", { name: "Files & outputs" })).toHaveAttribute("aria-current", "page");
+  await expect(page).toHaveURL(/\/library$/);
+  await expect(page.getByTestId("files")).toBeVisible();
+  await expect(page.getByTestId("knowledge")).toBeVisible();
 });
