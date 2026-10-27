@@ -1,0 +1,52 @@
+/* Motifs (flat colour + pattern + one shape) and the decorated page-header backdrop. */
+
+/* --- Motifs: flat colour, a pattern and one bold shape (no gradients) -------- */
+.motif { position: relative; overflow: hidden; isolation: isolate; }
+.motif::before, .motif::after { content: ""; position: absolute; z-index: -1; pointer-events: none; }
+.motif::before { inset: 0; }
+.motif-teal { background-color: #2a9d8f; }
+.motif-teal::before { background-image: radial-gradient(rgba(255, 255, 255, .3) 1.2px, transparent 1.7px); background-size: 12px 12px; }
+.motif-teal::after { width: 120px; height: 120px; right: -34px; top: -52px; border-radius: 50%; background: #e9c46a; opacity: .9; }
+.motif-charcoal { background-color: #264653; }
+.motif-charcoal::before { background-image: linear-gradient(rgba(255, 255, 255, .08) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, .08) 1px, transparent 1px); background-size: 16px 16px; }
+.motif-charcoal::after { width: 110px; height: 110px; left: -40px; bottom: -56px; border-radius: 50%; border: 16px solid #2a9d8f; }
+.motif-sun { background-color: #e9c46a; }
+.motif-sun::before { background-image: repeating-linear-gradient(-45deg, rgba(14, 19, 22, .07) 0 2px, transparent 2px 11px); }
+.motif-sun::after { width: 92px; height: 92px; right: 18px; bottom: -46px; border-radius: 50%; background: #e76f51; }
+.motif-peach { background-color: #e76f51; }
+.motif-peach::before { background-image: repeating-radial-gradient(circle at 100% 0, rgba(255, 255, 255, .16) 0 2px, transparent 2px 15px); }
+.motif-peach::after { width: 64px; height: 64px; left: 16px; bottom: -22px; background: #264653; transform: rotate(18deg); border-radius: 10px; }
+.motif-sandy { background-color: #f4a261; }
+.motif-sandy::before { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='14'%3E%3Cpath d='M0 7 Q10 0 20 7 T40 7' fill='none' stroke='%23264653' stroke-opacity='.14' stroke-width='2'/%3E%3C/svg%3E"); background-size: 40px 14px; }
+.motif-sandy::after { width: 0; height: 0; right: 22px; top: -6px; border-left: 34px solid transparent; border-right: 34px solid transparent; border-top: 58px solid #2a9d8f; }
+
+/* --- Backdrop: decorations behind page headers ------------------------------- */
+.backdrop { position: absolute; inset: 0; z-index: -1; pointer-events: none; overflow: hidden; }
+.bd-dots { position: absolute; inset: 0; background-image: radial-gradient(rgba(38, 70, 83, .18) 1px, transparent 1.3px); background-size: 20px 20px;
+  mask-image: radial-gradient(75% 95% at 50% 40%, #000 35%, transparent 80%); -webkit-mask-image: radial-gradient(75% 95% at 50% 40%, #000 35%, transparent 80%); }
+.bd-rings { position: absolute; width: 260px; height: 260px; fill: none; stroke: #2a9d8f; stroke-width: 1.2; opacity: .35; animation: bd-turn 60s linear infinite; }
+.bd-rings circle:nth-child(2) { stroke: #e9c46a; stroke-dasharray: 4 8; } .bd-rings circle:nth-child(3) { stroke: #e76f51; }
+.bd-rings.left { left: -110px; top: -90px; } .bd-rings.right { right: -120px; bottom: -150px; animation-direction: reverse; }
+@keyframes bd-turn { to { transform: rotate(360deg); } }
+.bd-shape { position: absolute; animation: bd-bob 8s ease-in-out infinite; }
+.bd-shape.circle { width: 22px; height: 22px; border-radius: 50%; background: #e9c46a; left: 18%; top: 18%; }
+.bd-shape.square { width: 16px; height: 16px; border-radius: 4px; background: #e76f51; right: 20%; top: 20%; transform: rotate(20deg); animation-delay: -2s; }
+.bd-shape.half { width: 30px; height: 15px; border-radius: 30px 30px 0 0; background: #2a9d8f; left: 26%; bottom: 16%; animation-delay: -4s; }
+.bd-shape.ring { width: 20px; height: 20px; border-radius: 50%; border: 4px solid #264653; right: 30%; bottom: 12%; opacity: .7; animation-delay: -6s; }
+.bd-shape.pill { width: 34px; height: 10px; border-radius: 10px; background: #f4a261; right: 10%; top: 48%; transform: rotate(-24deg); animation-delay: -3s; }
+.bd-shape.dot { width: 9px; height: 9px; border-radius: 50%; background: #264653; left: 9%; top: 62%; animation-delay: -5s; }
+@keyframes bd-bob { 0%, 100% { translate: 0 0; } 50% { translate: 0 -12px; } }
+.bd-flow { position: absolute; top: 50%; display: flex; align-items: flex-start; gap: 0; animation: bd-bob 9s ease-in-out infinite; }
+.bd-flow.left { left: max(20px, calc(50% - 580px)); margin-top: -50px; }
+.bd-flow.right { right: max(20px, calc(50% - 580px)); margin-top: -40px; animation-delay: -4s; }
+.bd-flow > svg { width: 90px; height: 54px; margin: 18px -4px 0; fill: none; stroke: #2a9d8f; stroke-width: 2; stroke-dasharray: 5 7; animation: bd-flowing 1.6s linear infinite; }
+.bd-flow.left .bd-app:last-child, .bd-flow.right .bd-app:first-child { margin-top: 44px; }
+@keyframes bd-flowing { to { stroke-dashoffset: -24; } }
+.bd-app { width: 40px; height: 40px; border-radius: 12px; background: #fff; display: grid; place-items: center; box-shadow: 0 1px 2px rgba(18, 24, 27, .06), 0 10px 22px -12px rgba(18, 24, 27, .35); }
+.bd-app.lone { position: absolute; width: 34px; height: 34px; right: max(60px, calc(50% - 470px)); top: 16%; transform: rotate(8deg); animation: bd-bob 7s ease-in-out -1s infinite; }
+.bd-spark { position: absolute; color: #e9c46a; font-size: 18px; animation: bd-twinkle 4s ease-in-out infinite; }
+.bd-spark.s1 { left: 34%; top: 14%; } .bd-spark.s2 { right: 36%; bottom: 10%; color: #e76f51; font-size: 14px; animation-delay: -1.5s; }
+.bd-spark.s3 { left: 12%; bottom: 26%; color: #2a9d8f; font-size: 12px; animation-delay: -2.6s; }
+@keyframes bd-twinkle { 0%, 100% { transform: scale(.8) rotate(0); opacity: .4; } 50% { transform: scale(1.15) rotate(45deg); opacity: 1; } }
+@media (max-width: 960px) { .bd-flow, .bd-app.lone, .bd-rings { display: none; } }
+@media (prefers-reduced-motion: reduce) { .backdrop * { animation: none !important; } }
