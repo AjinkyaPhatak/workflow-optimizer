@@ -56,11 +56,14 @@ function Dashboard() {
           <div className="wf-hero-inner">
             <span className="wf-eyebrow">Your workflows</span>
             <h1>What would you like to automate?</h1>
-            <p>Build from scratch, or start from one of our ready-made templates.</p>
+            <p>Describe what you need, or start from a blank canvas or template.</p>
             {canCreate && (
-              <button type="button" className="wf-new" onClick={() => setCreating(true)}>
-                <span aria-hidden>+</span> New workflow
-              </button>
+              <div className="row center">
+                <Link className="wf-new" href="/home">Build with the assistant →</Link>
+                <button type="button" className="wf-pill" onClick={() => setCreating(true)}>
+                  <span aria-hidden>+</span> New workflow
+                </button>
+              </div>
             )}
             <div className="wf-suggest">
               {suggestions.map((t) => {
@@ -101,7 +104,7 @@ function Dashboard() {
           ) : (
             <div className="wf-grid">
               {shown.map((wf) => (
-                <WorkflowCard key={wf.id} wf={wf} details={cards.details.get(wf.id)} catalog={cards.catalog} canEdit={canEdit}
+                <WorkflowCard key={wf.id} wf={wf} details={cards.details.get(wf.id)} catalog={cards.catalog} kind={cards.kinds.get(wf.id)} canEdit={canEdit}
                   onRename={async (name) => {
                     await workflowApi.update(wf.id, { name });
                     d.reload();
