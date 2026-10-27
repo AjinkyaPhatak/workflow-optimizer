@@ -12,12 +12,15 @@ import { Showcase } from "./Showcase";
 
 function Nav({ signedIn }: { signedIn: boolean }) {
   const [open, setOpen] = useState(false);
+  const sections = SECTIONS
+    .filter(s => signedIn || s.href !== "/automations")
+    .map(s => ({ ...s, href: !signedIn && s.href === "/home" ? "/" : s.href }));
   return (
     <header className="lp-nav-wrap">
       <nav className="lp-nav" aria-label="Main">
         <Link href="/" className="lp-logo"><BrandMark size={22} /> Workflow Optimizer</Link>
         <div className={`lp-nav-links${open ? " is-open" : ""}`}>
-          {SECTIONS.map((s) => (
+          {sections.map((s) => (
             <Link key={s.href} href={s.href} className={s.href === "/" ? "is-on" : undefined} aria-current={s.href === "/" ? "page" : undefined}
               onClick={() => setOpen(false)}>{s.label}</Link>
           ))}
@@ -25,7 +28,7 @@ function Nav({ signedIn }: { signedIn: boolean }) {
         </div>
         <span className="lp-spacer" />
         {signedIn ? (
-          <Link className="lp-btn lp-btn-primary lp-btn-sm" href="/workflows">Open app</Link>
+          <Link className="lp-btn lp-btn-primary lp-btn-sm" href="/home">Open app</Link>
         ) : (
           <>
             <Link className="lp-btn lp-btn-sun lp-btn-sm" href="/login">Sign in</Link>

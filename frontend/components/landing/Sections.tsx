@@ -117,8 +117,8 @@ export function Footer({ signedIn }: { signedIn: boolean }) {
         <div className="lp-foot-cta">
           <h3>Ready when you are</h3>
           <p>Pick a template, fill in the blanks, press Run.</p>
-          <Link className="lp-btn lp-btn-primary" href={signedIn ? "/workflows" : "/login"}>
-            {signedIn ? "Open my workflows" : "Get started for free"}
+          <Link className="lp-btn lp-btn-primary" href={signedIn ? "/home" : "/login"}>
+            {signedIn ? "Open app" : "Get started for free"}
           </Link>
         </div>
         <nav className="lp-foot-links" aria-label="Footer">

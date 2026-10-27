@@ -281,11 +281,11 @@ export function Hero({ signedIn }: { signedIn: boolean }) {
         <p className="lp-lede"><b>AI workflows for everyday work.</b></p>
         <p className="lp-sub">Connect Gmail, Calendar, Sheets and AI into simple step-by-step workflows. No code, and free to start.</p>
         <div className="lp-cta-row">
-          <Link className="lp-btn lp-btn-primary" href={signedIn ? "/workflows" : "/login"}>
-            {signedIn ? "Open my workflows" : "Get started for free"}
+          <Link className="lp-btn lp-btn-primary" href={signedIn ? "/home" : "/login"}>
+            {signedIn ? "Open app" : "Get started for free"}
           </Link>
           <Link className="lp-btn lp-btn-ghost" href="/templates">
-            <span className="lp-spark" aria-hidden>âœ³</span> Browse templates
+            <span className="lp-spark" aria-hidden>✳</span> Browse templates
           </Link>
         </div>
       </div>
