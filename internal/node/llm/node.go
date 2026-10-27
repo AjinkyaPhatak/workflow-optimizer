@@ -81,7 +81,7 @@ func DefinitionFor(providers []providerllm.Info) node.NodeDefinition {
 			node.NewConfigField("credential_id", node.ValueTypeString, false, "", "Workspace credential identifier").WithLabel("Credential"),
 			node.NewConfigField("system", node.ValueTypeString, false, "", "Instructions that shape how the model answers. Used when the system input is not connected; {{variables}} are filled in.").WithLabel("System prompt").WithMultiline(),
 			node.NewConfigField("prompt", node.ValueTypeString, false, "", "What to ask the model. Used when the prompt input is not connected; {{variables}} are filled in.").WithLabel("User prompt").WithMultiline(),
-			node.NewConfigField("image_file", node.ValueTypeString, false, "", "An uploaded image (Files page) for the model to look at. Needs a model that accepts images, e.g. Gemini Flash, GPT-4o or Llama 4 Scout.").
+			node.NewConfigField("image_file", node.ValueTypeString, false, "", "An uploaded image (in the Library) for the model to look at. Needs a model that accepts images, e.g. Gemini Flash, GPT-4o or Llama 4 Scout.").
 				WithLabel("Image").WithOptionsSource("image_files"),
 			node.NewConfigField("image_urls", node.ValueTypeString, false, "", "Images on the web: one https:// URL per line. {{variables}} are filled in.").
 				WithLabel("Image URLs").WithMultiline(),

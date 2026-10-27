@@ -23,7 +23,7 @@ const (
 )
 
 func baseField() node.ConfigField {
-	return node.NewConfigField("knowledge_base_id", node.ValueTypeString, true, "", "A knowledge base of this workspace (Knowledge page).").
+	return node.NewConfigField("knowledge_base_id", node.ValueTypeString, true, "", "A knowledge base of this workspace (in the Library).").
 		WithLabel("Knowledge base").WithOptionsSource("knowledge_bases")
 }
 

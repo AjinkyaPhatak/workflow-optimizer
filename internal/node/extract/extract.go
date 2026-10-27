@@ -33,7 +33,7 @@ func Definition() node.NodeDefinition {
 			node.NewPortDefinition("truncated", node.ValueTypeBoolean, true, "Whether the text was cut at 2 MB"),
 		},
 		Config: []node.ConfigField{
-			node.NewConfigField("file_id", node.ValueTypeString, false, "", "A file uploaded on the Files page. Used when no file is connected.").
+			node.NewConfigField("file_id", node.ValueTypeString, false, "", "A file uploaded in the Library. Used when no file is connected.").
 				WithLabel("File").WithOptionsSource("files"),
 		},
 	}

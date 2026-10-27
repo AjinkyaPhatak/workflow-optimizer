@@ -16,7 +16,7 @@ func Definition() node.NodeDefinition {
 	return node.NodeDefinition{
 		Type:        NodeType,
 		Name:        "Input",
-		Description: "Where a run starts. With a Field name it asks for one value when you run the workflow (text, or a file from the Files page); without one it passes on everything the run was given.",
+		Description: "Where a run starts. With a Field name it asks for one value when you run the workflow (text, or a file from the Library); without one it passes on everything the run was given.",
 		Category:    node.CategoryGeneral,
 		Role:        node.SemanticRoleEntry,
 		Inputs:      []node.PortDefinition{},
@@ -28,7 +28,7 @@ func Definition() node.NodeDefinition {
 			node.NewConfigField(FieldConfig, node.ValueTypeString, false, "", "What this input is called, e.g. topic or email. The Run form asks for it.").WithLabel("Field name"),
 			node.NewConfigField(TypeConfig, node.ValueTypeString, false, TypeText, "What kind of value to ask for.").WithLabel("Type").WithOptions(
 				node.ConfigOption{Value: TypeText, Label: "Text"},
-				node.ConfigOption{Value: TypeFile, Label: "File (from the Files page)"},
+				node.ConfigOption{Value: TypeFile, Label: "File (from the Library)"},
 			),
 		},
 	}

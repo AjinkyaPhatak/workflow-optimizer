@@ -5,7 +5,7 @@
   "category": "Writing",
   "order": 6,
   "setup": [
-    "Upload the document on the Files page (PDF, text, Markdown or CSV); the Run window lets you pick it."
+    "Upload the document in the Library (PDF, text, Markdown or CSV); the Run window lets you pick it."
   ],
   "definition": {
     "version": 1,

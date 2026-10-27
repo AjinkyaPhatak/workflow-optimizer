@@ -61,7 +61,7 @@ func Definition(providers []Provider) node.NodeDefinition {
 			providerField,
 			modelField,
 			node.NewConfigField("credential_id", node.ValueTypeString, false, "", "The API key of the service.").WithLabel("Credential"),
-			node.NewConfigField("audio_file", node.ValueTypeString, false, "", "A recording uploaded on the Files page. Used when no recording is connected.").
+			node.NewConfigField("audio_file", node.ValueTypeString, false, "", "A recording uploaded in the Library. Used when no recording is connected.").
 				WithLabel("Recording").WithOptionsSource("audio_files"),
 			node.NewConfigField("language", node.ValueTypeString, false, "", "The spoken language as a two-letter code (en, hi, es...). Empty: detected automatically.").WithLabel("Language"),
 		},

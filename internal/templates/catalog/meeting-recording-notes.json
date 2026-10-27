@@ -5,7 +5,7 @@
   "category": "Meetings",
   "order": 2,
   "setup": [
-    "Upload the recording (MP3, M4A, WAV, up to 14 MB) on the Files page; the Run window lets you pick it."
+    "Upload the recording (MP3, M4A, WAV, up to 14 MB) in the Library; the Run window lets you pick it."
   ],
   "definition": {
     "version": 1,
