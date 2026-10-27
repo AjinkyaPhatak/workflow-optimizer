@@ -19,7 +19,7 @@ stream = io.StringIO()
 with contextlib.redirect_stdout(stream):
     if request.get("code"):
         exec(compile(request["code"], "<analysis>", "exec"),
-             {"df": df, "pd": pd, "__name__": "__main__"})
+             {"df": df, "rows": data, "pd": pd, "__name__": "__main__"})
     else:
         numeric = df.apply(lambda col: pd.to_numeric(col.astype(str).str.replace(",", ""),
                                                     errors="coerce"))

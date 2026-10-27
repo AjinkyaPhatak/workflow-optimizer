@@ -34,6 +34,105 @@ function mount(saved: AssistantSession) {
 }
 
 describe("automatic workflow doctor", () => {
+  it.each([new TypeError("Failed to fetch"), new ApiError(504, "TIMEOUT", "Timed out", null), new ApiError(409, "CONFLICT", "Stale revision", null)])("recovers a saved answer after %s without executing it", async failure => {
+    const view = mount(draft("answer-recovery", 1, false));
+    await waitFor(() => expect(view.result.current.loading).toBe(false));
+    const latest = draft("answer-recovery", 2, false);
+    api.get.mockResolvedValue(latest);
+    api.answer.mockRejectedValue(failure);
+    const reads = api.get.mock.calls.length;
+    await act(async () => { await view.result.current.answer("report_name", "Updated report"); });
+    expect(api.get).toHaveBeenCalledTimes(reads + 1);
+    expect(view.result.current.session?.revision).toBe(2);
+    expect(view.result.current.busy).toBe(false);
+    expect(view.result.current.building).toBe(false);
+    expect((view.result.current.error as Error).message).toContain("latest saved workflow");
+    expect(api.answer).toHaveBeenCalledTimes(1);
+    expect(api.start).not.toHaveBeenCalled();
+    expect(api.repair).not.toHaveBeenCalled();
+  });
+  it("preserves the original answer failure when the saved revision has not advanced", async () => {
+    const view = mount(draft("answer-unchanged", 1, false));
+    await waitFor(() => expect(view.result.current.loading).toBe(false));
+    const failure = new TypeError("Failed to fetch");
+    api.answer.mockRejectedValue(failure);
+    await act(async () => { await expect(view.result.current.answer("report_name", "Updated report")).rejects.toBe(failure); });
+    expect(view.result.current.session?.revision).toBe(1);
+    expect(view.result.current.building).toBe(false);
+    expect(api.start).not.toHaveBeenCalled();
+    expect(api.repair).not.toHaveBeenCalled();
+  });
+  it("preserves the original failure if recovery cannot read the saved session", async () => {
+    const view = mount(draft("recovery-unavailable", 1, false));
+    await waitFor(() => expect(view.result.current.loading).toBe(false));
+    const failure = new TypeError("Failed to fetch");
+    api.answer.mockRejectedValue(failure);
+    api.get.mockRejectedValue(new TypeError("Still offline"));
+    await act(async () => { await expect(view.result.current.answer("report_name", "Updated report")).rejects.toBe(failure); });
+    expect(view.result.current.session?.revision).toBe(1);
+    expect(view.result.current.building).toBe(false);
+  });
+  it("keeps validation failures without fetching or retrying the answer", async () => {
+    const view = mount(draft("answer-invalid", 1, false));
+    await waitFor(() => expect(view.result.current.loading).toBe(false));
+    const failure = new ApiError(422, "VALIDATION_ERROR", "Invalid answer", null);
+    const reads = api.get.mock.calls.length;
+    api.answer.mockRejectedValue(failure);
+    await act(async () => { await expect(view.result.current.answer("report_name", "")).rejects.toBe(failure); });
+    expect(api.get).toHaveBeenCalledTimes(reads);
+    expect(api.answer).toHaveBeenCalledTimes(1);
+  });
+  it.each([true, false])("clears a lost send only when persisted user text matches: %s", async matches => {
+    const initial = draft("send-recovery", 1, false);
+    const view = mount(initial);
+    await waitFor(() => expect(view.result.current.loading).toBe(false));
+    const latest = draft("send-recovery", 2, false);
+    latest.messages = [{ role: "user", text: matches ? "Update report" : "Another tab changed this", created_at: "" }, { role: "assistant", text: "Done", created_at: "" }];
+    api.get.mockResolvedValueOnce(initial).mockResolvedValue(latest);
+    api.message.mockRejectedValue(new TypeError("Failed to fetch"));
+    await act(async () => { expect(await view.result.current.send("Update report")).toBe(matches); });
+    expect(view.result.current.session?.revision).toBe(2);
+    expect(view.result.current.building).toBe(false);
+    expect(api.message).toHaveBeenCalledTimes(1);
+    expect(api.start).not.toHaveBeenCalled();
+    expect(api.repair).not.toHaveBeenCalled();
+  });
+  it("does not automatically repair a recovered broken compilation", async () => {
+    const view = mount(draft("recovered-broken", 1, false));
+    await waitFor(() => expect(view.result.current.loading).toBe(false));
+    api.get.mockResolvedValue(draft("recovered-broken", 2));
+    api.answer.mockRejectedValue(new TypeError("Failed to fetch"));
+    await act(async () => { await view.result.current.answer("report_name", "Updated report"); });
+    expect(view.result.current.session?.revision).toBe(2);
+    expect(view.result.current.doctorFailure).toBeTruthy();
+    expect(api.repair).not.toHaveBeenCalled();
+    expect(api.start).not.toHaveBeenCalled();
+  });
+  it("ignores saved recovery arriving after an explicit interruption", async () => {
+    const view = mount(draft("recovery-interrupted", 1, false));
+    await waitFor(() => expect(view.result.current.loading).toBe(false));
+    let finish!: (saved: AssistantSession) => void;
+    api.get.mockImplementation(() => new Promise<AssistantSession>(resolve => { finish = resolve; }));
+    api.answer.mockRejectedValue(new TypeError("Failed to fetch"));
+    let answering!: Promise<void>;
+    act(() => { answering = view.result.current.answer("report_name", "Updated report"); });
+    await waitFor(() => expect(finish).toBeTypeOf("function"));
+    act(() => view.result.current.interrupt());
+    await act(async () => { finish(draft("recovery-interrupted", 2, false)); await answering; });
+    expect(view.result.current.session?.revision).toBe(1);
+    expect(view.result.current.error).toBeNull();
+    expect(view.result.current.building).toBe(false);
+    expect(api.start).not.toHaveBeenCalled();
+  });
+  it("does not recover an explicitly aborted request", async () => {
+    const view = mount(draft("answer-aborted", 1, false));
+    await waitFor(() => expect(view.result.current.loading).toBe(false));
+    const reads = api.get.mock.calls.length;
+    api.answer.mockRejectedValue(new DOMException("Aborted", "AbortError"));
+    await act(async () => { await view.result.current.answer("report_name", "Updated report"); });
+    expect(api.get).toHaveBeenCalledTimes(reads);
+    expect(view.result.current.building).toBe(false);
+  });
   it.each(["session", "run"])("opens an empty canvas for a removed %s without treating the workspace as broken", async kind => {
     api.get.mockRejectedValue(new ApiError(404, "NOT_FOUND", "Unavailable", null));
     api.run.mockRejectedValue(new ApiError(404, "NOT_FOUND", "Unavailable", null));

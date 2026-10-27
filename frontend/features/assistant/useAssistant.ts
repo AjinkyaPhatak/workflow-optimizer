@@ -129,6 +129,22 @@ export function useAssistant(workflowId?: string) {
     setCurrentSession(saved); setSessions(previous => [saved, ...previous.filter(s => s.id !== saved.id)]);
     window.history.replaceState(null, "", workflowId ? "/workflows/" + encodeURIComponent(saved.id) + "/editor" : "/home?session=" + encodeURIComponent(saved.id));
   }, [workflowId, setCurrentSession]);
+  const recoverSaved = useCallback(async (err: unknown, active: AssistantSession, current: number, signal: AbortSignal) => {
+    if (current !== turn.current || signal.aborted || (err as Error)?.name === "AbortError") return null;
+    if (err instanceof ApiError && err.status !== 409 && err.status < 500) return null;
+    try {
+      // The server may have committed before its response was lost. Read once;
+      // never repeat a mutation or execute a result recovered this way.
+      const latest = await assistantApi.get(active.id);
+      if (current !== turn.current || signal.aborted || latest.revision <= active.revision) return null;
+      autoRunAfterDoctor.current = null;
+      markDoctored(latest.id, latest.revision);
+      if (latest.compilation?.diagnostics.length) setDoctorFailure(DOCTOR_STOPPED);
+      remember(latest);
+      setError(new Error("The response was interrupted. The latest saved workflow has been loaded. Review it before continuing."));
+      return latest;
+    } catch { return null; }
+  }, [remember]);
   const send = useCallback(async (text: string) => {
     if (!text.trim() || buildingRef.current) return false;
     if (!workspaceId) {
@@ -141,8 +157,9 @@ export function useAssistant(workflowId?: string) {
     autoRunAfterDoctor.current = null;
     setBusy(true); setBuilding(true); setRepairing(false); setDoctorFailure(null); setPending(text); setError(null);
     let accepted = false;
+    let active: AssistantSession | null = null;
     try {
-      const active = sessionRef.current ? await assistantApi.get(sessionRef.current.id) : await assistantApi.create(workspaceId, credentialId || undefined);
+      active = sessionRef.current ? await assistantApi.get(sessionRef.current.id) : await assistantApi.create(workspaceId, credentialId || undefined);
       if (current !== turn.current) return false;
       remember(active);
       const next = await assistantApi.message(active.id, active.revision, text, controller.signal);
@@ -156,10 +173,14 @@ export function useAssistant(workflowId?: string) {
         if (current === turn.current) setRun(started);
       }
     } catch (err) {
-      if (current === turn.current && (err as Error).name !== "AbortError") setError(err);
+      const latest = !accepted && active ? await recoverSaved(err, active, current, controller.signal) : null;
+      if (latest) {
+        const lastUserMessage = latest.messages.findLast(message => message.role === "user");
+        accepted = lastUserMessage?.text === text;
+      } else if (current === turn.current && !controller.signal.aborted && (err as Error).name !== "AbortError") setError(err);
     } finally { if (current === turn.current) { setBusy(false); setBuilding(false); setPending(""); } }
     return accepted;
-  }, [workspaceId, credentialId, remember, setBuilding]);
+  }, [workspaceId, credentialId, remember, recoverSaved, setBuilding]);
   const answer = useCallback(async (id: string, value: unknown) => {
     if (run?.question) { await assistantApi.answerRun(run, id, value); return; }
     const active = sessionRef.current;
@@ -167,19 +188,25 @@ export function useAssistant(workflowId?: string) {
     const current = ++turn.current;
     request.current?.abort(); autoRunAfterDoctor.current = null;
     const controller = new AbortController(); request.current = controller;
-    setBusy(true); setBuilding(true); setRepairing(false); setDoctorFailure(null);
+    setBusy(true); setBuilding(true); setRepairing(false); setDoctorFailure(null); setError(null);
+    let saved = false;
     try {
       const next = await assistantApi.answer(active.id, active.revision, id, value, controller.signal);
       if (current !== turn.current) return;
       remember(next);
+      saved = true;
       const policy = executionPolicy.current;
       if (policy.autoExecute && !policy.run && next.compilation?.diagnostics.length) autoRunAfterDoctor.current = next.id;
       if (policy.autoExecute && next.compilation?.ready && !policy.run) {
         const started = await assistantApi.start(next.id, next.revision);
         if (current === turn.current) setRun(started);
       }
+    } catch (err) {
+      if (!saved && await recoverSaved(err, active, current, controller.signal)) return;
+      if (current !== turn.current || controller.signal.aborted || (err as Error).name === "AbortError") return;
+      throw err;
     } finally { if (current === turn.current) { setBusy(false); setBuilding(false); } }
-  }, [run, remember, setBuilding]);
+  }, [run, remember, recoverSaved, setBuilding]);
   const repair = useCallback(async () => {
     if (!session) return;
     const current = ++turn.current;

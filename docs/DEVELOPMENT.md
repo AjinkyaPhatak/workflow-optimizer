@@ -70,9 +70,11 @@ V2 runs use Temporal with separate PostgreSQL projections, artifacts and action
 ledgers. Legacy claims and Redis queues never own v2 execution.
 The browser talks to Next.js, which proxies `/api/v1/*` to Go. Configuration
 controls in the editor come from backend node metadata.
-The Next.js proxy timeout is five minutes, exceeding the assistant compilation
-and import handlers' four-minute write deadline. The default thirty-second proxy
-timeout otherwise resets slow planner requests and surfaces a generic HTTP 500.
+Assistant planning has a six-minute context budget. Its socket write deadline
+allows another fifteen seconds to deliver a JSON timeout response, and Next.js
+keeps the proxy open for seven minutes. Execution and authenticated SSE retain
+their separate lifecycle rules. A proxy or socket deadline shorter than planning
+can otherwise lose a response after its draft revision was already committed.
 
 ## Validation
 

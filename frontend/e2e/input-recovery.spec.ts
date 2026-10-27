@@ -87,6 +87,8 @@ test("real voice client keeps later transcripts in the current session and recov
   expect(new URL(page.url()).searchParams.get("session")).toBe(firstSession);
   await expect.poll(() => closes).toBe(2);
   expect(commits).toBe(2);
+  // The transcript can finish before the resulting AI build unlocks editing.
+  await expect(page.getByRole("button", { name: "Hold to speak" })).toBeEnabled();
   await page.getByRole("button", { name: "Hold to speak" }).focus();
   await page.keyboard.down("Space");
   await expect(page.getByRole("button", { name: "Release to send", exact: true })).toBeVisible();

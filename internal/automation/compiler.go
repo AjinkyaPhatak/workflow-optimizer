@@ -23,6 +23,9 @@ For ai.write, text must contain the actual user brief for original writing or re
 actual upstream source for a report. Never supply an empty source or make up missing results.
 Use branches for decisions, parallel for independent work, map for lists, repeat with a limit,
 workflow for saved version-pinned plans, wait for events/delays, ask for human decisions.
+Use the supplied controls' exact inputs and outputs. Every group exposes result, never results.
+Map/repeat result is a list of iterations, each containing child-step IDs and their output fields;
+parallel result contains child-step IDs and their output fields. Branch result has matched and outputs.
 For a linked workflow, use an exact ref from the supplied workflows list; never invent a version ID.
 Use continuous mode only when explicitly requested, with the user's explicit budgets.
 Fresh facts require web search. Keep citations and dates. Do not fabricate market data.
@@ -56,6 +59,15 @@ or detail should be included (purpose intent). Intent answers are planning guida
 never literal outgoing content. After an intent answer rebuild the content dataflow;
 remove the resolved intent question, preserve supplied facts, recipients, threshold decisions
 and the same outgoing action IDs/tools. An explicitly supplied exact message uses purpose value.
+An ask-only draft is an unfinished planning scaffold. A scope or parameter intent answer
+completes the original request: build its research and analysis steps and only the external
+actions already requested in the user's messages. Do not treat the scaffold's lack of actions
+as an instruction to omit a requested action. A content question attached to an existing
+email still preserves that email's action, destination and decision guards exactly.
+When the person delegates a non-high-risk methodological default, choose a reasonable
+explicit assumption and explain it in the summary; do not repeat the answered question.
+Do not claim a universal industry standard or invent facts, recipients or permissions.
+Delegating a default never authorizes a new external action or overrides an explicit threshold.
 Summary describes the intended outcome in ordinary English. Do not claim that a repair
 passed validation, or mention internal operator codes, schema names or type jargon.
 Return a complete plan, not code or a promise.`
@@ -68,14 +80,15 @@ var stepID = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_-]{0,79}$`)
 func HasPlaceholder(s string) bool { return placeholder.MatchString(s) }
 
 type PlanRequest struct {
-	Workflows      []WorkflowChoice `json:"workflows,omitempty"`
-	Repair         bool             `json:"repair"`
-	IntentQuestion *Question        `json:"intent_question,omitempty"`
-	Messages       []Message        `json:"messages"`
-	Tools          []ToolDescriptor `json:"tools"`
-	Previous       *Plan            `json:"previous"`
-	Answers        map[string]any   `json:"answers"`
-	Diagnostics    []Diagnostic     `json:"diagnostics"`
+	Workflows      []WorkflowChoice    `json:"workflows,omitempty"`
+	Controls       []ControlDescriptor `json:"controls"`
+	Repair         bool                `json:"repair"`
+	IntentQuestion *Question           `json:"intent_question,omitempty"`
+	Messages       []Message           `json:"messages"`
+	Tools          []ToolDescriptor    `json:"tools"`
+	Previous       *Plan               `json:"previous"`
+	Answers        map[string]any      `json:"answers"`
+	Diagnostics    []Diagnostic        `json:"diagnostics"`
 }
 type Planner interface {
 	Generate(context.Context, PlanRequest) (Plan, error)
@@ -92,6 +105,7 @@ func (c *Compiler) Compile(ctx context.Context, req PlanRequest) (Compilation, e
 		return Compilation{}, ErrUnavailable
 	}
 	req.Tools = c.Tools
+	req.Controls = ControlDescriptors()
 	if req.Repair && req.IntentQuestion == nil && req.Previous != nil {
 		for _, q := range req.Previous.Questions {
 			if q.Purpose == "intent" {
@@ -102,6 +116,12 @@ func (c *Compiler) Compile(ctx context.Context, req PlanRequest) (Compilation, e
 				}
 			}
 		}
+	}
+	// Resolving an ask-only scaffold finishes initial planning, with the same
+	// authority as the original request. Its absent action graph is not a
+	// repair baseline. Executable drafts retain all repair protections.
+	if req.Previous != nil && req.IntentQuestion != nil && IsPlanningClarification(*req.Previous, *req.IntentQuestion) {
+		req.Repair = false
 	}
 	retainIntentDraft := func(out Compilation) Compilation {
 		if req.IntentQuestion != nil && req.Previous != nil && len(out.Diagnostics) > 0 {
@@ -348,7 +368,13 @@ func Check(plan Plan, tools []ToolDescriptor) Compilation {
 							}
 						}
 						if from == "" {
-							add(s.ID, "PORT", "The source does not declare output "+port+".")
+							ports := make([]string, 0, len(source.Outputs))
+							for _, field := range source.Outputs {
+								ports = append(ports, field.Name)
+							}
+							out.Diagnostics = append(out.Diagnostics, Diagnostic{StepID: s.ID, Code: "PORT",
+								Message:    "I need to reconnect a result used by this step.",
+								RepairHint: fmt.Sprintf("Input %s references %s, but step %s declares outputs: %s. Use an exact declared output and preserve the requested dataflow.", b.Name, b.Ref, root, strings.Join(ports, ", "))})
 						} else if to != "" && from != to && from != "json" && to != "json" {
 							add(s.ID, "CONVERSION", fmt.Sprintf("Add an explicit conversion from %s to %s for %s.", from, to, b.Name))
 						}

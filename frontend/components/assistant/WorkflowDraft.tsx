@@ -36,6 +36,7 @@ function CanvasEditor({ plan, tools, comparisons = [], selectedStep, onSelectSte
   const redo = useCallback(() => { if (!lockedRef.current) redoDraft(); }, [redoDraft]);
   const flow = useReactFlow<PlanFlowNode>();
   const [selected, setSelected] = useState<string[]>([]), [positions, setPositions] = useState<Positions>(layout?.positions ?? {});
+  const [measurements, setMeasurements] = useState<Record<string, { width: number; height: number }>>({});
   const [layoutDirty, setLayoutDirty] = useState(false), [layoutError, setLayoutError] = useState("");
   const [hint, setHint] = useState(""), [moveTarget, setMoveTarget] = useState("");
   const [selectedEdges, setSelectedEdges] = useState<string[]>([]);
@@ -49,9 +50,16 @@ function CanvasEditor({ plan, tools, comparisons = [], selectedStep, onSelectSte
   useEffect(() => {
     const before = scope.current; scope.current = sessionId;
     if (before === sessionId || !before && sessionId) return;
-    setSelected([]); setPositions(layout?.positions ?? {}); layoutRef.current = layout?.positions ?? {}; setLayoutDirty(false); setLayoutError(""); fitted.current = false;
+    setSelected([]); setMeasurements({}); setPositions(layout?.positions ?? {}); layoutRef.current = layout?.positions ?? {}; setLayoutDirty(false); setLayoutError(""); fitted.current = false;
   }, [sessionId, layout]);
-  useEffect(() => { if (layout === incomingLayout.current) return; incomingLayout.current = layout; if (layout && !layoutDirty && !layoutFlight.current) { setPositions(layout.positions); layoutRef.current = layout.positions; } }, [layout, layoutDirty]);
+  useEffect(() => {
+    if (layout === incomingLayout.current) return;
+    incomingLayout.current = layout;
+    // An empty revision-zero layout can be the async loader's placeholder.
+    if (layout && (layout.revision > 0 || Object.keys(layout.positions).length) && !layoutDirty && !layoutFlight.current) {
+      setPositions(layout.positions); layoutRef.current = layout.positions;
+    }
+  }, [layout, layoutDirty]);
   useEffect(() => { if (selectedStep) setSelected(current => current.length === 1 && current[0] === selectedStep ? current : [selectedStep]); }, [selectedStep]);
   const select = useCallback((id: string) => { setSelected(id ? [id] : []); onSelectStep?.(id); }, [onSelectStep]);
   useEffect(() => { onFlushReady?.(editor.flush); return () => onFlushReady?.(null); }, [editor.flush, onFlushReady]);
@@ -87,7 +95,7 @@ function CanvasEditor({ plan, tools, comparisons = [], selectedStep, onSelectSte
     const descriptor = node.step && tools.find(item => item.id === node.step!.tool);
     const compact = descriptor?.inputs.filter(field => node.step?.inputs.some(binding => binding.name === field.name && binding.source === "literal")).slice(0, 2) ?? [];
     return { id: node.id, type: "plan", position: positions[node.id] ?? node.position, selectable: !!node.step, draggable: !!node.step && !locked,
-      selected: selected.includes(node.id), data: { step: node.step, tool: descriptor, label: node.label, kindName: controls.find(control => control.kind === node.step?.kind)?.name,
+      selected: selected.includes(node.id), measured: measurements[node.id], data: { step: node.step, tool: descriptor, label: node.label, kindName: controls.find(control => control.kind === node.step?.kind)?.name,
         comparison: comparisons.find(option => option.value === node.step?.condition?.op)?.label, onEdit: select, completed: completedSteps.includes(node.id),
         fieldEditor: node.step && compact.length ? <fieldset className="plan-inline-fields" disabled={locked}>{compact.map(field => <BindingEditor key={field.name} compact field={field} binding={node.step!.inputs.find(b => b.name === field.name)} steps={availableSteps(draft, node.id)} tools={tools} plan={draft} onChange={binding => setInput(node.step!, binding)} />)}</fieldset> : undefined } };
   });
@@ -116,8 +124,10 @@ function CanvasEditor({ plan, tools, comparisons = [], selectedStep, onSelectSte
       for (let attempt = 0; attempt < 100 && Object.values(next).some(point => Math.abs(point.x - position.x) < 300 && Math.abs(point.y - position.y) < 350); attempt++) position.y += 420;
       next[node.id] = position; changed = true;
     }
-    if (changed) storePositions(next);
-  }, [graph.nodes, storePositions]);
+    // Derived placement is presentation, not a user arrangement. In particular,
+    // it must not race a saved layout that is still loading after navigation.
+    if (changed) { setPositions(next); layoutRef.current = next; }
+  }, [graph.nodes, layout]);
   useEffect(() => {
     if (!layoutDirty || !sessionId || !layoutSave.current || layoutFlight.current || layoutError || locked || editor.dirty) return;
     const timer = setTimeout(async () => {
@@ -129,6 +139,18 @@ function CanvasEditor({ plan, tools, comparisons = [], selectedStep, onSelectSte
     return () => clearTimeout(timer);
   }, [positions, layoutDirty, layoutError, sessionId, locked, editor.dirty]);
   const onNodesChange = (changes: NodeChange<PlanFlowNode>[]) => {
+    // Controlled nodes must retain React Flow's measurements across renders;
+    // discarding them hides cards and invalidates their connection handles.
+    if (changes.some(change => change.type === "dimensions" && change.dimensions)) setMeasurements(previous => {
+      const next = { ...previous }; let changed = false;
+      for (const item of changes) {
+        if (item.type !== "dimensions" || !item.dimensions) continue;
+        const before = previous[item.id];
+        if (before?.width === item.dimensions.width && before?.height === item.dimensions.height) continue;
+        next[item.id] = item.dimensions; changed = true;
+      }
+      return changed ? next : previous;
+    });
     const selectedChanges = changes.filter(change => change.type === "select");
     if (selectedChanges.length) setSelected(previous => {
       const next = new Set(previous); for (const item of selectedChanges) if (item.type === "select") { if (item.selected) next.add(item.id); else next.delete(item.id); }

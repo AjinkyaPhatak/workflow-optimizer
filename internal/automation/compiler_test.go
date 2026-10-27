@@ -3,6 +3,7 @@ package automation
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 )
 
@@ -35,6 +36,35 @@ func TestRepairDoesNotAddAnExternalAction(t *testing.T) {
 	}
 	if len(out.Diagnostics) == 0 || out.Diagnostics[0].Code != "ACTION_CHANGE" {
 		t.Fatal("external action change did not block repair")
+	}
+}
+
+func TestPlannerReceivesControlOutputContractsWhenRepairing(t *testing.T) {
+	iterations := Step{ID: "history", Kind: "map", MaxIterations: 1, Inputs: []Binding{literal("items", `[1]`)}, Children: []Step{{ID: "prices", Kind: "tool", Tool: "lookup"}}}
+	calls := 0
+	c := Compiler{Tools: testTools, Planner: plannerFunc(func(_ context.Context, req PlanRequest) (Plan, error) {
+		calls++
+		found := false
+		for _, control := range req.Controls {
+			if control.Kind == "map" && len(control.Outputs) == 1 && control.Outputs[0].Name == "result" {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatal("planner lacks the map output contract")
+		}
+		output := "history.results"
+		if calls > 1 {
+			if len(req.Diagnostics) != 1 || !strings.Contains(req.Diagnostics[0].RepairHint, "declares outputs: result") {
+				t.Fatalf("repair lacks the exact source outputs: %+v", req.Diagnostics)
+			}
+			output = "history.result"
+		}
+		return planOf(iterations, Step{ID: "report", Kind: "tool", Tool: "value.text", Inputs: []Binding{{Name: "value", Source: "step", Ref: output}}}), nil
+	})}
+	out, err := c.Compile(context.Background(), PlanRequest{})
+	if err != nil || !out.Ready || calls != 2 {
+		t.Fatalf("map output could not be repaired: ready=%v calls=%d err=%v diagnostics=%+v", out.Ready, calls, err, out.Diagnostics)
 	}
 }
 

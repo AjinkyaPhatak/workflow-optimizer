@@ -35,7 +35,7 @@ func (s *AssistantService) applyDraftIntent(ctx context.Context, user uuid.UUID,
 	compiler := automation.Compiler{Planner: planner, Tools: tools, OnProgress: func(phase string, pass int, plan *automation.Plan) {
 		s.buildProgress(session.ID, token, phase, pass, plan)
 	}}
-	compiled, err := compiler.Compile(ctx, automation.PlanRequest{Workflows: choices, Repair: true, IntentQuestion: &q, Messages: session.Messages, Previous: &session.Compilation.Plan, Answers: session.Answers})
+	compiled, err := compiler.Compile(ctx, automation.PlanRequest{Workflows: choices, Repair: !automation.IsPlanningClarification(session.Compilation.Plan, q), IntentQuestion: &q, Messages: session.Messages, Previous: &session.Compilation.Plan, Answers: session.Answers})
 	if err != nil {
 		return compiled, &InvalidError{Message: err.Error()}
 	}

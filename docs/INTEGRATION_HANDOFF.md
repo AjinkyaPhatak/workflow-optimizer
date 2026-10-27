@@ -12,6 +12,14 @@ copying and source labels. `/knowledge/files` remains a compatibility redirect t
 `/library`; its unused tabs component is removed. Templates and backend screens
 use the new palette and control icons.
 
+Browser verification also found and repaired two canvas issues. Controlled nodes
+now retain React Flow's measured sizes across edits, avoiding hidden cards and
+broken dragging. Derived placement remains local presentation until an authored
+move or Arrange action; delayed saved layouts can arrive without default
+positions overwriting them. Version restoration and saved-template copies retain
+the arrangement. Regression tests cover late loading, explicit drag persistence,
+measurements, preview locks and session changes.
+
 Backend baseline at `9edf2d1`: `make check` passed with 204 frontend tests;
 all 17 browser tests passed. Integration before the final Pearson merge:
 `make check` passed with 217 frontend tests and all 19 browser tests passed.
@@ -29,7 +37,30 @@ No source branch is rebased and `main` remains untouched.
 The Pearson planning/recovery fix `9edf2d1` is merged after the integration
 repairs. Its backend contracts and state recovery remain authoritative; the
 redesigned screens retain the reviewed integration tests and routing changes.
-The final validation record is added when the merged tree has completed checks.
+
+- `TEST_ANALYSIS_IMAGE=workflow-optimizer-analysis:local make check`: passed,
+  including vet, TypeScript, lint, Go tests, three real sandbox tests with
+  synthetic data, and all 228 frontend tests present before adding canvas
+  measurement/layout regression coverage.
+- `make test-race`: passed across all Go packages with disposable PostgreSQL
+  and Redis, including the previously flaky lease stress test.
+- `bash scripts/parity-check.sh`: `RESULT: PASS` on the final source, including
+  typecheck, lint, all 232 frontend tests and Go builds.
+- The full canvas edit/drag/reload/version/template-copy regression passed in
+  isolation and again in the combined browser suite after both UI fixes.
+
+- Final full browser run: 19 passed; the remaining voice quota test pressed a
+  disabled mic before its preceding AI build completed. The test now explicitly
+  awaits the enabled state. All five input-recovery browser tests passed on the
+  focused rerun, covering all 20 browser scenarios against the final application
+  code without changing the build lock or weakening assertions.
+
+- `make build`: passed for API, both workers, connector and the production
+  Next.js application.
+
+Validation logs and the investigation traces remain under ignored
+`.local/integration/`; no environment
+files, provider credentials, application data or generated artifacts are committed.
 
 For the agent finishing the integration on the machine that has the backend
 stack (`make setup` done). Goal: one functional build with the backend's full
@@ -216,7 +247,10 @@ Expected to pass unchanged:
 
 These two existing spec edits plus the new `integration.spec.ts`,
 `workflow-cards.test.tsx` and `library-integration.test.tsx` are the reviewed test
-exceptions in the parity script. All existing backend contracts and state tests
+exceptions in the parity script, alongside the new `canvas-measurements.test.tsx`
+for transient React Flow measurements. The voice recovery spec also waits for the
+mic to unlock after the preceding AI build before starting the next press; the
+build lock itself stays unchanged. All existing backend contracts and state tests
 remain protected. `BACKEND_REF` can pin the pre-Pearson checkpoint while the final
 fix is deliberately deferred. `PARITY_SKIP_STATIC=1` runs structural checks only;
 the default runs the static checks too and propagates test-process failures.
@@ -263,9 +297,11 @@ Compare against `backend-overhaul`: run `make test-e2e` on a checkout of
 `origin/backend-overhaul` first, record the result, then on the integration branch.
 Any test that passes there and fails here is a regression from the merge.
 
-**Known pre-existing failure.** `tests/phase10/runtime_test.go:276`, the lease
-stress test under `make test-race`, also fails on `backend-overhaul` (see
-`docs/DEVELOPMENT.md`). It is not caused by this merge.
+**Historical reliability finding.** Earlier runs of
+`tests/phase10/runtime_test.go:276`, the lease stress test, failed on the backend
+checkpoint (see `docs/DEVELOPMENT.md`). The complete serial integration/race run
+on 2026-10-28 passed, including this stress test. No lease rules or tests were
+changed for the integration.
 
 ### Manual pass after `make dev` (http://localhost:3000)
 

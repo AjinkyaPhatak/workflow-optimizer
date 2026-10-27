@@ -24,7 +24,7 @@ OWNED='^(internal/(?!node/|templates/catalog/)|cmd/|migrations/|workers/|scripts
 drift=$(git diff --name-only "$REF" "$TREE" | grep -P "$OWNED")
 # Deliberate, reviewed exceptions (keep this list short and explained).
 # Additive integration tests cover merged screens; existing backend tests remain owned.
-ALLOW='^(frontend/e2e/(workflow-editor|connected-accounts|integration)\.spec\.ts|frontend/tests/unit/(workflow-cards|library-integration)\.test\.tsx|scripts/parity-check\.sh)$'
+ALLOW='^(frontend/e2e/(workflow-editor|connected-accounts|input-recovery|integration)\.spec\.ts|frontend/tests/unit/(workflow-cards|library-integration|canvas-measurements)\.test\.tsx|scripts/parity-check\.sh)$'
 unexpected=$(printf '%s\n' "$drift" | grep -vP "$ALLOW" | grep .)
 if [ -n "$unexpected" ]; then echo "UNEXPECTED drift:"; echo "$unexpected"; fail=1; else echo "ok"; fi
 [ -n "$drift" ] && echo "allowed drift:" && printf '%s\n' "$drift" | grep -P "$ALLOW"
