@@ -1,24 +1,6 @@
-"use client";
+import { redirect } from "next/navigation";
 
-import { Files } from "@/components/settings/Files";
-import { TopBar } from "@/components/ui/TopBar";
-import { useFiles } from "@/features/files/useFiles";
-import { RequireAuth } from "@/lib/auth/RequireAuth";
-
-function Page() {
-  const state = useFiles();
-  return (
-    <>
-      <TopBar />
-      <Files state={state} />
-    </>
-  );
-}
-
+// Files now live in the Library, together with knowledge bases.
 export default function FilesPage() {
-  return (
-    <RequireAuth>
-      <Page />
-    </RequireAuth>
-  );
+  redirect("/library");
 }

@@ -7,13 +7,13 @@ import { ErrorBanner } from "@/components/ui/ErrorBanner";
 import type { KnowledgeState } from "@/features/knowledge/useKnowledge";
 import type { KnowledgeDocumentStatus, KnowledgeResult } from "@/types/api";
 
-const STATUS: Record<KnowledgeDocumentStatus, { label: string; tone: string }> = {
+export const STATUS: Record<KnowledgeDocumentStatus, { label: string; tone: string }> = {
   INDEXING: { label: "Indexing…", tone: "off" },
   READY: { label: "Ready", tone: "ok" },
   FAILED: { label: "Failed", tone: "bad" },
 };
 
-function CreateBase({ s }: { s: KnowledgeState }) {
+export function CreateBase({ s }: { s: KnowledgeState }) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [credentialId, setCredentialId] = useState("");
@@ -56,7 +56,7 @@ function CreateBase({ s }: { s: KnowledgeState }) {
   );
 }
 
-function AddDocuments({ s }: { s: KnowledgeState }) {
+export function AddDocuments({ s }: { s: KnowledgeState }) {
   const [title, setTitle] = useState("");
   const [text, setText] = useState("");
   const [fileId, setFileId] = useState("");
@@ -103,7 +103,7 @@ function AddDocuments({ s }: { s: KnowledgeState }) {
   );
 }
 
-function TrySearch({ s }: { s: KnowledgeState }) {
+export function TrySearch({ s }: { s: KnowledgeState }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<KnowledgeResult[] | null>(null);
   return (

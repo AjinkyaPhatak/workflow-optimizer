@@ -37,7 +37,7 @@ function Question({ field, value, files, onChange }: { field: RunField; value: s
           <option value="">{files === null ? "Loading files…" : files.length ? "Choose a file…" : "No files yet"}</option>
           {(files ?? []).map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
         </select>
-        <div className="hint">Upload files on the <Link href="/files" target="_blank">Files page</Link>.</div>
+        <div className="hint">Upload files in the <Link href="/library" target="_blank">Library</Link>.</div>
       </div>
     );
   }

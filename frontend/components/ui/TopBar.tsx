@@ -11,8 +11,7 @@ export const SECTIONS = [
   { href: "/", label: "Home" },
   { href: "/workflows", label: "Workflows" },
   { href: "/templates", label: "Templates" },
-  { href: "/knowledge", label: "Knowledge" },
-  { href: "/files", label: "Files" },
+  { href: "/library", label: "Library" },
 ];
 
 /** Settings, in the account menu. */

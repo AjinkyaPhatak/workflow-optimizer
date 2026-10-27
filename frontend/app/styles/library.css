@@ -1,0 +1,43 @@
+/* Library page: files and knowledge bases. */
+
+/* --- Library ------------------------------------------------------------------------- */
+.lib-upload { display: inline-flex; align-items: center; gap: 8px; padding: 7px 14px 7px 8px; border: 1px dashed var(--border-strong); border-radius: 999px;
+  background: rgba(255, 255, 255, .7); color: var(--muted); font-size: 13.5px; }
+.lib-upload .link-button { font-weight: 650; color: var(--primary); padding: 0; min-height: 0; }
+.lib-upload-icon { width: 26px; height: 26px; border-radius: 50%; background: #fdeee9; color: var(--primary); display: grid; place-items: center; }
+.lib-formats { margin-top: 8px; font-size: 12px; color: var(--muted); }
+.lib-files-head { margin-top: 36px; flex-wrap: wrap; }
+.lib-filters { margin: 0; }
+.lib-filters button { min-height: 30px; padding: 0 12px; font-size: 12.5px; }
+.lib-files { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr)); gap: 12px; }
+.lib-file { position: relative; display: flex; gap: 12px; align-items: center; padding: 12px 14px; background: var(--panel); border-radius: 16px;
+  box-shadow: 0 1px 2px rgba(18, 24, 27, .04), 0 8px 20px -16px rgba(18, 24, 27, .3); transition: transform .18s, box-shadow .18s; }
+.lib-file:hover, .lib-file.menu-open { transform: translateY(-2px); box-shadow: 0 0 0 2px var(--verdigris), 0 14px 28px -16px rgba(42, 157, 143, .5); z-index: 2; }
+.lib-type { width: 42px; height: 42px; flex: none; border-radius: 13px; display: grid; place-items: center; }
+.lib-file-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.lib-file-text b { font-size: 14px; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lib-file-text > .muted { font-size: 12.5px; }
+.lib-actions { display: flex; gap: 12px; height: 0; overflow: hidden; opacity: 0; transition: opacity .15s; }
+.lib-file:hover .lib-actions, .lib-file.menu-open .lib-actions, .lib-file:focus-within .lib-actions { height: auto; opacity: 1; margin-top: 2px; }
+.lib-actions .link-button { padding: 0; min-height: 0; font-size: 12.5px; font-weight: 650; color: var(--accent); }
+.lib-actions .link-button.danger { color: var(--danger); }
+@media (hover: none) { .lib-actions { height: auto; opacity: 1; } }
+.lib-menu { top: calc(100% - 6px); bottom: auto; right: 12px; }
+.lib-base { border: none; padding: 0; text-align: left; font: inherit; cursor: pointer; white-space: normal; align-items: stretch; }
+.lib-base:hover:not(:disabled) { background: var(--panel); }
+.lib-base .wf-name { padding-right: 0; }
+.lib-base .wf-icon { position: relative; z-index: 1; color: var(--charcoal); }
+.lib-empty { display: flex; flex-direction: column; gap: 4px; align-items: center; padding: 34px 16px; border: 1.5px dashed var(--border-strong); border-radius: 18px; text-align: center; background: rgba(255, 255, 255, .5); }
+.lib-drop-overlay { position: fixed; inset: 0; z-index: 70; display: grid; place-items: center; background: rgba(42, 157, 143, .14); border: 3px dashed var(--verdigris); pointer-events: none; }
+.lib-drop-overlay span { display: inline-flex; align-items: center; gap: 10px; padding: 14px 22px; border-radius: 999px; background: #fff; font-weight: 650; box-shadow: var(--shadow-lg); }
+.lib-drawer-backdrop { place-items: stretch end; padding: 0; }
+.lib-drawer { width: min(560px, 100%); height: 100%; overflow-y: auto; background: var(--bg); box-shadow: var(--shadow-lg); animation: lib-slide .25s ease-out; }
+@keyframes lib-slide { from { transform: translateX(40px); opacity: 0; } }
+.lib-drawer-band { height: 110px; display: grid; place-items: center; }
+.lib-drawer-band .wf-icon { position: relative; z-index: 1; color: var(--charcoal); }
+.lib-drawer-band .wf-dialog-close { color: #fff; z-index: 2; }
+.lib-drawer-body { padding: 18px 20px 28px; }
+.lib-drawer-body h2 { margin: 0; font-size: 20px; }
+.lib-docs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.lib-docs li { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: var(--panel); border-radius: 12px; box-shadow: var(--shadow-sm); }
+.lib-hero .wf-hero-inner { max-width: 780px; }
