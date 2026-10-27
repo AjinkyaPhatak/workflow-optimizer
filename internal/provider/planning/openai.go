@@ -86,6 +86,8 @@ func PlanSchema() map[string]any {
 						choices = []string{"tool", "branch", "parallel", "map", "repeat", "ask", "wait", "workflow"}
 					case "Binding.source":
 						choices = []string{"literal", "step", "answer", "template", "item", "event"}
+					case "Question.purpose":
+						choices = []string{"", "value", "intent"}
 					case "Question.kind":
 						choices = []string{"text", "number", "boolean", "date", "choice", "contact", "file"}
 					case "Plan.mode":
@@ -164,6 +166,9 @@ func (c *Client) Research(ctx context.Context, query string, maxTokens int) (aut
 	return automation.ToolResult{Outputs: map[string]any{"text": res.OutputText(), "sources": sources, "observed_at": time.Now().UTC().Format(time.RFC3339)}, Tokens: int(res.Usage.TotalTokens)}, nil
 }
 func (c *Client) Write(ctx context.Context, instructions, input string, maxTokens int) (automation.ToolResult, error) {
+	if strings.TrimSpace(input) == "" {
+		return automation.ToolResult{}, errors.New("The writing step received no source text or brief. Its input needs to be repaired before a message can be prepared.")
+	}
 	if maxTokens < 1 || maxTokens > 12000 {
 		maxTokens = 12000
 	}

@@ -200,6 +200,8 @@ func (h *Handlers) AnswerAssistantDraft(w http.ResponseWriter, r *http.Request) 
 	if !h.decode(w, r, &in) {
 		return
 	}
+	// Intent answers can invoke the planner, just like a new message or repair.
+	_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(4 * time.Minute))
 	out, err := h.Assistant.AnswerDraft(r.Context(), user(r), id, in.Revision, in.QuestionID, in.Value)
 	if err != nil {
 		h.fail(w, r, err)

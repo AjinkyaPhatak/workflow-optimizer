@@ -37,6 +37,10 @@ type Option struct {
 	Value string `json:"value"`
 }
 type Question struct {
+	Purpose    string   `json:"purpose,omitempty"` // value (default) or intent, which requires replanning
+	Context    string   `json:"context,omitempty"`
+	StepName   string   `json:"step_name,omitempty"`
+	FieldLabel string   `json:"field_label,omitempty"`
 	ID         string   `json:"id"`
 	Prompt     string   `json:"prompt"`
 	Kind       string   `json:"kind"`
@@ -313,7 +317,7 @@ func Resolve(b Binding, outputs map[string]map[string]any, answers map[string]an
 		}
 		index := 0
 		var missing string
-		text = placeholder.ReplaceAllStringFunc(text, func(token string) string {
+		text = factPlaceholder.ReplaceAllStringFunc(text, func(token string) string {
 			id := fmt.Sprintf("%s_%d", b.Ref, index)
 			index++
 			v, ok := answers[id]

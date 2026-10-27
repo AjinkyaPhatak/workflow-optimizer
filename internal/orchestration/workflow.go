@@ -302,6 +302,10 @@ func (m *machine) steps(steps []automation.Step, path string, item any) error {
 					q := *out.Question
 					q.ID = op + "/" + q.ID
 					q.StepID = s.ID
+					q.StepName = s.Name
+					if q.Context == "" {
+						q.Context = "This question is for “" + s.Name + "”."
+					}
 					value, err := m.ask(q)
 					if err != nil {
 						return err
@@ -321,6 +325,10 @@ func (m *machine) steps(steps []automation.Step, path string, item any) error {
 			q := *s.Question
 			q.ID = op + "/" + q.ID
 			q.StepID = s.ID
+			q.StepName = s.Name
+			if q.Context == "" {
+				q.Context = "This question is for “" + s.Name + "”."
+			}
 			answer, err := m.ask(q)
 			if err != nil {
 				return err

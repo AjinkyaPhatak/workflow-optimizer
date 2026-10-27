@@ -34,6 +34,33 @@ func TestAverageThresholdOnlyDispatchesAbove150(t *testing.T) {
 	}
 }
 
+func TestNiftyAlertSkipsEmptyAndNonQualifyingGainers(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		hasRows       bool
+		maximumGainer float64
+		wantSends     int
+	}{
+		{"no data", false, 0, 0},
+		{"losses only", true, -1.2, 0},
+		{"below threshold", true, .6, 0},
+		{"exact threshold", true, .7, 0},
+		{"qualifying gainer", true, .71, 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			plan := automation.Plan{Mode: "once", Steps: []automation.Step{{ID: "has_data", Kind: "branch", Condition: &automation.Condition{Left: lit("", fmt.Sprint(tc.hasRows)), Op: "equals", Right: lit("", "true")}, Children: []automation.Step{{ID: "above_threshold", Kind: "branch", Condition: &automation.Condition{Left: lit("", fmt.Sprint(tc.maximumGainer)), Op: "greater", Right: lit("", "0.7")}, Children: []automation.Step{{ID: "email", Kind: "tool", Tool: "send", Inputs: []automation.Binding{lit("recipient", `"known"`)}}}}}}}}
+			env, store, tools := environment(t, plan)
+			env.ExecuteWorkflow(WorkflowName, Input{RunID: store.run.ID})
+			if err := env.GetWorkflowError(); err != nil {
+				t.Fatal(err)
+			}
+			if len(tools.calls) != tc.wantSends {
+				t.Fatalf("sends=%d; want %d", len(tools.calls), tc.wantSends)
+			}
+		})
+	}
+}
+
 type runStore struct {
 	automation.Store
 	mu     sync.Mutex

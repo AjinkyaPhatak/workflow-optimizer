@@ -67,6 +67,7 @@ func (s *AssistantService) Get(ctx context.Context, user, id uuid.UUID) (automat
 			return session, err
 		}
 		plan := automation.RefreshQuestionOptions(session.Compilation.Plan, tools)
+		session.Answers = automation.DiscardReferenceAnswers(plan, session.Answers)
 		compiled := automation.CheckAnswered(automation.InsertConversions(plan, tools), tools, session.Answers)
 		session.Compilation = &compiled
 	}
@@ -292,6 +293,12 @@ func (s *AssistantService) AnswerDraft(ctx context.Context, user, id uuid.UUID, 
 		return session, err
 	}
 	compiled := automation.CheckAnswered(session.Compilation.Plan, tools, session.Answers)
+	if q.Purpose == "intent" {
+		compiled, err = s.applyDraftIntent(ctx, user, session, *q, tools)
+		if err != nil {
+			return session, err
+		}
+	}
 	session.Compilation = &compiled
 	session.Revision++
 	return session, assistantError(s.Store.SaveSession(ctx, session, revision))

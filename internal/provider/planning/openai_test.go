@@ -32,6 +32,20 @@ func TestPlanSchemaConstrainComparisonsAndControlFlow(t *testing.T) {
 type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+func TestWriteRejectsMissingSourceBeforeCallingModel(t *testing.T) {
+	for _, source := range []string{"", " \n\t"} {
+		c := New("test-key", "", "gpt-6-luna")
+		called := false
+		c.SDK.Responses.Options = append(c.SDK.Responses.Options, option.WithHTTPClient(&http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			called = true
+			return nil, io.EOF
+		})}))
+		_, err := c.Write(context.Background(), "Summarize the market results and prepare the email", source, 100)
+		if err == nil || called {
+			t.Fatalf("missing source reached the model: called=%v err=%v", called, err)
+		}
+	}
+}
 func TestBlankEnvironmentEndpointUsesOfficialDefault(t *testing.T) {
 	t.Setenv("OPENAI_BASE_URL", "")
 	c := New("test-key", "", "gpt-6-luna")

@@ -54,6 +54,10 @@ func (n *Node) Execute(ctx context.Context, in node.NodeInput) (node.NodeOutput,
 		out.SetPort("output", val)
 	} else if staticText, ok := in.GetStringConfig("text"); ok && staticText != "" {
 		out.SetPort("output", node.NewStringValue(staticText))
+	} else if template, ok := in.GetStringConfig("template"); ok {
+		// References are resolved by the caller; the node emits the resulting
+		// text rather than evaluating templates or silently dropping it.
+		out.SetPort("output", node.NewStringValue(template))
 	} else {
 		out.SetPort("output", node.NewStringValue(""))
 	}

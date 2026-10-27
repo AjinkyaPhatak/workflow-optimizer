@@ -190,7 +190,19 @@ func (t *Toolbox) Execute(ctx context.Context, c ToolCall) (ToolResult, error) {
 	}
 	for _, f := range descriptor.Inputs {
 		if f.Required && (c.Inputs[f.Name] == nil || c.Inputs[f.Name] == "") {
-			return ToolResult{}, &NeedInput{Question: Question{ID: "missing_" + strings.ReplaceAll(f.Name, ".", "_"), Prompt: "What should I use for " + f.Name + "?", Kind: "text", Required: true, Input: f.Name}}
+			label := f.Label
+			if label == "" {
+				label = strings.ReplaceAll(strings.TrimPrefix(strings.TrimPrefix(f.Name, "config."), "port."), "_", " ")
+			}
+			kind := "text"
+			if f.Type == "number" || f.Type == "boolean" {
+				kind = f.Type
+			}
+			if len(f.Options) > 0 {
+				kind = "choice"
+			}
+			return ToolResult{}, &NeedInput{Question: Question{ID: "missing_" + strings.ReplaceAll(f.Name, ".", "_"), Prompt: "What " + label + " should I use for " + descriptor.Name + "?", Kind: kind, Required: true, Input: f.Name,
+				Purpose: "value", StepName: descriptor.Name, FieldLabel: label, Context: "This detail is needed before the step can continue.", Options: f.Options, AllowOther: f.AllowCustom, Min: f.Min, Max: f.Max}}
 		}
 	}
 	// Resolve recipients before claiming an action: clarification has no side effect.
