@@ -60,7 +60,8 @@ test("build a workflow on the cards and run it", async ({ page, request }) => {
   await page.getByLabel("Email").fill(s.email);
   await page.getByLabel("Password").fill(s.password);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page).toHaveURL(/\/workflows$/);
+  await expect(page).toHaveURL(/\/home$/);
+  await page.goto("/workflows");
   await page.getByRole("link", { name: s.workflowName }).click();
   await expect(page).toHaveURL(new RegExp(`/workflows/${s.workflowId}/editor$`), { timeout: 60_000 });
   // Versions, Validate and Publish are technical details.

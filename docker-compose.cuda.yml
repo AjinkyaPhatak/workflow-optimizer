@@ -1,0 +1,7 @@
+services:
+  embeddings:
+    build:
+      context: workers/embeddings
+      args:
+        TORCH_INDEX_URL: https://download.pytorch.org/whl/cu128
+    gpus: all

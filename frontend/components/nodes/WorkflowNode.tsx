@@ -1,5 +1,6 @@
 "use client";
 
+import { WorkflowNodeFrame } from "./WorkflowNodeFrame";
 import { nodeOutputs } from "@/lib/workflow/ports";
 import { useNodeTestResult } from "@/stores/test-run/store";
 import { Handle, Position, useUpdateNodeInternals, type NodeProps } from "@xyflow/react";
@@ -90,11 +91,7 @@ function WorkflowNodeView({ id, data, selected, dragging }: NodeProps<CanvasNode
 
   const kind = def ? tabOf(def) : "basics";
   return (
-    <div
-      className={`wf-node kind-${kind} ${selected ? "selected" : ""} ${hasError ? "invalid" : nodeIssues.length ? "warning" : ""} ${dragging ? "dragging" : ""}`}
-      data-testid={`node-${id}`}
-      data-node-type={data.node.type}
-    >
+    <WorkflowNodeFrame id={id} type={data.node.type} kind={kind} selected={selected} dragging={dragging} invalid={hasError} warning={nodeIssues.length > 0}>
       <div className="wf-node-header">
         <span className={`node-icon ${categoryClass(def?.category ?? "")}`}><NodeIcon def={def ?? { type: data.node.type, category: "" }} size={18} /></span>
         <div className="wf-node-heading">
@@ -154,7 +151,7 @@ function WorkflowNodeView({ id, data, selected, dragging }: NodeProps<CanvasNode
           {nodeIssues.length > 1 && <div className="more">+{nodeIssues.length - 1} more · hover for details</div>}
         </div>
       )}
-    </div>
+    </WorkflowNodeFrame>
   );
 }
 

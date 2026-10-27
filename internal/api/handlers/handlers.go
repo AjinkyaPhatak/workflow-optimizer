@@ -31,10 +31,14 @@ type Check struct {
 
 // Handlers are the API's endpoints.
 type Handlers struct {
-	Auth        *application.AuthService
-	Workflows   *application.WorkflowService
-	Executions  *application.ExecutionService
-	Credentials *application.CredentialService
+	Assistant     *application.AssistantService
+	Voice         *application.VoiceService
+	WhatsApp      *application.WhatsAppService
+	WebhookSecret string
+	Auth          *application.AuthService
+	Workflows     *application.WorkflowService
+	Executions    *application.ExecutionService
+	Credentials   *application.CredentialService
 	// ConnectedAccounts serves connected accounts and the OAuth flow
 	// (Phase C2).
 	ConnectedAccounts *application.ConnectedAccountService

@@ -1,14 +1,14 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { WorkflowEditor } from "@/components/workflow/WorkflowEditor";
+import { WorkflowEditorRoute } from "@/components/workflow/WorkflowEditorRoute";
 import { RequireAuth } from "@/lib/auth/RequireAuth";
 
 export default function EditorPage() {
   const { workflowId } = useParams<{ workflowId: string }>();
   return (
     <RequireAuth>
-      <WorkflowEditor workflowId={workflowId} />
+      <WorkflowEditorRoute key={workflowId} workflowId={workflowId} />
     </RequireAuth>
   );
 }

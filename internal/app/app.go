@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"workflow-optimizer/internal/compute"
 	"workflow-optimizer/internal/config"
 	"workflow-optimizer/internal/credential"
 	"workflow-optimizer/internal/files"
@@ -113,6 +114,9 @@ func BootstrapWith(cfg config.Config, deps Dependencies) (*Application, error) {
 	// OpenAI-compatible endpoints.
 	providerReg := providerllm.NewRegistry()
 	embedders := map[string]providerllm.Embedder{}
+	if cfg.Automation.EmbeddingURL != "" {
+		embedders["local"] = &compute.Embedder{URL: cfg.Automation.EmbeddingURL, Token: cfg.Automation.EmbeddingToken}
+	}
 	var transcribers []transcribe.Provider
 	for _, p := range []struct {
 		spec openai.Spec

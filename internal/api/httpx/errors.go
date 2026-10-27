@@ -74,6 +74,8 @@ func Classify(err error) *Error {
 		return &Error{Status: http.StatusForbidden, Code: CodeForbidden, Message: "You do not have permission to perform this action"}
 	case errors.Is(err, application.ErrInvalidCredentials):
 		return Unauthenticated("Invalid email or password")
+	case errors.Is(err, application.ErrSessionInvalid):
+		return Unauthenticated("Your session is no longer valid. Please sign in again.")
 	case errors.Is(err, application.ErrTooManyAttempts):
 		return &Error{Status: http.StatusTooManyRequests, Code: CodeRateLimited,
 			Message: "Too many wrong passwords. For your safety, wait 15 minutes and try again."}

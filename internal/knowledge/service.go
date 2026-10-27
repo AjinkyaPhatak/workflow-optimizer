@@ -5,6 +5,7 @@ import (
 	"crypto/sha1"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -53,11 +54,21 @@ func (s *Service) CreateBase(ctx context.Context, workspaceID uuid.UUID, name, d
 	if utf8.RuneCountInString(description) > 1000 {
 		return Base{}, invalid("the description is too long")
 	}
+	if credentialID == uuid.Nil {
+		spec, _ := SpecForModel("intfloat/multilingual-e5-small")
+		if s.embedders["local"] == nil {
+			return Base{}, invalid("local embeddings are not configured")
+		}
+		return s.repo.CreateBase(ctx, Base{ID: uuid.New(), WorkspaceID: workspaceID, Name: name, Description: description, Model: spec.Model, Dimensions: spec.Dimensions, ModelRevision: "614241f622f53c4eeff9890bdc4f31cfecc418b3"})
+	}
 	var (
 		spec    EmbeddingSpec
 		lastErr error
 	)
 	for _, candidate := range EmbeddingSpecs {
+		if candidate.Provider == "local" {
+			continue
+		}
 		if s.embedders[candidate.Provider] == nil {
 			continue
 		}
@@ -99,15 +110,29 @@ func (s *Service) credential(ctx context.Context, workspaceID, id uuid.UUID, spe
 }
 
 // embed turns texts into unit vectors with the base's credential.
-func (s *Service) embed(ctx context.Context, b Base, texts []string) ([][]float32, error) {
+func (s *Service) embed(ctx context.Context, b Base, texts []string, query bool) ([][]float32, error) {
 	spec, ok := SpecForModel(b.Model)
 	embedder := s.embedders[spec.Provider]
 	if !ok || embedder == nil {
 		return nil, invalid("embeddings are not available")
 	}
-	cred, err := s.credential(ctx, b.WorkspaceID, b.CredentialID, spec)
-	if err != nil {
-		return nil, err
+	var cred credential.ResolvedCredential
+	if spec.Provider != "local" {
+		var err error
+		cred, err = s.credential(ctx, b.WorkspaceID, b.CredentialID, spec)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		prefix := "passage: "
+		if query {
+			prefix = "query: "
+		}
+		prefixed := make([]string, len(texts))
+		for i, t := range texts {
+			prefixed[i] = prefix + t
+		}
+		texts = prefixed
 	}
 	out := make([][]float32, 0, len(texts))
 	for start := 0; start < len(texts); start += embedBatch {
@@ -116,7 +141,18 @@ func (s *Service) embed(ctx context.Context, b Base, texts []string) ([][]float3
 		if err != nil {
 			return nil, err
 		}
+		if len(resp.Vectors) != end-start {
+			return nil, invalid("the embedding worker returned an incomplete batch")
+		}
 		for _, v := range resp.Vectors {
+			if len(v) != b.Dimensions {
+				return nil, invalid("the embedding dimensions do not match this knowledge base")
+			}
+			for _, n := range v {
+				if math.IsNaN(float64(n)) || math.IsInf(float64(n), 0) {
+					return nil, invalid("the embedding worker returned an invalid vector")
+				}
+			}
 			out = append(out, Normalize(v))
 		}
 	}
@@ -134,11 +170,12 @@ type AddInput struct {
 	WorkspaceID uuid.UUID
 	BaseID      uuid.UUID
 	// ID is optional (DocumentID for idempotent adds).
-	ID     uuid.UUID
-	Title  string
-	Text   string
-	Source string
-	FileID *uuid.UUID
+	ID        uuid.UUID
+	Title     string
+	Text      string
+	Source    string
+	FileID    *uuid.UUID
+	SourceURL string
 }
 
 // Begin validates and stores a document (INDEXING) without indexing it.
@@ -170,7 +207,7 @@ func (s *Service) Begin(ctx context.Context, in AddInput) (Base, Document, bool,
 		in.Source = "text"
 	}
 	d, created, err := s.repo.CreateDocument(ctx, Document{ID: in.ID, KnowledgeBaseID: b.ID, WorkspaceID: b.WorkspaceID, Title: title,
-		Source: in.Source, FileID: in.FileID, Status: StatusIndexing, Chars: utf8.RuneCountInString(text)}, text)
+		Source: in.Source, SourceURL: in.SourceURL, FileID: in.FileID, Status: StatusIndexing, Chars: utf8.RuneCountInString(text)}, text)
 	return b, d, created, err
 }
 
@@ -191,13 +228,17 @@ func firstLine(s string) string {
 // returned.
 func (s *Service) Index(ctx context.Context, b Base, d Document, text string) (Document, error) {
 	chunks := Split(text)
-	vectors, err := s.embed(ctx, b, chunks)
+	vectors, err := s.embed(ctx, b, chunks, false)
 	if err == nil {
 		stored := make([]Chunk, len(chunks))
 		for i := range chunks {
 			stored[i] = Chunk{DocumentID: d.ID, Ordinal: i, Content: chunks[i], Vector: vectors[i]}
 		}
-		err = s.repo.FinishDocument(ctx, b.WorkspaceID, d.ID, stored)
+		if repo, ok := s.repo.(GenerationRepository); ok {
+			err = repo.FinishGeneration(ctx, b.WorkspaceID, d.ID, d.Generation, stored)
+		} else {
+			err = s.repo.FinishDocument(ctx, b.WorkspaceID, d.ID, stored)
+		}
 	}
 	if err != nil {
 		// Recorded even when ctx is done (the run was cancelled).
@@ -265,6 +306,7 @@ func (s *Service) Reindex(ctx context.Context, workspaceID, docID uuid.UUID) (Ba
 		return Base{}, Document{}, "", err
 	}
 	d.Status, d.Error = StatusIndexing, ""
+	d.Generation++
 	return b, d, text, nil
 }
 
@@ -281,6 +323,15 @@ func (s *Service) Search(ctx context.Context, workspaceID, baseID uuid.UUID, que
 	if err != nil {
 		return nil, err
 	}
+	if b.Model == "intfloat/multilingual-e5-small" {
+		q, err := s.embed(ctx, b, []string{query}, true)
+		if err != nil {
+			return nil, err
+		}
+		if repo, ok := s.repo.(VectorRepository); ok {
+			return repo.SearchVectors(ctx, workspaceID, baseID, q[0], query, k, minScore)
+		}
+	}
 	vectors, err := s.repo.Vectors(ctx, workspaceID, baseID)
 	if err != nil {
 		return nil, err
@@ -288,7 +339,7 @@ func (s *Service) Search(ctx context.Context, workspaceID, baseID uuid.UUID, que
 	if len(vectors) == 0 {
 		return []Result{}, nil
 	}
-	q, err := s.embed(ctx, b, []string{query})
+	q, err := s.embed(ctx, b, []string{query}, true)
 	if err != nil {
 		return nil, err
 	}

@@ -112,7 +112,7 @@ func (s *AuthService) issue(ctx context.Context, u auth.User) (Session, error) {
 func (s *AuthService) Me(ctx context.Context, user uuid.UUID) (auth.User, []workspace.Membership, error) {
 	u, err := s.identities.FindByID(ctx, user)
 	if errors.Is(err, auth.ErrUserNotFound) {
-		return auth.User{}, nil, notFound("user")
+		return auth.User{}, nil, ErrSessionInvalid
 	}
 	if err != nil {
 		return auth.User{}, nil, err

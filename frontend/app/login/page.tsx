@@ -20,7 +20,7 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (!hydrated) hydrate();
-    else if (session) router.replace("/workflows");
+    else if (session) router.replace("/home");
   }, [hydrated, hydrate, session, router]);
 
   async function submit(e: FormEvent) {
@@ -30,7 +30,7 @@ export default function LoginPage() {
     try {
       if (mode === "login") await login(email, password);
       else await register(email, name, password);
-      router.replace("/workflows");
+      router.replace("/home");
     } catch (err) {
       setError(err);
       setBusy(false);
@@ -47,8 +47,8 @@ export default function LoginPage() {
             <BrandMark size={28} />
             <span>Workflow Optimizer</span>
           </div>
-          <h2>AI workflows for everyday work.</h2>
-          <p>Connect Gmail, Calendar, Sheets and AI into simple step-by-step workflows. No code, and free to start.</p>
+          <h2>Say what you need.<br />Let’s make it happen.</h2>
+          <p>Talk through an idea, shape your workflow, and get back to the work that matters.</p>
           <div className="auth-illustration">
             <div className="auth-node">Gmail</div>
             <div className="auth-edge" />

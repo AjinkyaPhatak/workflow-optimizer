@@ -50,6 +50,7 @@ var ErrInvalidConfig = errors.New("config: invalid configuration")
 
 // Config contains configuration needed by the architectural entrypoints.
 type Config struct {
+	Automation  AutomationConfig
 	DatabaseURL string
 	RedisURL    string
 
@@ -180,6 +181,7 @@ func Load() (Config, error) {
 // LoadFrom reads configuration through getenv (used by Load and by tests).
 func LoadFrom(getenv func(string) string) (Config, error) {
 	cfg := Config{
+		Automation:               loadAutomation(getenv),
 		DatabaseURL:              getenv("DATABASE_URL"),
 		RedisURL:                 getenv("REDIS_URL"),
 		CredentialEncryptionKey:  getenv("CREDENTIAL_ENCRYPTION_KEY"),

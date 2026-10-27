@@ -20,6 +20,8 @@ var (
 	ErrForbidden = errors.New("forbidden")
 	// ErrInvalidCredentials: login failed (unknown email or wrong password).
 	ErrInvalidCredentials = errors.New("invalid email or password")
+	// ErrSessionInvalid means a signed token no longer identifies an account.
+	ErrSessionInvalid = errors.New("session is no longer valid")
 	// ErrUnavailable: a required capability is not configured (for example
 	// the credential encryption key).
 	ErrUnavailable = errors.New("service unavailable")

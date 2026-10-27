@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"workflow-optimizer/internal/auth"
 	"workflow-optimizer/internal/queue"
 )
 
@@ -448,6 +449,24 @@ func TestAuthenticationAndAuthorization(t *testing.T) {
 	}
 	e.must(e.call(b.token, "POST", "/api/v1/workflows/"+wf+"/versions/"+draft+"/publish", nil), 200)
 	e.must(e.call(b.token, "DELETE", "/api/v1/credentials/"+cred, nil), 204)
+}
+
+func TestMissingAccountInvalidatesSession(t *testing.T) {
+	e := newEnv(t)
+	// A correctly signed token can outlive its account (for example after a
+	// database restore). It must trigger sign-in recovery, not a broken workspace.
+	tokens, err := auth.NewHMACTokenService([]byte(e.cfg.AuthTokenSecret), time.Hour, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	token, _, err := tokens.Generate(context.Background(), auth.User{ID: uuid.New()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := e.call(token, "GET", "/api/v1/auth/me", nil)
+	if r.status != 401 || r.errCode(t) != "UNAUTHENTICATED" {
+		t.Fatalf("missing account: %d %s", r.status, r.body)
+	}
 }
 
 func TestCredentialsAPI(t *testing.T) {

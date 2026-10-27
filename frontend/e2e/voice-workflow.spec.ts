@@ -1,0 +1,75 @@
+import { test, expect } from "@playwright/test";
+import { MOCK_OPENAI_PORT, MOCK_SLOW_PLANNER, type Seed } from "./stack";
+
+test("workflow planning survives a response slower than the default proxy timeout", async ({ page }) => {
+  const seed = JSON.parse(process.env.E2E_SEED!) as Seed;
+  await page.goto("/login");
+  await page.getByLabel("Email").fill(seed.email);
+  await page.getByLabel("Password", { exact: true }).fill(seed.password);
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await expect(page).toHaveURL(/\/home$/);
+  await page.getByLabel("Run when ready").uncheck();
+  await page.getByLabel("What would you like to do?").fill(MOCK_SLOW_PLANNER + " Check the published Nifty 50 data, create a CSV and statistics, and send it to Phatak on WhatsApp.");
+  const response = page.waitForResponse(res => res.request().method() === "POST" && /\/assistant\/sessions\/[^/]+\/messages$/.test(new URL(res.url()).pathname), { timeout: 60_000 });
+  const started = Date.now();
+  await page.getByRole("button", { name: "Make it happen" }).click();
+  expect((await response).status()).toBe(200);
+  expect(Date.now() - started).toBeGreaterThanOrEqual(31_000);
+  await expect(page.getByRole("textbox", { name: "Workflow name", exact: true })).toHaveValue("Nifty 50 daily report");
+  await expect(page.getByRole("button", { name: "Run workflow", exact: true })).toBeEnabled();
+  await expect(page.locator(".error-banner")).toHaveCount(0);
+});
+test("voice landing compiles a request, clarifies a contact, creates files and sends exactly once", async ({ page, request }) => {
+  const seed = JSON.parse(process.env.E2E_SEED!) as Seed;
+  await page.goto("/login");
+  await page.getByLabel("Email").fill(seed.email);await page.getByLabel("Password", { exact: true }).fill(seed.password);
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await expect(page).toHaveURL(/\/home$/);
+  await expect(page.getByTestId("canvas")).toBeVisible();
+  await page.screenshot({ path: "../.local/voice-home.png", fullPage: true });
+  await page.getByLabel("What would you like to do?").fill("Check the published Nifty 50 gainers and losers, create a CSV, calculate statistics, and send the results to Phatak on WhatsApp.");
+  await page.getByRole("button", { name: "Make it happen" }).click();
+  await expect(page.getByRole("textbox", { name: "Workflow name", exact: true })).toHaveValue("Nifty 50 daily report");
+  const recipient = page.getByLabel("Which WhatsApp contact should receive this?");
+  await expect(recipient).toBeVisible({ timeout: 90_000 });
+  const before = await (await request.get("http://127.0.0.1:" + MOCK_OPENAI_PORT + "/__whatsapp_calls")).json();
+  expect(before).toHaveLength(0);
+  await recipient.selectOption("phatak1@s.whatsapp.net");
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await expect(page.locator(".run-status")).toHaveText("completed", { timeout: 60_000 });
+  const sent = await (await request.get("http://127.0.0.1:" + MOCK_OPENAI_PORT + "/__whatsapp_calls")).json();
+  expect(sent).toHaveLength(1);
+  expect(sent[0].recipient).toBe("phatak1@s.whatsapp.net");
+  expect(sent[0].filename).toBe("nifty50.csv");
+  expect(Buffer.from(sent[0].data, "base64").toString("utf8").trim().split("\n")).toHaveLength(51);
+  expect(sent[0].text).toContain("50");
+  await page.screenshot({ path: "../.local/voice-workflow.png", fullPage: true });
+  await page.reload();
+  await expect(page.locator(".run-status")).toHaveText("completed");
+  expect(await (await request.get("http://127.0.0.1:" + MOCK_OPENAI_PORT + "/__whatsapp_calls")).json()).toHaveLength(1);
+  const auth = await (await request.post("/api/v1/auth/login", { data: { email: seed.email, password: seed.password } })).json();
+  const headers = { Authorization: "Bearer " + auth.access_token };
+  const me = await (await request.get("/api/v1/auth/me", { headers })).json();
+  const workspace = me.workspaces[0].id;
+  const sessionId = new URL(page.url()).searchParams.get("session");
+  const session = await (await request.get("/api/v1/assistant/sessions/" + sessionId, { headers })).json();
+  const scheduled = await request.put("/api/v1/automations", { headers, data: {
+    workspace_id: workspace, name: "Fixture schedule", plan: session.compilation.plan, cron: "0 0 1 1 *", timezone: "Asia/Kolkata", trigger: "", enabled: true,
+  } });
+  expect(scheduled.status()).toBe(200);
+  const schedule = await scheduled.json();
+  expect((await request.put("/api/v1/automations", { headers, data: { ...schedule, enabled: false } })).status()).toBe(200);
+  expect((await request.put("/api/v1/automations", { headers, data: { ...schedule, enabled: true } })).status()).toBe(200);
+  expect((await request.delete("/api/v1/automations/" + schedule.id, { headers })).status()).toBe(204);
+  const baseResponse = await request.post("/api/v1/knowledge-bases", { headers, data: { workspace_id: workspace, name: "Local fixture", description: "Real CPU embeddings" } });
+  expect(baseResponse.status()).toBe(201);
+  const base = await baseResponse.json();
+  const sourceResponse = await request.post("/api/v1/knowledge-bases/" + base.id + "/documents", { headers, data: { title: "Refund policy", text: "Customers can request a full refund within thirty days of purchase." } });
+  expect(sourceResponse.status()).toBe(202);
+  await expect.poll(async () => {
+    const current = await (await request.get("/api/v1/knowledge-bases/" + base.id, { headers })).json();
+    return current.items[0]?.status;
+  }, { timeout: 60_000 }).toBe("READY");
+  const hits = await (await request.post("/api/v1/knowledge-bases/" + base.id + "/search", { headers, data: { query: "How long do I have to get my money back?", top_k: 3 } })).json();
+  expect(hits.items[0].text).toContain("thirty days");
+});

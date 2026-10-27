@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"time"
 
+	"go.temporal.io/sdk/client"
 	"workflow-optimizer/internal/api"
 	"workflow-optimizer/internal/api/handlers"
 	"workflow-optimizer/internal/application"
@@ -19,8 +20,10 @@ import (
 	"workflow-optimizer/internal/files"
 	"workflow-optimizer/internal/infrastructure/postgres"
 	redisinfra "workflow-optimizer/internal/infrastructure/redis"
+	"workflow-optimizer/internal/integration/whatsapp"
 	"workflow-optimizer/internal/oauth"
 	"workflow-optimizer/internal/observability"
+	"workflow-optimizer/internal/orchestration"
 	"workflow-optimizer/internal/queue"
 	"workflow-optimizer/internal/workflow"
 )
@@ -40,6 +43,7 @@ type APIRuntime struct {
 	logger  *slog.Logger
 	// knowledge indexes documents in the background (Phase D2).
 	knowledge *application.KnowledgeService
+	temporal  client.Client
 }
 
 // NewAPI validates cfg, connects to PostgreSQL and Redis, and wires:
@@ -151,10 +155,22 @@ func (rt *APIRuntime) build(enc credential.SecretEncryptor, tokens auth.TokenSer
 	})
 	policy := application.ObservabilityPolicy{ExposeNodeInputs: rt.cfg.ExposeNodeData, ExposeNodeOutputs: rt.cfg.ExposeNodeData}
 	rt.knowledge = application.NewKnowledgeService(access, engine.Knowledge, rt.logger)
+	assistant, tc, err := buildAssistant(rt.cfg, rt.store, access, credentials, engine)
+	if err != nil {
+		return err
+	}
+	rt.temporal = tc
+	if tc != nil {
+		rt.knowledge.WithIndexer(&orchestration.Indexer{Client: tc, Repository: deps.KnowledgeRepository, Queue: rt.cfg.Automation.TemporalTaskQueue})
+	}
 	h := &handlers.Handlers{
-		Auth:       application.NewAuthService(identities, tokens),
-		Workflows:  workflows,
-		Executions: executions,
+		Assistant:     assistant,
+		Voice:         &application.VoiceService{Access: access, Key: rt.cfg.Automation.ElevenLabsKey, VoiceID: rt.cfg.Automation.ElevenLabsVoice},
+		WhatsApp:      &application.WhatsAppService{Access: access, Client: &whatsapp.Client{URL: rt.cfg.Automation.ConnectorURL, Token: rt.cfg.Automation.ConnectorToken}},
+		WebhookSecret: rt.cfg.Automation.WebhookSecret,
+		Auth:          application.NewAuthService(identities, tokens),
+		Workflows:     workflows,
+		Executions:    executions,
 		Observability: application.NewObservabilityService(executions, postgres.NewExecutionEventRepository(rt.store),
 			postgres.NewExecutionListRepository(rt.store), pricing, policy),
 		Credentials:       application.NewCredentialService(access, credentials, credentialRepo, engine.ProviderRegistry, enc != nil),
@@ -220,6 +236,9 @@ func (rt *APIRuntime) Serve(ctx context.Context, ln net.Listener) error {
 
 // Close releases Redis and PostgreSQL. It is safe to call more than once.
 func (rt *APIRuntime) Close() {
+	if rt.temporal != nil {
+		rt.temporal.Close()
+	}
 	if rt.knowledge != nil {
 		// Background indexing stops (its documents are marked FAILED,
 		// to retry) before the database closes.

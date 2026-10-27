@@ -3,7 +3,6 @@ package postgres_test
 import (
 	"context"
 	"errors"
-	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -11,28 +10,13 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-
-	postgresinfra "workflow-optimizer/internal/infrastructure/postgres"
 )
 
 func TestSchemaRelationshipsConstraintsJSONBAndHistory(t *testing.T) {
-	url := os.Getenv("TEST_DATABASE_URL")
-	if url == "" {
-		t.Skip("TEST_DATABASE_URL is required for PostgreSQL integration tests")
-	}
+	// The caller's database may contain development data. Use the same isolated
+	// schema as the other repository tests; never reset the public schema.
+	pool := newPGEnv(t).raw
 	ctx := context.Background()
-	pool, err := pgxpool.New(ctx, url)
-	if err != nil {
-		t.Fatalf("connect test database: %v", err)
-	}
-	defer pool.Close()
-	if _, err := pool.Exec(ctx, "DROP SCHEMA public CASCADE; CREATE SCHEMA public"); err != nil {
-		t.Fatalf("reset test schema: %v", err)
-	}
-	t.Cleanup(func() { _, _ = pool.Exec(ctx, "DROP SCHEMA public CASCADE; CREATE SCHEMA public") })
-	if err := postgresinfra.ApplyMigrations(url, migrationsPath(t)); err != nil {
-		t.Fatalf("apply migrations: %v", err)
-	}
 
 	userID, workspaceID, projectID, workflowID, versionOneID := uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New()
 	mustExec(t, pool, "INSERT INTO users (id, email, name, password_hash) VALUES ($1, $2, 'User', 'hash')", userID, "user@example.test")

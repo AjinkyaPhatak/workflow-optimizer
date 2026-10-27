@@ -1,8 +1,10 @@
 "use client";
 
+import Link from "next/link";
+import { useState } from "react";
 import { ErrorBanner } from "@/components/ui/ErrorBanner";
 import type { ConnectedAccountsState } from "@/features/connected-accounts/useConnectedAccounts";
-import { statusLabel } from "@/lib/connectedAccounts";
+import { ACCOUNT_PROVIDER_SETUP, accountProviderCards, statusLabel } from "@/lib/connectedAccounts";
 import type { ConnectedAccount } from "@/types/api";
 
 function AccountRow({ account, canManage, busy, onDisconnect }: {
@@ -28,15 +30,14 @@ function AccountRow({ account, canManage, busy, onDisconnect }: {
   );
 }
 
-/** Connected Accounts: one card per OAuth provider configured on the server
- * (none by default), listing the workspace's accounts of that provider. The
- * browser only ever sees account metadata. */
+/** Supported apps remain discoverable before the server's OAuth client is configured. */
 export function ConnectedAccounts({ state, outcome, confirm = (m) => window.confirm(m) }: {
   state: ConnectedAccountsState;
   outcome: { kind: "ok" | "error"; text: string } | null;
   confirm?: (message: string) => boolean;
 }) {
   const s = state;
+  const [setup, setSetup] = useState<{ provider: string; origin: string } | null>(null);
   const canManage = s.workspace?.role === "owner" || s.workspace?.role === "admin";
   return (
     <main className="dashboard stack" data-testid="connected-accounts">
@@ -61,26 +62,38 @@ export function ConnectedAccounts({ state, outcome, confirm = (m) => window.conf
       <ErrorBanner error={s.error} />
       {s.loading ? (
         <div className="empty"><span className="spinner" aria-hidden /> Loading…</div>
-      ) : s.providers.length === 0 ? (
-        <section className="card empty" data-testid="no-providers">
-          <b>No account providers are configured</b>
-          <div className="small">A provider has to be set up on the server before accounts can be connected.</div>
-        </section>
       ) : (
-        s.providers.map((p) => {
+        accountProviderCards(s.providers, s.accounts).map((p) => {
           const accounts = s.accounts.filter((a) => a.provider === p.id);
+          const configured = s.providers.some(provider => provider.id === p.id);
+          const instructions = ACCOUNT_PROVIDER_SETUP.find(provider => provider.id === p.id);
+          const setupOpen = setup?.provider === p.id;
           return (
             <section key={p.id} className="card provider-card" data-testid={`provider-${p.id}`}>
               <div className="row">
                 <h2>{p.name}</h2>
                 <span className="spacer" />
                 {canManage && (
-                  <button type="button" className="primary" disabled={s.busy === p.id} onClick={() => void s.connect(p.id)}>
-                    {s.busy === p.id ? "Redirecting…" : accounts.length ? "Connect another account" : "Connect"}
+                  <button type="button" className="primary" disabled={s.busy === p.id || !s.workspace}
+                    aria-expanded={configured ? undefined : setupOpen}
+                    aria-controls={configured ? undefined : `setup-${p.id}`}
+                    onClick={() => configured ? void s.connect(p.id) : setSetup(setupOpen ? null : { provider: p.id, origin: window.location.origin })}>
+                    {!configured ? `Connect ${p.name}` : s.busy === p.id ? "Redirecting…" : accounts.length ? "Connect another account" : "Connect"}
                   </button>
                 )}
               </div>
               {p.description && <p className="muted small">{p.description}</p>}
+              {!configured && <p className="hint">Server setup needed before {p.name} sign-in is available.</p>}
+              {!configured && setupOpen && <div className="stack notice" id={`setup-${p.id}`} role="region" aria-label={`${p.name} connection setup`}>
+                <b>Set up {p.name} once, then connect your account</b>
+                {instructions ? <>
+                  <p>Create a {p.name} OAuth application{p.id === "google" ? " with a Web application client" : ""}. Register this exact redirect URL:</p>
+                  <code>{setup.origin}/api/v1/oauth/callback/{p.id}</code>
+                  <p>In the server’s root <code>.env</code> file, set <code>{instructions.prefix}_CLIENT_ID</code> and <code>{instructions.prefix}_CLIENT_SECRET</code> from that application. Set <code>{instructions.prefix}_OAUTH_REDIRECT_URI</code> to the redirect URL above.</p>
+                  {p.id === "discord" && <p>Also set <code>DISCORD_BOT_TOKEN</code> for the application’s bot.</p>}
+                  <p>Restart the app with <code>make dev</code>, refresh this page, then choose Connect. Keep the client secret on the server.</p>
+                </> : <p>Ask your server administrator to restore this provider’s OAuth configuration, then refresh this page.</p>}
+              </div>}
               {accounts.length === 0 ? (
                 <div className="muted small" data-testid="not-connected">Not connected</div>
               ) : (
@@ -94,13 +107,17 @@ export function ConnectedAccounts({ state, outcome, confirm = (m) => window.conf
                   ))}
                 </ul>
               )}
-              {canManage && accounts.some((a) => a.status !== "ACTIVE") && (
+              {canManage && configured && accounts.some((a) => a.status !== "ACTIVE") && (
                 <div className="hint">To reconnect an account, choose Connect and sign in with the same account.</div>
               )}
             </section>
           );
         })
       )}
+      <section className="card provider-card">
+        <div className="row"><h2>WhatsApp</h2><span className="spacer" /><Link href="/settings/whatsapp">Connect WhatsApp →</Link></div>
+        <p className="muted small">Link your personal account with a QR code to send messages and files.</p>
+      </section>
       {!canManage && s.workspace && <div className="hint">Only workspace owners and admins can connect or disconnect accounts.</div>}
     </main>
   );

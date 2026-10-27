@@ -10,13 +10,16 @@ const config: NextConfig = {
   // Do not generate AGENTS.md / CLAUDE.md in the project on `next dev`.
   agentRules: false,
   experimental: {
+    // Assistant compilation/import handlers allow four minutes. Keep the proxy
+    // open long enough to return their result instead of its default 30s reset.
+    proxyTimeout: 5 * 60 * 1000,
     // Proxied request bodies are buffered up to this size (default 10 MB);
     // file uploads go up to 20 MB (Phase D1).
     proxyClientMaxBodySize: 25 * 1024 * 1024,
   },
   // Standard browser protections on every page: never framed by another
   // site (clickjacking), no content-type guessing, no full URLs leaked to
-  // other sites, and no camera/microphone/location access.
+  // other sites; microphone access requires a same-origin user gesture.
   async headers() {
     return [{
       source: "/:path*",
@@ -25,7 +28,7 @@ const config: NextConfig = {
         { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
         { key: "X-Content-Type-Options", value: "nosniff" },
         { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-        { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+        { key: "Permissions-Policy", value: "camera=(), microphone=(self), geolocation=()" },
       ],
     }];
   },

@@ -18,6 +18,7 @@ type createKnowledgeBase struct {
 }
 
 type addDocument struct {
+	URL    string `json:"url"`
 	FileID string `json:"file_id"`
 	Title  string `json:"title"`
 	Text   string `json:"text"`
@@ -47,10 +48,13 @@ func (h *Handlers) CreateKnowledgeBase(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, err)
 		return
 	}
-	cred, err := parseID("credential_id", req.CredentialID)
-	if err != nil {
-		h.fail(w, r, err)
-		return
+	cred := uuid.Nil
+	if strings.TrimSpace(req.CredentialID) != "" {
+		cred, err = parseID("credential_id", req.CredentialID)
+		if err != nil {
+			h.fail(w, r, err)
+			return
+		}
 	}
 	b, err := h.Knowledge.Create(r.Context(), user(r), ws, req.Name, req.Description, cred)
 	if err != nil {
@@ -105,6 +109,18 @@ func (h *Handlers) DeleteKnowledgeBase(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
+func (h *Handlers) CopyKnowledgeLocal(w http.ResponseWriter, r *http.Request) {
+	id, ok := h.pathID(w, r, "baseID")
+	if !ok {
+		return
+	}
+	base, err := h.Knowledge.CopyLocal(r.Context(), user(r), id)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	httpx.WriteJSON(w, 202, responses.NewKnowledgeBase(base))
+}
 
 // AddKnowledgeDocument handles POST /api/v1/knowledge-bases/{baseID}/documents:
 // {file_id} or {title, text}. The document is indexed in the background
@@ -116,6 +132,15 @@ func (h *Handlers) AddKnowledgeDocument(w http.ResponseWriter, r *http.Request) 
 	}
 	var req addDocument
 	if !h.decode(w, r, &req) {
+		return
+	}
+	if strings.TrimSpace(req.URL) != "" {
+		d, err := h.Knowledge.AddURL(r.Context(), user(r), id, req.URL)
+		if err != nil {
+			h.fail(w, r, err)
+			return
+		}
+		httpx.WriteJSON(w, http.StatusAccepted, responses.NewKnowledgeDocument(d))
 		return
 	}
 	if strings.TrimSpace(req.FileID) != "" {

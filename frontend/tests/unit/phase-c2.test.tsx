@@ -47,10 +47,29 @@ describe("connected accounts helpers", () => {
 });
 
 describe("Connected Accounts page", () => {
-  it("shows a clear empty state when no provider is configured", () => {
-    render(<ConnectedAccounts state={state({ providers: [] })} outcome={null} />);
-    expect(screen.getByTestId("no-providers").textContent).toContain("No account providers are configured");
-    expect(screen.queryByRole("button", { name: /Connect/ })).toBeNull();
+  it("keeps Google and other supported apps visible before server setup", () => {
+    const s = state({ providers: [] });
+    render(<ConnectedAccounts state={s} outcome={null} />);
+    for (const name of ["Google", "Notion", "Airtable", "Discord"]) {
+      expect(screen.getByRole("button", { name: `Connect ${name}` })).toBeTruthy();
+    }
+    fireEvent.click(screen.getByRole("button", { name: "Connect Google" }));
+    const setup = screen.getByRole("region", { name: "Google connection setup" });
+    expect(setup.textContent).toContain("GOOGLE_CLIENT_ID");
+    expect(setup.textContent).toContain("GOOGLE_CLIENT_SECRET");
+    expect(setup.textContent).toContain("GOOGLE_OAUTH_REDIRECT_URI");
+    expect(setup.textContent).toContain(window.location.origin + "/api/v1/oauth/callback/google");
+    expect(s.connect).not.toHaveBeenCalled();
+    expect(screen.getByRole("link", { name: "Connect WhatsApp →" }).getAttribute("href")).toBe("/settings/whatsapp");
+  });
+
+  it("retains stored accounts when their provider configuration is absent", () => {
+    const s = state({ providers: [], accounts: [account()] });
+    render(<ConnectedAccounts state={s} outcome={null} confirm={() => true} />);
+    const card = screen.getByTestId("provider-fake_oauth");
+    expect(card.textContent).toContain("ada@example.test");
+    fireEvent.click(within(card).getByRole("button", { name: "Disconnect" }));
+    expect(s.disconnect).toHaveBeenCalledWith("acc-1");
   });
 
   it("offers to connect a provider without accounts", () => {
@@ -74,7 +93,7 @@ describe("Connected Accounts page", () => {
     expect(s.disconnect).not.toHaveBeenCalled();
     fireEvent.click(within(row).getByRole("button", { name: "Disconnect" }));
     expect(s.disconnect).toHaveBeenCalledWith("acc-1");
-    expect(screen.getByRole("button", { name: "Connect another account" })).toBeTruthy();
+    expect(within(screen.getByTestId("provider-fake_oauth")).getByRole("button", { name: "Connect another account" })).toBeTruthy();
   });
 
   it("shows disconnected and revoked accounts with how to reconnect", () => {

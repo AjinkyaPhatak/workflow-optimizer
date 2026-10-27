@@ -316,6 +316,8 @@ export interface EventPage {
 // --- templates (Phase B) ------------------------------------------------------
 
 export interface WorkflowTemplate {
+  /** The preview is presentation only; creation uses the compiler template. */
+  automation?: boolean;
   id: string;
   name: string;
   description: string;
@@ -442,7 +444,7 @@ export type KnowledgeDocumentStatus = "INDEXING" | "READY" | "FAILED";
 export interface KnowledgeDocument {
   id: UUID;
   title: string;
-  source: "file" | "text";
+  source: "file" | "text" | "url";
   file_id: UUID | null;
   status: KnowledgeDocumentStatus;
   error?: string;

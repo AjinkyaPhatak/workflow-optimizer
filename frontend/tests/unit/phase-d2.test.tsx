@@ -19,7 +19,7 @@ function state(over: Partial<KnowledgeState> = {}): KnowledgeState {
   return {
     loading: false, error: null, workspaces: [{ id: "ws", name: "Main", role: "member" }], workspace: { id: "ws", name: "Main", role: "member" },
     setWorkspaceId: vi.fn(), bases: [], credentials: [], files: [], selected: null, select: vi.fn(), busy: null,
-    create: vi.fn().mockResolvedValue(true), removeBase: vi.fn(), addText: vi.fn().mockResolvedValue(true), addFiles: vi.fn(),
+    create: vi.fn().mockResolvedValue(true), removeBase: vi.fn(), addText: vi.fn().mockResolvedValue(true), addURL: vi.fn().mockResolvedValue(true), copyLocal: vi.fn(), addFiles: vi.fn(),
     uploadAndAdd: vi.fn(), removeDocument: vi.fn(), reindex: vi.fn(), search: vi.fn().mockResolvedValue([]), ...over,
   };
 }
@@ -27,9 +27,9 @@ function state(over: Partial<KnowledgeState> = {}): KnowledgeState {
 const detail = (items: KnowledgeDocument[]): KnowledgeBaseDetail => ({ ...base(), items });
 
 describe("Knowledge page", () => {
-  it("asks for a (free Gemini) key before a base can be created", () => {
+  it("offers local document search without requiring an API key", () => {
     render(<Knowledge state={state()} />);
-    expect(screen.getByTestId("create-base").textContent).toContain("Add a free Google Gemini key");
+    expect(screen.getByTestId("create-base").textContent).toContain("Local search");
     expect((screen.getByRole("button", { name: "Create" }) as HTMLButtonElement).disabled).toBe(true);
   });
 
@@ -37,6 +37,7 @@ describe("Knowledge page", () => {
     const s = state({ credentials: [{ id: "c1", workspace_id: "ws", name: "OpenAI", provider: "openai", credential_type: "api_key", created_at: "", updated_at: "" }] });
     render(<Knowledge state={s} />);
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: " Support " } });
+    fireEvent.change(screen.getByLabelText("Document search"), { target: { value: "c1" } });
     fireEvent.click(screen.getByRole("button", { name: "Create" }));
     expect(s.create).toHaveBeenCalledWith("Support", "", "c1");
     await waitFor(() => expect((screen.getByLabelText("Name") as HTMLInputElement).value).toBe(""));

@@ -1,15 +1,52 @@
 # Workflow Optimizer
 
-Architectural skeleton for a Go modular-monolith AI workflow orchestration platform.
+AI workflow orchestration platform with a Go modular monolith, a Next.js visual editor, PostgreSQL persistence, and Redis job delivery.
 
-The repository currently establishes package ownership, contracts, configuration, and local infrastructure boundaries only. It deliberately contains no workflow execution, persistence schema, queue worker behavior, authentication logic, or provider calls.
+The authenticated home is a full canvas with a bottom text/voice composer,
+collapsible conversation, and compiler-aware editing. V2 runs use Temporal, typed clarification cards, schedules and event
+triggers; knowledge supports local CPU/CUDA embeddings, and personal WhatsApp
+connects by QR. See [docs/OVERHAUL.md](docs/OVERHAUL.md) for setup, configuration,
+runtime boundaries and the new API. [Canvas editor details](docs/CANVAS_EDITOR.md)
+cover autosave, versions, templates, layout and build progress.
+
+The application includes workflow execution, retries and recovery, authentication, encrypted credentials, third-party integrations, files, knowledge bases, templates, and execution debugging. The phase sections below record how these capabilities were introduced; use the implementation and tests for current behavior.
+
+## Local development
+
+Prerequisites: Node.js 22.13+ (22.x), 24.x, or 26+, npm, Go with toolchain downloads available, Docker Engine with Compose v2, Bash, and Make.
+
+```sh
+make setup
+make dev
+```
+
+Open http://localhost:3000 and register a local account. Setup installs locked dependencies, generates private local signing/encryption keys, starts isolated project infrastructure, and applies all migrations. Rerunning it preserves existing environment files and keys. No provider key is needed to start the app; add your own through Settings → Credentials to use AI nodes, and configure OAuth separately for connected apps.
+
+The project uses PostgreSQL on `127.0.0.1:55432`, Redis on `127.0.0.1:56379`, and the API on `127.0.0.1:18080` to avoid common local port conflicts. Change `.env` and the corresponding `frontend/.env.local` value together when changing ports. `make` uses the toolchain pinned in `go.mod` and public Go checksum verification without changing global Go settings.
+
+```sh
+make check              # Go vet, TypeScript, ESLint, Go tests, frontend unit tests
+make test-integration   # Go tests with real PostgreSQL and Redis
+make test-race          # Integration tests with Go's race detector (C compiler required)
+make browsers           # Install Chromium once for browser tests
+make test-e2e           # Real API + worker; isolated schemas/queues; mock AI provider
+make build              # Go binaries in bin/ and Next.js production build
+make down               # Stop infrastructure; preserve PostgreSQL data
+```
+
+See [AGENTS.md](AGENTS.md) for Codex instructions and [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for the code map, debugging, and test boundaries.
+For a frontend redesign, use [docs/FRONTEND_MERGE.md](docs/FRONTEND_MERGE.md) to preserve the API/state behavior while reconciling screens and styles.
 
 ## Entry points
 
 - `cmd/api`: REST API process (Phase 12); it persists and enqueues executions but never runs them.
 - `cmd/worker`: long-running execution process; it consumes execution jobs from Redis and runs them (Phase 9).
+- `cmd/orchestrator`: Temporal worker for v2 workflows, activities and knowledge indexing.
+- `cmd/connector`: encrypted personal WhatsApp linked-device sessions and delivery.
+- `cmd/migrate`: applies pending migrations separately from application startup.
 
-The intended future flow is API → queue → worker → executor.
+The legacy execution flow is API → queue → worker → executor. V2 uses assistant
+API → compiler/checker → Temporal → activities/tools, with separate persistence.
 
 ## Worker (Phase 9)
 
@@ -127,7 +164,10 @@ nothing about them (`internal/integration`).
 
 Provider-neutral OAuth 2.0 (authorization code + PKCE) and connected accounts.
 No provider is configured by default: `GET /api/v1/oauth/providers` is empty
-and the Connected accounts page says so. Providers are `oauth.Provider`
+and the Connected accounts page shows setup cards for Google, Notion, Airtable
+and Discord. Configured providers offer OAuth sign-in; unconfigured providers
+show the required server settings and callback URL. Stored accounts remain
+visible if their provider's server configuration is removed. Providers are `oauth.Provider`
 implementations registered through `app.Extensions` (tests use
 `internal/oauth/fake`).
 
@@ -202,8 +242,9 @@ requested: full mailbox access (`https://mail.google.com/`) or
 
 **Configuration**: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`,
 `GOOGLE_OAUTH_REDIRECT_URI` (all or none; see `.env.example`), read by both the
-API and the worker (the worker refreshes tokens). Without them Google is not
-offered; the Gmail nodes stay in the catalog and ask for a Google account.
+API and the worker (the worker refreshes tokens). Without them the Google card
+shows setup instructions; the Gmail nodes stay in the catalog and ask for a
+Google account. After configuring the OAuth client, restart the application.
 
 ## Google Sheets and Google Calendar (Phase C4)
 

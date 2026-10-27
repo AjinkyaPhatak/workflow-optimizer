@@ -8,14 +8,16 @@ import { BrandMark } from "./BrandMark";
 
 /** The main sections, in the top bar (and on the landing page). */
 export const SECTIONS = [
-  { href: "/", label: "Home" },
+  { href: "/home", label: "Home" },
   { href: "/workflows", label: "Workflows" },
   { href: "/templates", label: "Templates" },
   { href: "/library", label: "Library" },
+  { href: "/automations", label: "Automations" },
 ];
 
 /** Settings, in the account menu. */
 const SETTINGS = [
+  { href: "/settings/whatsapp", label: "WhatsApp", hint: "Connect your personal account" },
   { href: "/settings/account", label: "Account", hint: "Your name, password and workspace" },
   { href: "/settings/connected-accounts", label: "Connected accounts", hint: "Your Google account and other apps" },
   { href: "/settings/credentials", label: "AI keys", hint: "Gemini and other keys" },
@@ -59,7 +61,7 @@ export function TopBar() {
       <button type="button" className="topbar-menu" aria-label="Menu" aria-expanded={navOpen} onClick={() => setNavOpen(!navOpen)}>
         <span /><span /><span />
       </button>
-      <Link href="/" className="brand"><BrandMark size={22} />Workflow Optimizer</Link>
+      <Link href={session ? "/home" : "/"} className="brand"><BrandMark size={22} />Workflow Optimizer</Link>
       <nav className={`topbar-nav${navOpen ? " open" : ""}`} aria-label="Main">
         {SECTIONS.map((s) => (
           <Link key={s.href} href={s.href} className={`topbar-link ${active(pathname, s.href) ? "active" : ""}`}
