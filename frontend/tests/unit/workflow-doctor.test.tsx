@@ -6,7 +6,7 @@ import { useAssistant } from "@/features/assistant/useAssistant";
 import type { AssistantSession } from "@/types/automation";
 
 const api = vi.hoisted(() => Object.fromEntries([
-  "tools", "get", "sessions", "runs", "repair", "message", "answer", "edit", "start", "run", "stream",
+  "tools", "get", "create", "sessions", "runs", "repair", "message", "answer", "edit", "start", "run", "stream",
 ].map(name => [name, vi.fn()])));
 vi.mock("@/lib/api/assistant", () => ({ assistantApi: api }));
 vi.mock("@/lib/api", () => ({
@@ -33,6 +33,33 @@ function mount(saved: AssistantSession) {
 }
 
 describe("automatic workflow doctor", () => {
+  it("runs the latest saved revision even through a callback captured before autosave", async () => {
+    const initial = draft("latest-save", 1, false);
+    const view = mount(initial);
+    await waitFor(() => expect(view.result.current.loading).toBe(false));
+    const start = view.result.current.start;
+    const saved = draft("latest-save", 2, false);
+    api.edit.mockResolvedValue(saved); api.start.mockResolvedValue(null);
+    act(() => view.result.current.beginManualEdit());
+    await act(async () => { await view.result.current.edit(saved.compilation!.plan); });
+    expect(api.start).not.toHaveBeenCalled();
+    await act(async () => { await start(); });
+    expect(api.start).toHaveBeenCalledWith("latest-save", 2, false);
+  });
+  it("forks the saved plan rather than the plan from before a flush", async () => {
+    const view = mount(draft("latest-fork", 1, false));
+    await waitFor(() => expect(view.result.current.loading).toBe(false));
+    const fork = view.result.current.fork;
+    const saved = draft("latest-fork", 2, false);
+    saved.compilation!.plan.name = "Updated report";
+    api.edit.mockResolvedValueOnce(saved);
+    await act(async () => { await view.result.current.edit(saved.compilation!.plan); });
+    api.create.mockResolvedValue(draft("forked", 1, false));
+    api.edit.mockResolvedValue(draft("forked", 2, false));
+    await act(async () => { await fork(); });
+    expect(api.edit).toHaveBeenLastCalledWith("forked", 1, expect.objectContaining({ name: "Updated report (copy)" }));
+    expect(api.start).not.toHaveBeenCalled();
+  });
   it("leaves genuine missing facts as questions instead of retrying the doctor", async () => {
     const clarified = draft("doctor-question", 2, false);
     clarified.compilation!.ready = false;

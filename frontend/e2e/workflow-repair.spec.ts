@@ -43,7 +43,7 @@ test("doctor repairs automatically, preserves answers, and does not execute a re
   await expect(issues).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Repair workflow" })).toHaveCount(0);
   await expect(page.getByText("Choose a supported comparison.", { exact: true })).toHaveCount(0);
-  await page.getByText("Show the report when the average is above 150", { exact: true }).click();
+  await page.getByTestId("node-average_gate").locator(".wf-node-header").click();
   const inspector = page.getByRole("region", { name: "Edit Show the report when the average is above 150" });
   await expect(inspector).toBeVisible();
   await expect(inspector.getByLabel("Rule")).toContainText("is greater than");
@@ -56,7 +56,6 @@ test("doctor repairs automatically, preserves answers, and does not execute a re
   expect(repairs).toBe(1);
   expect((await request.post(path + "/repair", { headers, data: { revision: beforeRepair } })).status()).toBe(409);
   await inspector.getByLabel("Rule").selectOption("at_least");
-  await page.getByRole("button", { name: "Save changes", exact: true }).click();
   await expect.poll(async () => (await (await request.get(path, { headers })).json()).compilation.plan.steps[0].condition.op).toBe("at_least");
   const runs = await (await request.get("/api/v1/automation-runs?workspace_id=" + workspace, { headers })).json();
   expect(runs.items.filter((run: { session_id: string }) => run.session_id === created.id)).toHaveLength(0);

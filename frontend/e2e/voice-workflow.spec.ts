@@ -15,7 +15,7 @@ test("workflow planning survives a response slower than the default proxy timeou
   await page.getByRole("button", { name: "Make it happen" }).click();
   expect((await response).status()).toBe(200);
   expect(Date.now() - started).toBeGreaterThanOrEqual(31_000);
-  await expect(page.getByRole("heading", { name: "Nifty 50 daily report" })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Workflow name", exact: true })).toHaveValue("Nifty 50 daily report");
   await expect(page.getByRole("button", { name: "Run workflow", exact: true })).toBeEnabled();
   await expect(page.locator(".error-banner")).toHaveCount(0);
 });
@@ -25,11 +25,11 @@ test("voice landing compiles a request, clarifies a contact, creates files and s
   await page.getByLabel("Email").fill(seed.email);await page.getByLabel("Password", { exact: true }).fill(seed.password);
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(page).toHaveURL(/\/home$/);
-  await expect(page.getByRole("heading", { name: /Say what you need/ })).toBeVisible();
+  await expect(page.getByTestId("canvas")).toBeVisible();
   await page.screenshot({ path: "../.local/voice-home.png", fullPage: true });
   await page.getByLabel("What would you like to do?").fill("Check the published Nifty 50 gainers and losers, create a CSV, calculate statistics, and send the results to Phatak on WhatsApp.");
   await page.getByRole("button", { name: "Make it happen" }).click();
-  await expect(page.getByRole("heading", { name: "Nifty 50 daily report" })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Workflow name", exact: true })).toHaveValue("Nifty 50 daily report");
   const recipient = page.getByLabel("Which WhatsApp contact should receive this?");
   await expect(recipient).toBeVisible({ timeout: 90_000 });
   const before = await (await request.get("http://127.0.0.1:" + MOCK_OPENAI_PORT + "/__whatsapp_calls")).json();

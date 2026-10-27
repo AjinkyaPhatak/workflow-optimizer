@@ -23,8 +23,16 @@ export interface AutomationRun {
   plan: Plan; status: string; question: Question | null; error: string;
   outputs: Record<string, Record<string, unknown>>; created_at: string; updated_at: string;
 }
-export interface ToolField { name: string; type: string; description: string; required: boolean; options?: { label: string; value: string }[] }
-export interface ToolDescriptor { id: string; name: string; description: string; inputs: ToolField[]; outputs: ToolField[]; side_effects: string; provider?: string }
+export interface ToolField { name: string; type: string; description: string; required: boolean; options?: { label: string; value: string }[]; label?: string; default?: unknown; min?: number; max?: number; multiline?: boolean }
+export interface ToolDescriptor { id: string; name: string; description: string; inputs: ToolField[]; outputs: ToolField[]; side_effects: string; provider?: string; category?: string; icon?: string; integration_id?: string }
+export interface ControlDescriptor { kind: string; name: string; description: string; inputs: ToolField[]; outputs: ToolField[] }
+export interface ConversionRule { from: string; to: string; tool: string; input: string; output: string }
+export interface EditorLayout { revision: number; positions: Record<string, { x: number; y: number }> }
+export interface AutomationWorkflow { id: string; workspace_id: string; project_id?: string | null; name: string; updated_at: string; created_at: string; active_version_id?: string | null }
+export interface WorkflowEnvelope { workflow: AutomationWorkflow; session: AssistantSession; layout: EditorLayout }
+export interface AutomationVersion { id: string; workflow_id: string; version_number: number; revision: number; plan: Plan; answers: Record<string, unknown>; credential_id: string; created_at: string; status: "PUBLISHED" }
+export interface AutomationTemplate { id: string; name: string; description: string; plan: Plan; workspace_id?: string; builtin?: boolean; category?: string }
+export interface BuildProgress { status: "idle" | "building" | "completed" | "failed" | "cancelled"; phase: "planning" | "checking" | "repairing" | "saving" | "complete"; pass: number; revision: number; request_id: string; plan?: Plan; updated_at: string }
 export interface Automation {
   source?: string;
   id?: string; workspace_id: string; user_id?: string; name: string; plan: Plan; credential_id?: string;

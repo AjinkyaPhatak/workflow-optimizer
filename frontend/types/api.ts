@@ -316,6 +316,8 @@ export interface EventPage {
 // --- templates (Phase B) ------------------------------------------------------
 
 export interface WorkflowTemplate {
+  /** The preview is presentation only; creation uses the compiler template. */
+  automation?: boolean;
   id: string;
   name: string;
   description: string;

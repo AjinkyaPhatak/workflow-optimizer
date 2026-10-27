@@ -59,10 +59,17 @@ test("template, variables, prompt template, LLM, structured output, search and v
   await page.getByTestId("template-structured-ai-response").click();
   const details = page.getByTestId("template-details");
   await expect(details).toContainText("What it does");
-  await details.getByLabel("Name your workflow").fill("Meeting Summarizer");
-  await details.getByTestId("use-template").click();
-  await expect(page).toHaveURL(/\/workflows\/[0-9a-f-]{36}\/editor$/, { timeout: 60_000 });
-  const workflowId = page.url().split("/").at(-2)!;
+  // The gallery now creates compiler workflows. Keep this regression focused
+  // on the retained legacy editor/version contract; the canvas suite covers
+  // using compiler templates through the gallery.
+  const legacyToken = await page.evaluate(() => JSON.parse(localStorage.getItem("workflow-optimizer.session")!).token as string);
+  const legacyHeaders = { Authorization: `Bearer ${legacyToken}` };
+  const legacyMe = await (await request.get("/api/v1/auth/me", { headers: legacyHeaders })).json();
+  const legacyProjects = await (await request.get("/api/v1/projects?workspace_id=" + legacyMe.workspaces[0].id, { headers: legacyHeaders })).json();
+  const legacyCreated = await request.post("/api/v1/workflows", { headers: legacyHeaders, data: { project_id: legacyProjects.items[0].id, name: "Meeting Summarizer", template_id: "structured-ai-response" } });
+  expect(legacyCreated.status()).toBe(201);
+  const workflowId = (await legacyCreated.json()).id;
+  await page.goto(`/workflows/${workflowId}/editor`);
   await expect(page.getByTestId("version-status")).toHaveText("v1 · Draft");
   for (const type of ["input", "prompt", "llm", "structured_output", "output"]) await expect(node(page, type)).toHaveCount(1);
   await expect(page.locator(".react-flow__edge")).toHaveCount(4);

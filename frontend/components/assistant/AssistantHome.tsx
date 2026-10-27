@@ -1,7 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
+import { WorkflowManagement } from "./WorkflowManagement";
+import { useBuildProgress } from "@/features/assistant/useBuildProgress";
+import { useEditorLayout } from "@/features/assistant/useEditorLayout";
+import "./workspace.css";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { CommitStrategy, useScribe } from "@elevenlabs/react";
 import { useAssistant, materializePlan } from "@/features/assistant/useAssistant";
 import { voiceErrorMessage } from "@/features/assistant/voiceErrors";
@@ -15,11 +20,6 @@ import { WorkflowDraft } from "./WorkflowDraft";
 import { CompilerIssues } from "./CompilerIssues";
 import type { Budget, Plan } from "@/types/automation";
 
-const EXAMPLES = [
-  { title: "Make sense of the market", text: "Check the latest published Nifty 50 gainers and losers, make a CSV, calculate descriptive statistics, and send the files to Phatak on WhatsApp." },
-  { title: "Put your knowledge to work", text: "Search my knowledge base and turn the relevant information into a useful report." },
-  { title: "Keep something moving", text: "Build an automation that reads a web page every weekday, summarizes what changed, and emails me." },
-];
 function BudgetEditor({ budget, onChange }: { budget: Budget; onChange: (value: Budget) => void }) {
   return <div className="budget-fields">
     <label>Actions<input aria-label="Action limit" type="number" min={1} value={budget.max_actions || ""} onChange={e => onChange({ ...budget, max_actions: Number(e.target.value) })} /></label>
@@ -27,7 +27,7 @@ function BudgetEditor({ budget, onChange }: { budget: Budget; onChange: (value: 
     <label>Active minutes<input aria-label="Active time limit" type="number" min={1} value={budget.max_active_seconds ? budget.max_active_seconds / 60 : ""} onChange={e => onChange({ ...budget, max_active_seconds: Number(e.target.value) * 60 })} /></label>
   </div>;
 }
-function PlanBudgetEditor({ plan, onSave, busy }: { plan: Plan; onSave: (plan: Plan) => Promise<void>; busy: boolean }) {
+function PlanBudgetEditor({ plan, onSave, busy }: { plan: Plan; onSave: (plan: Plan) => Promise<unknown>; busy: boolean }) {
   const [budget, setBudget] = useState(plan.budget);
   return <><BudgetEditor budget={budget} onChange={setBudget} /><button disabled={busy || budget.max_actions < 1 || budget.max_tokens < 1 || budget.max_active_seconds < 1}
     onClick={() => void onSave({ ...plan, budget })}>Use these limits</button></>;
@@ -62,8 +62,26 @@ function ResultPreview({ value }: { value: Record<string, unknown> }) {
   const visible = Object.fromEntries(Object.entries(value).filter(([key]) => !["artifact", "artifacts", "child_run_id"].includes(key)));
   return Object.keys(visible).length ? <FriendlyValue value={visible} /> : null;
 }
-export function AssistantHome() {
-  const s = useAssistant();
+export function AssistantHome({ workflowId }: { workflowId?: string } = {}) {
+  const s = useAssistant(workflowId);
+  const router = useRouter();
+  const canEdit = s.workspaces.some(workspace => workspace.id === s.workspaceId && workspace.role !== "viewer");
+  const progress = useBuildProgress(s.session?.id, s.session?.revision, s.building);
+  const buildLabel = progress ? (progress.phase === "planning" ? "Planning the next steps" : progress.phase === "repairing" ? "Refining the workflow" : progress.phase === "saving" ? "Saving the checked workflow" : "Checking the generated steps") + (progress.pass > 1 ? " · pass " + progress.pass : "") : s.repairing ? "Checking and repairing the workflow…" : "Building your workflow…";
+  const [conversationOpen, setConversationOpen] = useState(true);
+  const flushRef = useRef<(() => Promise<void>) | null>(null);
+  const flush = useCallback(async () => { await flushRef.current?.(); }, []);
+  const registerFlush = useCallback((callback: (() => Promise<void>) | null) => { flushRef.current = callback; }, []);
+  const layout = useEditorLayout(s.session?.id);
+  const [workflowVersions, setWorkflowVersions] = useState<{id: string; name: string}[]>([]);
+  useEffect(() => {
+    if (!s.workspaceId) return;
+    let live = true;
+    assistantApi.workflows(s.workspaceId).then(result => { if (live) setWorkflowVersions(result.items.filter(w => w.active_version_id).map(w => ({ id: "version:" + w.active_version_id, name: w.name + " (published)" }))); }).catch(() => {});
+    return () => { live = false; };
+  }, [s.workspaceId, s.session?.revision]);
+  async function afterSave(action: () => Promise<unknown>) { try { await flush(); await action(); } catch (error) { s.setError(error); } }
+
   const [text, setText] = useState("");
   const [speakReplies, setSpeakReplies] = useState(true);
   const [voiceTokenPending, setVoiceTokenPending] = useState(false);
@@ -92,8 +110,7 @@ export function AssistantHome() {
     modelId: "scribe_v2_realtime", commitStrategy: CommitStrategy.VAD, vadSilenceThresholdSecs: 1.5,
     microphone: { echoCancellation: true, noiseSuppression: true },
     onPartialTranscript: ({ text: partial }) => {
-      const current = voiceContext.current.s;
-      if (partial.trim()) { stopSpeech(); if (current.busy) current.interrupt(); }
+      if (partial.trim()) { stopSpeech(); /* Editing is locked while AI works; do not interrupt its draft. */ }
     },
     onCommittedTranscript: ({ text: committed }) => {
       if (!committed.trim()) return;
@@ -105,6 +122,7 @@ export function AssistantHome() {
           void assistantApi.control(s.run.id, "cancel").catch(s.setError);
         return;
       }
+      if (s.building) { setText(current => [current, committed].filter(Boolean).join("\n")); return; }
       if (liveQuestion) {
         let answer: unknown = committed.trim();
         if (liveQuestion.kind === "number") answer = Number(committed.replace(/,/g, ""));
@@ -114,11 +132,11 @@ export function AssistantHome() {
         }
         const match = liveQuestion.options?.find(option => option.label.toLowerCase() === committed.trim().toLowerCase() || option.value === committed.trim());
         if (match) answer = match.value;
-        void s.answer(liveQuestion.id, answer).catch(s.setError);
+        void flush().then(() => voiceContext.current.s.answer(liveQuestion.id, answer)).catch(s.setError);
       } else {
         if (s.run && !["COMPLETED", "FAILED", "CANCELLED"].includes(s.run.status))
           void assistantApi.control(s.run.id, "pause").catch(s.setError);
-        void s.send(committed).then(sent => { if (!sent) setText(current => [current, committed].filter(Boolean).join("\n")); });
+        void flush().then(() => voiceContext.current.s.send(committed)).then(sent => { if (!sent) setText(current => [current, committed].filter(Boolean).join("\n")); }).catch(error => { s.setError(error); setText(current => [current, committed].filter(Boolean).join("\n")); });
       }
     },
     onError: error => failVoice(voiceErrorMessage(error)),
@@ -172,35 +190,23 @@ export function AssistantHome() {
   }
   async function submit(e: FormEvent) {
     e.preventDefault();
-    if (!s.workspaceId || !text.trim()) return;
+    if (!s.workspaceId || !text.trim() || s.building) return;
     const message = text; stopSpeech();
-    if (await s.send(message)) setText(current => current === message ? "" : current);
+    try { await flush(); if (await voiceContext.current.s.send(message)) setText(current => current === message ? "" : current); } catch (error) { s.setError(error); }
   }
   const compilation = s.session?.compilation;
   const activeRun = s.run && !["COMPLETED", "FAILED", "CANCELLED"].includes(s.run.status);
-  return <main className={"assistant-home " + (compilation ? "has-workflow" : "")}>
-    <aside className="assistant-sidebar">
-      <button className="new-conversation" onClick={s.fresh}>＋ New request</button>
-      {s.workspaces.length > 1 && <select aria-label="Workspace" value={s.workspaceId} onChange={e => { s.fresh(); s.setWorkspaceId(e.target.value); }}>
-        {s.workspaces.map(workspace => <option key={workspace.id} value={workspace.id}>{workspace.name}</option>)}
-      </select>}
-      <span className="eyebrow">Recent workflows</span>
-      {s.sessions.length === 0 && <p className="hint">Your ideas will take shape here.</p>}
-      {s.sessions.map(session => <button key={session.id} className={"conversation-link " + (s.session?.id === session.id ? "selected" : "")} onClick={() => void s.open(session.id)}>
-        <span>◇</span>{session.compilation?.plan.name ?? "New conversation"}
-      </button>)}
-      <div className="sidebar-footer"><Link href="/automations">Schedules & triggers ↗</Link><Link href="/knowledge">Add some knowledge ↗</Link><Link href="/settings/whatsapp">Connect WhatsApp ↗</Link></div>
-    </aside>
-    <section className="assistant-conversation">
+  return <main className={"canvas-workspace " + (conversationOpen ? "conversation-open" : "conversation-closed")}>
+    <aside className="workspace-conversation" hidden={!conversationOpen} aria-label="Conversation">
+      <header className="row"><strong>Conversation</strong><span className="spacer" /><button aria-label="Collapse conversation" onClick={() => setConversationOpen(false)}>‹</button></header>
+      <details className="workspace-recents"><summary>Recent workflows</summary>
+        {s.workspaces.length > 1 && <select disabled={s.building} aria-label="Workspace" value={s.workspaceId} onChange={e => { s.fresh(); s.setWorkspaceId(e.target.value); }}>{s.workspaces.map(workspace => <option key={workspace.id} value={workspace.id}>{workspace.name}</option>)}</select>}
+        {s.sessions.map(session => <button key={session.id} className="conversation-link" disabled={s.building} onClick={() => void afterSave(() => s.open(session.id))}>{session.compilation?.plan.name ?? "New workflow"}</button>)}
+        {!s.sessions.length && <p className="small muted">Your saved workflows will appear here.</p>}
+      </details>
       <div className="conversation-scroll">
-        {!s.session?.messages.length && !s.run ? <div className="assistant-welcome">
-          <span className="welcome-orbit" aria-hidden>✦</span><div className="eyebrow">A little less busywork</div>
-          <h1>Say what you need.<br /><span>Let’s make it happen.</span></h1>
-          <p>Talk it through, shape the steps, and let your workflow take it from here.</p>
-          <div className="suggestion-cards">{EXAMPLES.map((example, i) => <button key={example.title} onClick={() => setText(example.text)}>
-            <span className="suggestion-number">0{i + 1}</span><strong>{example.title}</strong><span>{example.text}</span><b aria-hidden>↗</b>
-          </button>)}</div>
-        </div> : <div className="conversation-messages" aria-live="polite">
+
+        {!s.session?.messages.length && !s.run ? <p className="muted small">Describe what you need below. Your workflow will take shape on the canvas, and I’ll ask here if a detail is missing.</p> : <div className="conversation-messages" aria-live="polite">
           {s.session?.messages.map((message, i) => <article key={i} className={"assistant-message " + message.role}>
             <span className="message-author">{message.role === "user" ? "You" : "✦ Workflow"}</span><AiMarkdown text={message.text} />
           </article>)}
@@ -209,7 +215,7 @@ export function AssistantHome() {
         {s.busy && !s.repairing && <div className="planning-progress" role="status"><span className="spinner" />Shaping the steps and checking what’s needed…</div>}
         <ErrorBanner error={s.error} />
         {compilation && (!s.busy || s.repairing) && <CompilerIssues compilation={compilation} failure={s.doctorFailure} />}
-        {liveQuestion && <ClarificationCard key={liveQuestion.id} question={liveQuestion} onAnswer={value => s.answer(liveQuestion.id, value)} busy={s.busy} />}
+        {liveQuestion && <ClarificationCard key={liveQuestion.id} question={liveQuestion} onAnswer={async value => { await flush(); await s.answer(liveQuestion.id, value); }} busy={s.busy} />}
         {liveQuestion?.input === "config.credential_id" && !liveQuestion.options?.length && <p className="hint">
           <Link href="/settings/connected-accounts" target="_blank">Connect the account</Link> or <Link href="/settings/credentials" target="_blank">add an AI key</Link>, then{" "}
           <button className="link" disabled={s.busy} onClick={() => void s.send("I have connected the required account. Check the available accounts and update this workflow.")}>check again</button>.
@@ -233,30 +239,47 @@ export function AssistantHome() {
           {s.run.status === "COMPLETED" && Object.entries(s.run.outputs).filter(([id]) => !id.startsWith("_")).slice(-2).map(([id, value]) => <div key={id} className="run-result"><ResultPreview value={value} /></div>)}
         </section>}
         {compilation?.ready && <div className="workflow-actions">
-          <button className="primary" disabled={s.busy || !!activeRun} onClick={() => void s.start()}>{s.run ? "Run again" : "Run workflow"}</button>
-          <button onClick={() => void s.fork()}>Fork</button><button onClick={() => setScheduleOpen(!scheduleOpen)}>Make recurring</button>
+          <button className="primary" disabled={s.busy || !!activeRun} onClick={() => void afterSave(s.start)}>{s.run ? "Run again" : "Run workflow"}</button>
+          <button disabled={s.building} onClick={() => void afterSave(s.fork)}>Fork</button><button disabled={s.building} onClick={() => setScheduleOpen(!scheduleOpen)}>Make recurring</button>
         </div>}
         {scheduleOpen && compilation && <form className="schedule-card" onSubmit={async e => {
           e.preventDefault();
-          try { await assistantApi.saveAutomation({ workspace_id: s.workspaceId, name: compilation.plan.name, plan: materializePlan(compilation.plan, s.session?.answers ?? {}),
+          try { await flush(); const saved = s.currentSession(); if (!saved?.compilation?.ready) throw new Error("Finish checking this workflow before scheduling it."); await assistantApi.saveAutomation({ workspace_id: saved.workspace_id, name: saved.compilation.plan.name, plan: materializePlan(saved.compilation.plan, saved.answers),
             ...(s.credentialId ? { credential_id: s.credentialId } : {}), cron, timezone, trigger: "", enabled: true }); setScheduleSaved(true); } catch (err) { s.setError(err); }
         }}>
           <h3>Keep this workflow running</h3><label>Cron expression<input value={cron} onChange={e => setCron(e.target.value)} /></label><p className="hint">0 9 * * 1-5 runs at 9 am every weekday.</p>
-          <label>Timezone<input value={timezone} onChange={e => setTimezone(e.target.value)} /></label><button type="submit" className="primary">Save schedule</button>
+          <label>Timezone<input value={timezone} onChange={e => setTimezone(e.target.value)} /></label><button type="submit" className="primary" disabled={s.building}>Save schedule</button>
           {scheduleSaved && <p role="status">Schedule saved. Manage it in <Link href="/automations">Schedules & triggers</Link>.</p>}
         </form>}
+
       </div>
+    </aside>
+    <section className="workspace-stage" aria-label="Canvas workspace">
+      <WorkflowDraft plan={progress?.plan ?? compilation?.plan ?? s.run?.plan ?? null} tools={s.tools} comparisons={s.comparisons} controls={s.controls}
+        sessionId={s.session?.id} revision={s.session?.revision} layout={layout.layout} onLayoutSave={layout.save}
+        selectedStep={selectedStep} onSelectStep={setSelectedStep} busy={s.building} readOnly={!canEdit} onSave={s.edit} onManualEdit={s.beginManualEdit} onDirtyChange={dirty => { if (!dirty) s.endManualEdit(); }} onFlushReady={registerFlush}
+        workflowVersions={workflowVersions} completedSteps={s.events.filter(event => event.run_id === s.run?.id && event.kind === "step_completed").map(event => event.step_id)}
+        checkPlan={s.session ? plan => { const active = s.currentSession()!; return assistantApi.check(active.id, active.revision, plan); } : undefined}
+        headerActions={<>
+          <button aria-expanded={conversationOpen} aria-label={conversationOpen ? "Hide conversation" : "Show conversation"} onClick={() => setConversationOpen(!conversationOpen)}>Conversation{liveQuestion ? " •" : ""}</button>
+          <button disabled={s.building} onClick={() => void afterSave(async () => { s.fresh(); if (workflowId) router.push("/home"); })}>New request</button>
+          <WorkflowManagement session={s.session} currentSession={s.currentSession} flush={flush} onRestore={s.acceptSession} disabled={s.busy || !canEdit} />
+          <button className="primary" disabled={!canEdit || !compilation?.ready || s.busy || !!activeRun} onClick={() => void afterSave(s.start)}>▶ Run</button>
+        </>} />
       <form className="voice-composer" onSubmit={submit}>
         <ErrorBanner error={voiceError} />
+        {s.building && <div className="row small" role="status"><span className="spinner" />{buildLabel}. Editing unlocks when this finishes.<span className="spacer" /><button type="button" onClick={s.interrupt}>Stop building</button></div>}
+        {!conversationOpen && liveQuestion && <button type="button" className="composer-question" onClick={() => setConversationOpen(true)}>Answer needed: {liveQuestion.prompt}</button>}
+        {!conversationOpen && (s.busy || !!s.doctorFailure || !!s.error) && <div className="small" role="status">{s.doctorFailure || (s.repairing ? "Checking and fixing your workflow…" : s.busy ? "Shaping your workflow…" : "A request needs attention.")} <button type="button" className="link" onClick={() => setConversationOpen(true)}>Open conversation</button></div>}
         {!!s.workspaceError && <div role="status"><ErrorBanner error={s.workspaceError} /><button type="button" disabled={s.loading} onClick={s.reloadWorkspace}>Retry loading workspace</button></div>}
         {s.loading && !s.workspaceId && <p className="hint" role="status">Loading your workspace. You can write your request while you wait.</p>}
         {voiceActive && <div className="live-transcript" role="status"><span className="listening-dot" />{scribe.partialTranscript || "Listening. You can interrupt me anytime."}</div>}
         <textarea aria-label="What would you like to do?" placeholder="Tell me what you’d like to get done…" value={text} onChange={e => setText(e.target.value)} rows={2}
           onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); if (text.trim() && s.workspaceId) e.currentTarget.form?.requestSubmit(); } }} />
-        <div className="composer-toolbar"><button type="button" disabled={!s.workspaceId || voiceStarting} className={"mic-button " + (voiceActive ? "listening" : "")} aria-label={voiceStarting ? "Connecting microphone" : voiceActive ? "Stop microphone" : "Start microphone"} aria-pressed={voiceActive} onClick={() => void toggleVoice()}>
+        <div className="composer-toolbar"><button type="button" disabled={!canEdit || !s.workspaceId || voiceStarting || (s.building && !voiceActive)} className={"mic-button " + (voiceActive ? "listening" : "")} aria-label={voiceStarting ? "Connecting microphone" : voiceActive ? "Stop microphone" : "Start microphone"} aria-pressed={voiceActive} onClick={() => void toggleVoice()}>
           <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="9" y="2" width="6" height="12" rx="3" /><path d="M5 10v2a7 7 0 0014 0v-2M12 19v3M8 22h8" /></svg>
         </button><span className="hint">{voiceStarting ? "Connecting…" : voiceActive ? "Tap to stop" : "Talk it through"}</span><span className="spacer" />
-          <button className="primary send-button" type="submit" disabled={!text.trim() || !s.workspaceId}>Make it happen ↑</button>
+          <button className="primary send-button" type="submit" disabled={!canEdit || !text.trim() || !s.workspaceId || s.building}>Make it happen ↑</button>
         </div>
         <div className="composer-settings"><label><input type="checkbox" checked={s.autoExecute} onChange={e => s.setAutoExecute(e.target.checked)} /> Run when ready</label>
           <label><input type="checkbox" checked={speakReplies} onChange={e => { setSpeakReplies(e.target.checked); if (!e.target.checked) stopSpeech(); }} /> Spoken replies</label>
@@ -264,6 +287,5 @@ export function AssistantHome() {
         </div>
       </form>
     </section>
-    {compilation && <aside className="assistant-builder"><WorkflowDraft key={s.session!.id + ":" + s.session!.revision} plan={compilation.plan} tools={s.tools} comparisons={s.comparisons} selectedStep={selectedStep} onSelectStep={setSelectedStep} busy={s.busy} onSave={s.edit} /></aside>}
   </main>;
 }

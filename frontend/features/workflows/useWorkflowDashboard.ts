@@ -5,6 +5,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { authApi, projectApi, workflowApi } from "@/lib/api";
+import { assistantApi } from "@/lib/api/assistant";
+import { workflowSummary } from "@/lib/automation/workflowSummary";
 import type { Project, Workflow, WorkspaceRef } from "@/types/api";
 
 export interface WorkflowRow {
@@ -14,8 +16,14 @@ export interface WorkflowRow {
 
 async function loadWorkspace(workspaceId: string): Promise<{ ps: Project[]; rs: WorkflowRow[] }> {
   const ps = (await projectApi.list(workspaceId)).items;
-  const lists = await Promise.all(ps.map((p) => workflowApi.list(p.id)));
-  return { ps, rs: lists.flatMap((l, i) => l.items.map((workflow) => ({ workflow, project: ps[i] }))) };
+  const [lists, modern] = await Promise.all([Promise.all(ps.map((p) => workflowApi.list(p.id))), assistantApi.workflows(workspaceId)]);
+  const rs = lists.flatMap((l, i) => l.items.map((workflow) => ({ workflow, project: ps[i] })));
+  for (const item of modern.items) {
+    const workflow = workflowSummary(item);
+    const project = ps.find(p => p.id === workflow.project_id) ?? { id: "", workspace_id: workspaceId, name: "Workspace", description: null, created_at: item.created_at, updated_at: item.updated_at };
+    rs.push({ workflow, project });
+  }
+  return { ps, rs: rs.sort((a, b) => b.workflow.updated_at.localeCompare(a.workflow.updated_at)) };
 }
 
 export function useWorkflowDashboard() {
@@ -69,7 +77,8 @@ export function useWorkflowDashboard() {
       if (!workspaceId) throw new Error("No workspace");
       let pid = projectId ?? projects[0]?.id;
       if (!pid) pid = (await projectApi.create(workspaceId, "Default")).id;
-      const wf = templateId ? await workflowApi.createFromTemplate(pid, name, templateId) : await workflowApi.create(pid, name);
+      const created = await assistantApi.createWorkflow({ workspace_id: workspaceId, project_id: pid, name, ...(templateId ? { template_id: templateId } : {}) });
+      const wf = workflowSummary(created.workflow);
       reload();
       return wf;
     },

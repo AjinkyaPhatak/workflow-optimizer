@@ -40,7 +40,7 @@ test("workspace and send failures preserve text and offer recovery", async ({ pa
   await expect(input).toHaveValue("Make my report");
   sendFails = false;
   await page.getByRole("button", { name: "Make it happen" }).click();
-  await expect(page.getByRole("heading", { name: "Nifty 50 daily report" })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Workflow name", exact: true })).toHaveValue("Nifty 50 daily report");
   await expect(input).toHaveValue("");
 });
 
@@ -59,7 +59,7 @@ test("real voice client keeps later transcripts in the current session and recov
   await page.getByRole("button", { name: "Start microphone" }).click();
   await expect(page.getByRole("button", { name: "Stop microphone" })).toBeVisible();
   socket!.send(JSON.stringify({ message_type: "committed_transcript", text: "Make a market report" }));
-  await expect(page.getByRole("heading", { name: "Nifty 50 daily report" })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Workflow name", exact: true })).toHaveValue("Nifty 50 daily report");
   const firstSession = new URL(page.url()).searchParams.get("session");
   socket!.send(JSON.stringify({ message_type: "committed_transcript", text: "Include the average too" }));
   await expect(page.locator(".assistant-message.user").filter({ hasText: "Include the average too" })).toBeVisible();

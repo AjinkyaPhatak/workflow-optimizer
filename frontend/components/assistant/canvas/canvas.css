@@ -1,0 +1,47 @@
+/* The compiler editor uses the existing editor/node/palette design tokens. */
+.compiler-editor { display:flex; flex-direction:column; flex:1; min-height:0; min-width:0; height:100%; overflow:hidden; background:var(--panel); }
+.compiler-editor-header { flex-shrink:0; min-height:52px; flex-wrap:wrap; gap:6px; padding-top:6px; padding-bottom:6px; }
+.compiler-workflow-name { width:clamp(140px,22vw,320px); min-width:100px; border-color:transparent; background:transparent; font-weight:600; font-size:16px; padding-left:0; text-overflow:ellipsis; }
+.compiler-workflow-name:focus { border-color:var(--accent); background:var(--panel); }
+.compiler-editor-header .save-state { font-size:11px; color:var(--muted); }
+.compiler-editor-header .save-state.error { color:var(--danger); }
+.compiler-editor-header button { flex-shrink:0; }
+.plan-palette { flex-shrink:0; }
+.plan-palette .palette-row { max-height:92px; }
+.compiler-editor-body { display:grid; grid-template-columns:minmax(0,1fr); flex:1; min-height:0; position:relative; }
+.compiler-editor-body.has-inspector { grid-template-columns:minmax(0,1fr) 330px; }
+.plan-canvas { height:100%; min-height:200px; outline:none; background:var(--canvas,#f8f9fa); }
+.plan-canvas .react-flow__node-plan { border:none; background:none; padding:0; }
+.plan-control-handle { top:20px; opacity:.55; width:6px; height:6px; }
+.plan-node-description { padding:8px 10px; color:var(--muted); border-bottom:1px solid var(--border); font-size:11px; white-space:normal; overflow-wrap:anywhere; }
+.plan-join { width:110px; background:var(--panel); border:1px solid var(--border); border-radius:var(--radius); padding:10px 8px; text-align:center; color:var(--muted); font-size:11px; box-shadow:var(--shadow-sm); }
+.plan-canvas .wf-node-more { margin:4px 10px 10px; min-height:22px; }
+.plan-canvas .wf-port { max-width:145px; overflow:visible; }
+.plan-canvas .wf-port .pname { display:block; overflow:hidden; text-overflow:ellipsis; }
+.plan-canvas .wf-node-body { padding:8px 10px; }
+.plan-canvas .react-flow__edge.data .react-flow__edge-path { stroke:var(--accent); stroke-width:1.25; }
+.plan-canvas .react-flow__edge.loop .react-flow__edge-path { stroke:var(--muted); }
+.compiler-config { min-width:0; overflow-y:auto; padding-bottom:36px; }
+.compiler-config h3 { overflow-wrap:anywhere; }
+.compiler-config fieldset { margin:18px 0; padding:12px; min-width:0; border:1px solid var(--border); border-radius:var(--radius-sm); }
+.compiler-config legend { color:var(--muted); font-size:12px; padding:0 5px; }
+.compiler-config select,.compiler-config input,.compiler-config textarea { width:100%; }
+.compiler-config .switch-row input { width:auto; }
+.compiler-config .row { flex-wrap:wrap; }
+.compiler-config .field { margin:14px 0; }
+.plan-binding select+input,.plan-binding select+textarea,.plan-binding select+select { margin-top:6px; }
+.plan-binding textarea { resize:vertical; min-height:60px; }
+.plan-binding .hint { margin:5px 0 0; }
+.plan-binding.compact { margin:0 0 8px; }
+.plan-binding.compact label { font-size:10px; color:var(--muted); }
+.plan-binding.compact input,.plan-binding.compact select,.plan-binding.compact textarea { min-height:28px; font-size:11px; padding:4px 6px; width:100%; }
+.compiler-notice { display:flex; align-items:center; flex-wrap:wrap; gap:8px; padding:8px 16px; font-size:12px; background:var(--warn-weak); color:var(--text); border-bottom:1px solid var(--border); }
+.compiler-notice button { font-size:12px; }
+.compiler-empty { background:transparent; border-color:transparent; box-shadow:none; padding:18px; }
+.compiler-empty h2 { font-size:16px; }
+.compiler-empty p { font-size:13px; }
+@media(max-width:1100px) { .compiler-editor-header .save-state { display:none; } .plan-palette .palette-bar-top { flex-wrap:wrap; } .plan-palette .palette-search { width:180px; } .plan-palette .palette-tab { padding:3px 10px; font-size:12px; } .compiler-editor-body.has-inspector { grid-template-columns:minmax(0,1fr); } .compiler-config { position:absolute; z-index:10; top:0; right:0; bottom:0; width:min(330px,90%); box-shadow:var(--shadow-lg); } }
+@media(max-width:700px) { .compiler-workflow-name { flex:1; width:150px; } .compiler-editor-header { padding:6px 10px; } .compiler-editor-header button { padding:4px 7px; font-size:11px; } .plan-palette { padding:6px 10px; } .plan-palette .palette-search { width:100%; } .plan-palette .palette-row { min-height:58px; max-height:74px; } .plan-palette .palette-tile { min-height:56px; width:82px; } .plan-canvas .react-flow__minimap { display:none; } }
+
+.compiler-config .compiler-edit-fields,.plan-inline-fields { margin:0; padding:0; border:0; min-width:0; }
+.compiler-edit-fields:disabled,.plan-inline-fields:disabled { opacity:.7; }
