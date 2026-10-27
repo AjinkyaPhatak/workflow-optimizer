@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
 import { BrandMark, Spinner } from "@/components/ui/BrandMark";
@@ -46,24 +47,25 @@ export default function LoginPage() {
             <BrandMark size={28} />
             <span>Workflow Optimizer</span>
           </div>
-          <h2>Design AI workflows visually.</h2>
-          <p>Connect inputs, models and integrations on a canvas, then run and debug every step.</p>
+          <h2>AI workflows for everyday work.</h2>
+          <p>Connect Gmail, Calendar, Sheets and AI into simple step-by-step workflows. No code, and free to start.</p>
           <div className="auth-illustration">
-            <div className="auth-node">Input</div>
+            <div className="auth-node">Gmail</div>
             <div className="auth-edge" />
-            <div className="auth-node accent">LLM</div>
+            <div className="auth-node accent">AI</div>
             <div className="auth-edge" />
-            <div className="auth-node">Output</div>
+            <div className="auth-node">Summary</div>
           </div>
         </div>
       </section>
 
       <section className="auth-panel">
+        <Link href="/" className="auth-home">← Back to home</Link>
         <form className="auth-form" onSubmit={submit} aria-busy={busy}>
-          <div className="auth-logo compact">
+          <Link href="/" className="auth-logo compact">
             <BrandMark size={24} />
             <span>Workflow Optimizer</span>
-          </div>
+          </Link>
           <div>
             <h1>{registering ? "Create your account" : "Sign in"}</h1>
             <p className="muted">{registering ? "Start building workflows in minutes." : "Welcome back. Sign in to continue to your workflows."}</p>

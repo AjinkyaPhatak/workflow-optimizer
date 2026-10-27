@@ -6,8 +6,9 @@ import { useEffect, useRef, useState } from "react";
 import { useSession } from "@/lib/auth/session";
 import { BrandMark } from "./BrandMark";
 
-/** The main sections, in the top bar. */
-const SECTIONS = [
+/** The main sections, in the top bar (and on the landing page). */
+export const SECTIONS = [
+  { href: "/", label: "Home" },
   { href: "/workflows", label: "Workflows" },
   { href: "/templates", label: "Templates" },
   { href: "/knowledge", label: "Knowledge" },
@@ -30,7 +31,7 @@ export function initials(name: string | undefined): string {
 }
 
 function active(pathname: string, href: string): boolean {
-  return pathname === href || pathname.startsWith(href + "/");
+  return pathname === href || (href !== "/" && pathname.startsWith(href + "/"));
 }
 
 export function TopBar() {
@@ -38,6 +39,7 @@ export function TopBar() {
   const pathname = usePathname() ?? "";
   const { session, logout } = useSession();
   const [open, setOpen] = useState(false);
+  const [navOpen, setNavOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -55,14 +57,18 @@ export function TopBar() {
 
   return (
     <header className="topbar">
-      <Link href="/workflows" className="brand"><BrandMark size={22} />Workflow Optimizer</Link>
-      <nav className="topbar-nav" aria-label="Main">
+      <button type="button" className="topbar-menu" aria-label="Menu" aria-expanded={navOpen} onClick={() => setNavOpen(!navOpen)}>
+        <span /><span /><span />
+      </button>
+      <Link href="/" className="brand"><BrandMark size={22} />Workflow Optimizer</Link>
+      <nav className={`topbar-nav${navOpen ? " open" : ""}`} aria-label="Main">
         {SECTIONS.map((s) => (
           <Link key={s.href} href={s.href} className={`topbar-link ${active(pathname, s.href) ? "active" : ""}`}
-            aria-current={active(pathname, s.href) ? "page" : undefined}>{s.label}</Link>
+            aria-current={active(pathname, s.href) ? "page" : undefined} onClick={() => setNavOpen(false)}>{s.label}</Link>
         ))}
       </nav>
       <span className="spacer" />
+      {!session && <Link href="/login" className="topbar-cta">Sign in</Link>}
       {session && (
         <div className="account-menu" ref={menuRef}>
           <button type="button" className={`account-button ${SETTINGS.some((s) => active(pathname, s.href)) ? "active" : ""}`}

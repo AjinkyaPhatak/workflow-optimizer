@@ -173,3 +173,5 @@ button.account-item.signout:hover:not(:disabled) { background: var(--danger-weak
 .gallery-card.soon:disabled { opacity: .62; cursor: not-allowed; filter: grayscale(.6); }
 .badge.soon-badge { background: #efebe3; color: var(--muted); }
 
+/* The editor sits under the shared top bar. */
+.editor { grid-template-rows: 60px 52px auto 1fr; }

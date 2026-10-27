@@ -14,6 +14,7 @@ import { CREDENTIAL_FIELD } from "@/lib/workflow/labels";
 import { credentialFills } from "@/lib/workflow/requirements";
 import { isDirty, useEditorStore, useIsDirty } from "@/stores/workflow-editor/store";
 import type { NodeDefinition } from "@/types/api";
+import { TopBar } from "@/components/ui/TopBar";
 import { EditorHeader } from "./EditorHeader";
 import { RunDialog } from "@/components/run/RunDialog";
 import { useShowDetails } from "@/stores/ui/details";
@@ -156,6 +157,7 @@ function EditorLayout({ workflowId }: { workflowId: string }) {
   return (
     <EditorContext.Provider value={session}>
       <div className="editor">
+        <TopBar />
         <EditorHeader onRun={() => setRunning(true)} />
         <PaletteBar onAdd={addAtCenter} />
         <div className="editor-body">
