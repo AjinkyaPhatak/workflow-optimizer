@@ -105,6 +105,12 @@ Unsafe actions claim a durable operation before dispatch. Uncertain delivery
 produces a reconciliation card and never blindly resends. Provider receipts
 remain in the action ledger. Deliberate new runs have new request IDs.
 
+WhatsApp resolves names against the connected account's contacts. Exact IDs and
+names take priority; normalization handles punctuation, case and accents, and
+minor spelling differences use the clear closest match. Near ties require a
+contact choice before an action is claimed. Phone numbers and contact addresses
+are matched exactly and never autocorrected to a nearby number.
+
 Knowledge defaults to normalized 384-dimensional multilingual-e5-small,
 revision `614241f622f53c4eeff9890bdc4f31cfecc418b3`. Retrieval combines cosine
 similarity and keywords within a workspace/base. Hosted bases keep their

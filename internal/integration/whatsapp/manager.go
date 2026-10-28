@@ -265,15 +265,7 @@ func (m *Manager) Resolve(ctx context.Context, ws, user uuid.UUID, query string)
 	if err != nil {
 		return nil, err
 	}
-	matches := []Contact{}
-	for _, contact := range contacts {
-		if contact.ID == query {
-			return []Contact{contact}, nil
-		}
-		if strings.Contains(strings.ToLower(contact.Name), strings.ToLower(query)) {
-			matches = append(matches, contact)
-		}
-	}
+	matches := MatchContacts(contacts, query)
 	if len(matches) > 0 {
 		return matches, nil
 	}

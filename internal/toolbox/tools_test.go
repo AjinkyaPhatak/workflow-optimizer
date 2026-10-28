@@ -107,6 +107,63 @@ func TestAmbiguousContactDoesNotClaimOrSend(t *testing.T) {
 		t.Fatal("ambiguous contact was not stopped before the send")
 	}
 }
+
+func TestMisspelledContactUsesMatchedIDAndRetainsSendDeduplication(t *testing.T) {
+	sends := 0
+	contactReads := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if strings.HasSuffix(r.URL.Path, "/contacts") {
+			contactReads++
+			if contactReads == 1 {
+				w.WriteHeader(http.StatusServiceUnavailable)
+				return
+			}
+			_ = json.NewEncoder(w).Encode([]whatsapp.Contact{{ID: "correct-jid", Name: "Ajinkya Phatak"}, {ID: "unrelated", Name: "Ritwik Sundar"}})
+			return
+		}
+		if !strings.HasSuffix(r.URL.Path, "/send") {
+			t.Errorf("unexpected operation %s", r.URL.Path)
+		}
+		var request whatsapp.SendRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil || request.Recipient != "correct-jid" || request.Text != "The requested value" {
+			t.Errorf("incorrect resolved send: %+v %v", request, err)
+		}
+		sends++
+		_ = json.NewEncoder(w).Encode(whatsapp.Receipt{ID: "synthetic-receipt", Status: "sent"})
+	}))
+	defer server.Close()
+	store := &actionStore{results: map[string]*automation.ToolResult{}}
+	box := &Toolbox{Store: store, WhatsApp: &whatsapp.Client{URL: server.URL, Token: "internal"}}
+	call := automation.ToolCall{RunID: uuid.New(), OperationID: "same-send", Tool: "whatsapp.send", Inputs: map[string]any{"recipient": "Ajinkya Fatak", "text": "The requested value"}}
+	for i := 0; i < 2; i++ {
+		if _, err := box.Execute(context.Background(), call); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if sends != 1 || contactReads != 3 {
+		t.Fatalf("contact reconnect/deduplication: sends=%d contact reads=%d", sends, contactReads)
+	}
+}
+
+func TestFuzzyContactTieDoesNotClaimOrSend(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasSuffix(r.URL.Path, "/contacts") {
+			t.Error("ambiguous fuzzy match sent a message")
+			http.Error(w, "unexpected send", http.StatusInternalServerError)
+			return
+		}
+		_ = json.NewEncoder(w).Encode([]whatsapp.Contact{{ID: "one", Name: "Ajinkya Phatak"}, {ID: "two", Name: "Other Phatak"}})
+	}))
+	defer server.Close()
+	store := &actionStore{results: map[string]*automation.ToolResult{}}
+	box := &Toolbox{Store: store, WhatsApp: &whatsapp.Client{URL: server.URL, Token: "internal"}}
+	_, err := box.Execute(context.Background(), automation.ToolCall{RunID: uuid.New(), Tool: "whatsapp.send", Inputs: map[string]any{"recipient": "Phatac", "text": "The requested value"}})
+	var need *automation.NeedInput
+	if !errors.As(err, &need) || len(need.Question.Options) != 2 || len(store.results) != 0 {
+		t.Fatalf("ambiguous fuzzy contact was not clarified before claiming: %v", err)
+	}
+}
 func TestCSVAndLargeArtifactReferences(t *testing.T) {
 	store := &fileStore{metadata: map[uuid.UUID]files.File{}, data: map[uuid.UUID][]byte{}}
 	box := &Toolbox{Files: store}

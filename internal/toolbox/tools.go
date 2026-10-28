@@ -75,7 +75,7 @@ func (t *Toolbox) Catalog() []ToolDescriptor {
 		{ID: "knowledge.search", Name: "Search knowledge", Inputs: []Field{field("base_id", "string", "Knowledge base ID", true), field("query", "string", "Question to search", true)}, Outputs: []Field{field("text", "string", "Cited passages", true), field("results", "array", "Matching passages", true)}},
 		{ID: "knowledge.add", Name: "Save to knowledge", SideEffects: "idempotent", Inputs: []Field{field("base_id", "string", "Knowledge base ID", true), field("text", "string", "Source text", true), field("title", "string", "Document title", false)}, Outputs: []Field{field("document_id", "string", "Saved document", true)}},
 		{ID: "whatsapp.contacts", Name: "Find WhatsApp contacts", Inputs: []Field{}, Outputs: []Field{field("contacts", "array", "Available contacts and IDs", true)}},
-		{ID: "whatsapp.send", Name: "Send on WhatsApp", Description: "Send an explicitly requested message and optional file. Ambiguous contacts prompt for a choice.", SideEffects: "unsafe", Inputs: []Field{field("recipient", "string", "Contact name or exact contact ID", true), field("text", "string", "Message to send", true), field("file_id", "string", "Optional attachment ID", false)}, Outputs: []Field{field("receipt", "object", "Message ID and delivery status", true)}},
+		{ID: "whatsapp.send", Name: "Send on WhatsApp", Description: "Send an explicitly requested message and optional file. Minor name misspellings use a clear closest contact match; ambiguous names prompt for a choice.", SideEffects: "unsafe", Inputs: []Field{field("recipient", "string", "Contact name or exact contact ID", true), field("text", "string", "Message to send", true), field("file_id", "string", "Optional attachment ID", false)}, Outputs: []Field{field("receipt", "object", "Message ID and delivery status", true)}},
 	}
 	if t.Nodes != nil {
 		for _, d := range t.Nodes.Definitions() {
@@ -212,16 +212,7 @@ func (t *Toolbox) Execute(ctx context.Context, c ToolCall) (ToolResult, error) {
 			return ToolResult{}, err
 		}
 		recipient := stringInput(c, "recipient")
-		matches := []whatsapp.Contact{}
-		for _, contact := range contacts {
-			if contact.ID == recipient {
-				matches = []whatsapp.Contact{contact}
-				break
-			}
-			if strings.Contains(strings.ToLower(contact.Name), strings.ToLower(recipient)) {
-				matches = append(matches, contact)
-			}
-		}
+		matches := whatsapp.MatchContacts(contacts, recipient)
 		if len(matches) != 1 {
 			if len(matches) == 0 && strings.HasPrefix(recipient, "+") {
 				_ = t.WhatsApp.Request(ctx, c.WorkspaceID, c.UserID, "POST", "resolve", map[string]string{"query": recipient}, &matches)
@@ -236,7 +227,7 @@ func (t *Toolbox) Execute(ctx context.Context, c ToolCall) (ToolResult, error) {
 			for _, contact := range choices {
 				options = append(options, Option{Label: contact.Name, Value: contact.ID})
 			}
-			return ToolResult{}, &NeedInput{Question: Question{ID: "recipient", Prompt: "Which WhatsApp contact should receive this?", Kind: "contact", Required: true, AllowOther: true, Example: "A contact name or an international number starting with +", Options: options, Input: "recipient"}}
+			return ToolResult{}, &NeedInput{Question: Question{ID: "recipient", Prompt: "Which WhatsApp contact should receive this?", Kind: "contact", Required: true, AllowOther: true, Example: "A contact name or an international number starting with +", Options: options, Input: "recipient", StepName: "Send on WhatsApp", FieldLabel: "Recipient", Context: "I couldn’t choose one clear contact for “" + recipient + "”. Choose the intended person from your WhatsApp contacts."}}
 		}
 		c.Inputs["recipient"] = matches[0].ID
 	}
