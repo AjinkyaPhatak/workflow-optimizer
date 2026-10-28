@@ -117,6 +117,29 @@ func (h *Handlers) GetAssistantSession(w http.ResponseWriter, r *http.Request) {
 	}
 	httpx.WriteJSON(w, 200, out)
 }
+
+func (h *Handlers) SetAssistantBudget(w http.ResponseWriter, r *http.Request) {
+	if !h.assistantReady(w, r) {
+		return
+	}
+	id, ok := h.pathID(w, r, "sessionID")
+	if !ok {
+		return
+	}
+	var in struct {
+		Revision int               `json:"revision"`
+		Budget   automation.Budget `json:"budget"`
+	}
+	if !h.decode(w, r, &in) {
+		return
+	}
+	out, err := h.Assistant.SetDraftBudget(r.Context(), user(r), id, in.Revision, in.Budget)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	httpx.WriteJSON(w, 200, out)
+}
 func (h *Handlers) AssistantMessage(w http.ResponseWriter, r *http.Request) {
 	if !h.assistantReady(w, r) {
 		return
@@ -441,6 +464,22 @@ func (h *Handlers) SaveAutomation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.WriteJSON(w, 200, out)
+}
+
+func (h *Handlers) ListRunsForAutomation(w http.ResponseWriter, r *http.Request) {
+	if !h.assistantReady(w, r) {
+		return
+	}
+	id, ok := h.pathID(w, r, "automationID")
+	if !ok {
+		return
+	}
+	out, err := h.Assistant.AutomationRuns(r.Context(), user(r), id)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	httpx.WriteJSON(w, 200, map[string]any{"items": out})
 }
 func (h *Handlers) DeleteAutomation(w http.ResponseWriter, r *http.Request) {
 	if !h.assistantReady(w, r) {

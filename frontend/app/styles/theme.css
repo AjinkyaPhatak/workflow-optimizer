@@ -134,7 +134,15 @@ button.account-item.signout:hover:not(:disabled) { background: var(--danger-weak
 .automation-page .automation-form,.whatsapp-page .whatsapp-card { position: relative; overflow: hidden; max-width: 720px; }
 .automation-page .automation-form::before,.whatsapp-page .whatsapp-card::before { content: ""; position: absolute; inset: 0 0 auto; height: 4px; background: var(--tuscan); }
 .whatsapp-page .whatsapp-card::before { background: var(--verdigris); }
-.automation-page .automation-row { border-left: 4px solid var(--verdigris); }
+.automation-page .automation-card { border-left: 4px solid var(--verdigris); overflow: hidden; }
+.automation-description { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.automation-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.automation-runs { border-top: 1px solid var(--border); padding: 18px 20px; }
+.automation-runs h4 { margin: 0; font-size: 14px; }
+.automation-run { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 14px 0; border-bottom: 1px solid var(--border); }
+.automation-run .hint { margin: 7px 0 0; }
+.automation-history { margin-top: 18px; }
+.automation-history summary { cursor: pointer; font-weight: 600; }
 .whatsapp-page .whatsapp-qr { align-self: flex-start; padding: 16px; border: 1px solid var(--border); border-radius: 16px; background: var(--panel); max-width: 100%; }
 .whatsapp-page .whatsapp-qr img { max-width: 100%; height: auto; }
 @media (max-width: 700px) {

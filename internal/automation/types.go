@@ -68,12 +68,15 @@ type Step struct {
 	WorkflowRef     string     `json:"workflow_ref"`
 }
 type Budget struct {
-	MaxActions       int `json:"max_actions"`
-	MaxTokens        int `json:"max_tokens"`
-	MaxActiveSeconds int `json:"max_active_seconds"`
+	Automatic        bool `json:"automatic,omitempty"`
+	MaxActions       int  `json:"max_actions"`
+	MaxTokens        int  `json:"max_tokens"`
+	MaxActiveSeconds int  `json:"max_active_seconds"`
 }
 
-func (b Budget) Valid() bool { return b.MaxActions > 0 && b.MaxTokens > 0 && b.MaxActiveSeconds > 0 }
+func (b Budget) Valid() bool {
+	return b.Automatic || b.MaxActions > 0 && b.MaxTokens > 0 && b.MaxActiveSeconds > 0
+}
 
 type Plan struct {
 	SchemaVersion int        `json:"schema_version"`
@@ -224,6 +227,7 @@ type Store interface {
 	CreateRun(context.Context, Run) error
 	Run(context.Context, uuid.UUID) (Run, error)
 	ListRuns(context.Context, uuid.UUID) ([]Run, error)
+	ListAutomationRuns(context.Context, uuid.UUID, uuid.UUID) ([]Run, error)
 	UpdateRun(context.Context, uuid.UUID, string, map[string]map[string]any, *Question, string) error
 	AddEvent(context.Context, Event) error
 	Events(context.Context, uuid.UUID, int64) ([]Event, error)

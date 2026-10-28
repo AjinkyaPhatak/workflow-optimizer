@@ -4,7 +4,7 @@ export type Position = { x: number; y: number };
 export type Positions = Record<string, Position>;
 export type ControlDescriptor = { kind: string; name: string; description?: string };
 export type EditorLayout = { revision: number; positions: Positions };
-export const emptyPlan = (): Plan => ({ schema_version: 2, name: "New workflow", summary: "", mode: "once", budget: { max_actions: 30, max_tokens: 50000, max_active_seconds: 600 }, steps: [], questions: [] });
+export const emptyPlan = (): Plan => ({ schema_version: 2, name: "New workflow", summary: "", mode: "once", budget: { automatic: true, max_actions: 30, max_tokens: 50000, max_active_seconds: 600 }, steps: [], questions: [] });
 // Go encodes unused slices as null. Normalize a presentation copy so opening a
 // server draft never becomes a semantic edit or triggers an autosave.
 export function normalizeCanvasPlan(plan: Plan): Plan {
@@ -16,6 +16,12 @@ export function normalizeCanvasPlan(plan: Plan): Plan {
   return { ...plan, steps: steps(plan.steps), questions: (plan.questions ?? []).map(question) };
 }
 export const allSteps = (steps: Step[] | null | undefined): Step[] => (steps ?? []).flatMap(step => [step, ...allSteps(step.children), ...allSteps(step.otherwise)]);
+export function isBudgetQuestion(plan: Plan, question: Question): boolean {
+  const fields = ["max_actions", "max_tokens", "max_active_seconds"];
+  return question.kind === "number" && question.purpose !== "intent" &&
+    fields.some(field => question.input === "budget." + field || question.id === field && question.input === "answer") &&
+    (!question.step_id && question.input.startsWith("budget.") || (plan.steps ?? []).some(step => step.kind === "ask" && step.id === question.step_id && step.question?.id === question.id));
+}
 export const updateStep = (steps: Step[], id: string, update: (step: Step) => Step): Step[] => steps.map(step => step.id === id ? update(step) : ({ ...step, children: updateStep(step.children ?? [], id, update), otherwise: updateStep(step.otherwise ?? [], id, update) }));
 export const literal = (name: string, value: unknown): Binding => ({ name, source: "literal", ref: "", value_json: JSON.stringify(value) });
 export const newID = () => "step_" + crypto.randomUUID().replaceAll("-", "").slice(0, 12);
@@ -112,31 +118,47 @@ export function resultFields(step: Step, tools: ToolDescriptor[]) {
 }
 export type ProjectedNode = { id: string; position: Position; step?: Step; label?: string };
 export type ProjectedEdge = { id: string; source: string; target: string; sourceHandle: string; targetHandle: string; label?: string; kind: "control" | "data" | "loop" };
-export function projectPlan(plan: Plan): { nodes: ProjectedNode[]; edges: ProjectedEdge[] } {
+export function projectPlan(plan: Plan): { nodes: ProjectedNode[]; edges: ProjectedEdge[]; ambiguousStepIDs: string[] } {
   const nodes: ProjectedNode[] = []; const edges: ProjectedEdge[] = [];
-  const connect = (source: string | undefined, target: string, label?: string, kind: ProjectedEdge["kind"] = "control") => {
-    if (source) edges.push({ id: [kind, source, target, label ?? ""].join(":"), source, target, label, kind, sourceHandle: "flow-out", targetHandle: "flow-in" });
+  const counts = new Map<string, number>();
+  for (const step of allSteps(plan.steps)) counts.set(step.id, (counts.get(step.id) ?? 0) + 1);
+  const ambiguousStepIDs = [...counts].filter(([id, count]) => !id || count > 1).map(([id]) => id);
+  // Draft previews can precede checker repairs. Keep every occurrence visible,
+  // using presentation IDs only: never rewrite executable IDs or guess which
+  // repeated step a result reference was intended to use.
+  const nodeIDs = new Set(counts.keys()), edgeIDs = new Set<string>();
+  const uniqueID = (base: string, used: Set<string>): string => {
+    let id = base, suffix = 1;
+    while (used.has(id)) id = base + "_" + suffix++;
+    used.add(id); return id;
   };
-  const walk = (list: Step[], x: number, y: number, source?: string, label?: string): { tail?: string; x: number; bottom: number } => {
+  const addEdge = (base: string, edge: Omit<ProjectedEdge, "id">) => edges.push({ ...edge, id: uniqueID(base, edgeIDs) });
+  const connect = (source: string | undefined, target: string, label?: string, kind: ProjectedEdge["kind"] = "control") => {
+    if (source) addEdge([kind, source, target, label ?? ""].join(":"), { source, target, label, kind, sourceHandle: "flow-out", targetHandle: "flow-in" });
+  };
+  const walk = (list: Step[], x: number, y: number, source?: string, label?: string, path = "steps"): { tail?: string; x: number; bottom: number } => {
     let previous = source, bottom = y + 400;
-    for (const step of list) {
-      nodes.push({ id: step.id, position: { x, y }, step }); connect(previous, step.id, label); label = undefined;
-      let tail = step.id;
+    for (const [index, step] of list.entries()) {
+      const id = step.id && counts.get(step.id) === 1 ? step.id : uniqueID("__preview_" + path + "_" + index, nodeIDs);
+      nodes.push({ id, position: { x, y }, step }); connect(previous, id, label); label = undefined;
+      let tail = id;
       if (["branch", "parallel", "map", "repeat"].includes(step.kind)) {
-        const join = "__join_" + step.id;
+        // Reserve real step IDs before allocating joins, including real IDs
+        // that happen to start with the canvas's __join_ prefix.
+        const join = uniqueID("__join_" + id, nodeIDs);
         const paths = step.kind === "branch" ? [{ list: step.children, label: "Yes" }, { list: step.otherwise, label: "Otherwise" }]
           : step.kind === "parallel" ? (step.children ?? []).map((child, i) => ({ list: [child], label: "Path " + (i + 1) }))
           : [{ list: step.children, label: step.kind === "map" ? "For each item" : "Repeat" }];
         let nextY = y, right = x + 360;
         const exits: { tail: string; label?: string }[] = [];
-        for (const path of paths) {
-          const result = walk(path.list ?? [], x + 360, nextY, step.id, path.label);
-          exits.push({ tail: result.tail ?? step.id, label: path.list?.length ? undefined : path.label });
+        for (const [pathIndex, childPath] of paths.entries()) {
+          const result = walk(childPath.list ?? [], x + 360, nextY, id, childPath.label, path + "_" + index + "_path_" + pathIndex);
+          exits.push({ tail: result.tail ?? id, label: childPath.list?.length ? undefined : childPath.label });
           right = Math.max(right, result.x); nextY = result.bottom + 40;
         }
-        if (!paths.length) exits.push({ tail: step.id });
+        if (!paths.length) exits.push({ tail: id });
         nodes.push({ id: join, position: { x: right, y: y + 35 }, label: ["repeat", "map"].includes(step.kind) ? "Done" : "Continue" });
-        for (const exit of exits) { connect(exit.tail, join, exit.label); if (["repeat", "map"].includes(step.kind) && exit.tail !== step.id) connect(exit.tail, step.id, "Next iteration", "loop"); }
+        for (const exit of exits) { connect(exit.tail, join, exit.label); if (["repeat", "map"].includes(step.kind) && exit.tail !== id) connect(exit.tail, id, "Next iteration", "loop"); }
         x = right + 180; bottom = Math.max(bottom, nextY - 40); tail = join;
       } else { x += 360; }
       previous = tail;
@@ -144,9 +166,9 @@ export function projectPlan(plan: Plan): { nodes: ProjectedNode[]; edges: Projec
     return { tail: previous, x, bottom };
   };
   walk(plan.steps ?? [], 60, 60);
-  for (const step of allSteps(plan.steps)) for (const binding of step.inputs ?? []) if (binding.source === "step") {
+  for (const node of nodes) for (const binding of node.step?.inputs ?? []) if (binding.source === "step") {
     const [source, ...port] = binding.ref.split(".");
-    if (nodes.some(n => n.id === source)) edges.push({ id: "data:" + source + ":" + step.id + ":" + binding.name, source, target: step.id, sourceHandle: "out:" + port[0], targetHandle: "in:" + binding.name, label: undefined, kind: "data" });
+    if (counts.get(source) === 1 && nodes.some(n => n.step?.id === source)) addEdge("data:" + source + ":" + node.id + ":" + binding.name, { source, target: node.id, sourceHandle: "out:" + port[0], targetHandle: "in:" + binding.name, label: undefined, kind: "data" });
   }
-  return { nodes, edges };
+  return { nodes, edges, ambiguousStepIDs };
 }

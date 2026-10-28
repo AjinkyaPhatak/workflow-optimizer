@@ -164,6 +164,9 @@ export interface Seed {
   credentialName: string;
 }
 
+// Synthetic signing key for local trigger tests; never use deployment secrets.
+export const E2E_WEBHOOK_SECRET = "workflow-optimizer-e2e-webhook";
+
 async function api<T>(method: string, path: string, body?: unknown, token?: string): Promise<T> {
   const r = await fetch(`http://127.0.0.1:${API_PORT}/api/v1${path}`, {
     method,
@@ -240,6 +243,7 @@ export async function startStack(): Promise<{ seed: Seed; stop: () => Promise<vo
       TEMPORAL_TASK_QUEUE: prefix + ":v2",
       WHATSAPP_CONNECTOR_URL: "http://127.0.0.1:" + MOCK_OPENAI_PORT,
       CONNECTOR_SERVICE_TOKEN: providerKey,
+      AUTOMATION_WEBHOOK_SECRET: E2E_WEBHOOK_SECRET,
       MODEL_PRICING: JSON.stringify(MODEL_PRICING),
     };
     for (const name of ["api", "worker", "orchestrator"]) {

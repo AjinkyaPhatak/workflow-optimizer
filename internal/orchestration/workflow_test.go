@@ -2,13 +2,16 @@ package orchestration
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/testsuite"
 	temporalworkflow "go.temporal.io/sdk/workflow"
 	"workflow-optimizer/internal/automation"
@@ -90,14 +93,22 @@ func (s *runStore) AddEvent(_ context.Context, e automation.Event) error {
 }
 
 type fakeTools struct {
-	mu    sync.Mutex
-	calls []automation.ToolCall
+	mu      sync.Mutex
+	calls   []automation.ToolCall
+	failure error
+	results map[string]automation.ToolResult
 }
 
 func (t *fakeTools) Execute(_ context.Context, c automation.ToolCall) (automation.ToolResult, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.calls = append(t.calls, c)
+	if result, ok := t.results[c.Tool]; ok {
+		return result, nil
+	}
+	if c.Tool == "fail" && t.failure != nil {
+		return automation.ToolResult{}, t.failure
+	}
 	if c.Tool == "send" && c.Inputs["recipient"] != "known" {
 		return automation.ToolResult{}, &automation.NeedInput{Question: automation.Question{ID: "contact", Prompt: "Which Phatak?", Kind: "choice", Required: true, Input: "recipient", Options: []automation.Option{{Label: "Ajinkya Phatak", Value: "known"}}}}
 	}
@@ -190,5 +201,111 @@ func TestBudgetPauseAndRenewal(t *testing.T) {
 	}
 	if !paused || len(tools.calls) != 2 {
 		t.Fatal("budget was not enforced")
+	}
+}
+
+func TestStopUnblocksDurableWaits(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		plan   automation.Plan
+		status string
+	}{
+		{"event", automation.Plan{Mode: "once", Steps: []automation.Step{{ID: "event", Kind: "wait"}}}, "WAITING_FOR_EVENT"},
+		{"human", automation.Plan{Mode: "once", Steps: []automation.Step{{ID: "human", Kind: "ask", Question: &automation.Question{ID: "q", Kind: "text", Prompt: "Which recipient?", Required: true}}}}, "WAITING_FOR_INPUT"},
+		{"budget", automation.Plan{Mode: "once", Budget: automation.Budget{MaxActions: 1, MaxTokens: 100, MaxActiveSeconds: 100}, Steps: []automation.Step{{ID: "one", Kind: "tool", Tool: "echo"}, {ID: "two", Kind: "tool", Tool: "echo"}}}, "PAUSED"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			env, store, _ := environment(t, tc.plan)
+			env.RegisterDelayedCallback(func() { env.CancelWorkflow() }, time.Second)
+			env.ExecuteWorkflow(WorkflowName, Input{RunID: store.run.ID})
+			if err := env.GetWorkflowError(); !temporal.IsCanceledError(err) {
+				t.Fatalf("expected cancellation, got %v", err)
+			}
+			if store.run.Status != "CANCELLED" {
+				t.Fatalf("run remained %s after Stop", store.run.Status)
+			}
+			waited := false
+			for _, event := range store.events {
+				if event.Kind == "status" || event.Kind == "started" {
+					continue
+				}
+				if (tc.status == "WAITING_FOR_EVENT" && event.Kind == "waiting") || (tc.status == "WAITING_FOR_INPUT" && event.Kind == "question") || (tc.status == "PAUSED" && event.Kind == "budget") {
+					waited = true
+				}
+			}
+			if !waited {
+				t.Fatalf("did not exercise %s before Stop", tc.status)
+			}
+		})
+	}
+}
+
+func TestStopWhileLoadingProjectsCancelled(t *testing.T) {
+	env, store, _ := environment(t, automation.Plan{Mode: "once"})
+	store.run.Status = "PENDING"
+	env.RegisterActivityWithOptions(func(ctx context.Context, _ uuid.UUID) (automation.Run, error) {
+		<-ctx.Done()
+		return automation.Run{}, ctx.Err()
+	}, activity.RegisterOptions{Name: "automation.load", DisableAlreadyRegisteredCheck: true})
+	env.RegisterDelayedCallback(func() { env.CancelWorkflow() }, time.Millisecond)
+	env.ExecuteWorkflow(WorkflowName, Input{RunID: store.run.ID})
+	if err := env.GetWorkflowError(); !temporal.IsCanceledError(err) {
+		t.Fatalf("expected cancellation, got %v", err)
+	}
+	if store.run.Status != "CANCELLED" {
+		t.Fatalf("pending run remained %s after Stop", store.run.Status)
+	}
+}
+
+func TestAutomaticExecutionDoesNotPauseForUserBudgetForms(t *testing.T) {
+	plan := automation.Plan{Mode: "once", Budget: automation.Budget{Automatic: true, MaxActions: 1, MaxTokens: 1, MaxActiveSeconds: 1}, Steps: []automation.Step{{ID: "one", Kind: "tool", Tool: "echo"}, {ID: "two", Kind: "tool", Tool: "echo"}, {ID: "three", Kind: "tool", Tool: "echo"}}}
+	env, store, tools := environment(t, plan)
+	env.ExecuteWorkflow(WorkflowName, Input{RunID: store.run.ID})
+	if err := env.GetWorkflowError(); err != nil || store.run.Status != "COMPLETED" || len(tools.calls) != 3 {
+		t.Fatalf("automatic execution stopped for a budget: status=%s calls=%d err=%v", store.run.Status, len(tools.calls), err)
+	}
+	for _, event := range store.events {
+		if event.Kind == "budget" {
+			t.Fatal("automatic execution asked for a budget")
+		}
+	}
+}
+
+type publicToolFailure string
+
+func (e publicToolFailure) Error() string       { return string(e) }
+func (e publicToolFailure) UserMessage() string { return string(e) }
+
+func TestToolFailureNamesStepAndPreservesCompletedResults(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		err     error
+		message string
+	}{
+		{"safe connection failure", publicToolFailure("WhatsApp is reconnecting. Check Settings."), "WhatsApp is reconnecting. Check Settings."},
+		{"private provider failure", errors.New("private_provider_key=do-not-expose"), "Check its connection and inputs."},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			plan := automation.Plan{Mode: "once", Steps: []automation.Step{
+				{ID: "fetch", Name: "Fetch current data", Kind: "tool", Tool: "read", Inputs: []automation.Binding{lit("value", `"checked quote"`)}},
+				{ID: "notify", Name: "Send Ajinkya the quote", Kind: "tool", Tool: "fail"},
+			}}
+			env, store, tools := environment(t, plan)
+			tools.failure = tc.err
+			env.ExecuteWorkflow(WorkflowName, Input{RunID: store.run.ID})
+			if env.GetWorkflowError() == nil || store.run.Status != "FAILED" {
+				t.Fatal("expected failed execution")
+			}
+			if !strings.Contains(store.run.Error, "Send Ajinkya the quote") || !strings.Contains(store.run.Error, tc.message) || strings.Contains(store.run.Error, "private_provider_key") {
+				t.Fatalf("unhelpful or unsafe failure: %q", store.run.Error)
+			}
+			if store.run.Outputs["fetch"]["result"] != "checked quote" {
+				t.Fatal("completed result was lost")
+			}
+			final := store.events[len(store.events)-1]
+			if final.StepID != "notify" || final.Kind != "FAILED" {
+				t.Fatalf("missing failed step: %+v", final)
+			}
+		})
 	}
 }

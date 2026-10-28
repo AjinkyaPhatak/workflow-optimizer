@@ -20,19 +20,23 @@ import { FriendlyValue } from "@/components/run/FriendlyValue";
 import { ClarificationCard } from "./ClarificationCard";
 import { WorkflowDraft } from "./WorkflowDraft";
 import { CompilerIssues } from "./CompilerIssues";
-import type { Budget, Plan } from "@/types/automation";
+import { ExecutionTiming } from "./ExecutionTiming";
+import { isBudgetQuestion } from "@/lib/automation/editor";
+import type { Budget } from "@/types/automation";
 
-function BudgetEditor({ budget, onChange }: { budget: Budget; onChange: (value: Budget) => void }) {
+function BudgetEditor({ budget, onChange, disabled = false }: { budget: Budget; onChange: (value: Budget) => void; disabled?: boolean }) {
   return <div className="budget-fields">
-    <label>Actions<input aria-label="Action limit" type="number" min={1} value={budget.max_actions || ""} onChange={e => onChange({ ...budget, max_actions: Number(e.target.value) })} /></label>
-    <label>Tokens<input aria-label="Token limit" type="number" min={1} value={budget.max_tokens || ""} onChange={e => onChange({ ...budget, max_tokens: Number(e.target.value) })} /></label>
-    <label>Active minutes<input aria-label="Active time limit" type="number" min={1} value={budget.max_active_seconds ? budget.max_active_seconds / 60 : ""} onChange={e => onChange({ ...budget, max_active_seconds: Number(e.target.value) * 60 })} /></label>
+    <label>Actions<input aria-label="Action limit" type="number" min={1} disabled={disabled} value={budget.max_actions || ""} onChange={e => onChange({ ...budget, max_actions: Number(e.target.value) })} /></label>
+    <label>Tokens<input aria-label="Token limit" type="number" min={1} disabled={disabled} value={budget.max_tokens || ""} onChange={e => onChange({ ...budget, max_tokens: Number(e.target.value) })} /></label>
+    <label>Active minutes<input aria-label="Active time limit" type="number" min={1} disabled={disabled} value={budget.max_active_seconds ? budget.max_active_seconds / 60 : ""} onChange={e => onChange({ ...budget, max_active_seconds: Number(e.target.value) * 60 })} /></label>
   </div>;
 }
-function PlanBudgetEditor({ plan, onSave, busy }: { plan: Plan; onSave: (plan: Plan) => Promise<unknown>; busy: boolean }) {
-  const [budget, setBudget] = useState(plan.budget);
-  return <><BudgetEditor budget={budget} onChange={setBudget} /><button disabled={busy || budget.max_actions < 1 || budget.max_tokens < 1 || budget.max_active_seconds < 1}
-    onClick={() => void onSave({ ...plan, budget })}>Use these limits</button></>;
+function PlanBudgetEditor({ initial, onSave, busy }: { initial: Budget; onSave: (budget: Budget) => Promise<unknown>; busy: boolean }) {
+  const [budget, setBudget] = useState(initial);
+  const [saving, setSaving] = useState(false), [error, setError] = useState<unknown>(null);
+  const save = async () => { setSaving(true); setError(null); try { await onSave({ ...budget, automatic: false }); } catch (err) { setError(err); } finally { setSaving(false); } };
+  return <><BudgetEditor budget={budget} onChange={setBudget} disabled={busy || saving} /><ErrorBanner error={error} /><button disabled={busy || saving || budget.max_actions < 1 || budget.max_tokens < 1 || budget.max_active_seconds < 1}
+    onClick={() => void save()}>{saving ? "Saving limits…" : "Use these limits"}</button></>;
 }
 function ArtifactDownloads({ value }: { value: unknown }) {
   const [error, setError] = useState<unknown>(null);
@@ -96,12 +100,12 @@ export function AssistantHome({ workflowId }: { workflowId?: string } = {}) {
   const [cron, setCron] = useState("0 9 * * 1-5");
   const [timezone, setTimezone] = useState("Asia/Kolkata");
   const [scheduleSaved, setScheduleSaved] = useState(false);
-  const [renewBudget, setRenewBudget] = useState<Budget>({ max_actions: 0, max_tokens: 0, max_active_seconds: 0 });
   const audio = useRef<HTMLAudioElement | null>(null);
   const audioURL = useRef("");
   const speech = useRef<AbortController | null>(null);
   const spoken = useRef("");
-  const liveQuestion = s.run?.question ?? s.session?.compilation?.plan.questions.find(q => q.purpose === "intent" || !Object.hasOwn(s.session?.answers ?? {}, q.id));
+  const questionPlan = s.session?.compilation?.plan;
+  const liveQuestion = s.run?.question ?? questionPlan?.questions.find(q => !(questionPlan.mode === "continuous" && isBudgetQuestion(questionPlan, q)) && (q.purpose === "intent" || !Object.hasOwn(s.session?.answers ?? {}, q.id)));
   // The SDK installs callbacks once per connection. Read the current draft and
   // question when a transcript arrives, including after a previous voice turn.
   const voiceContext = useRef({ s, liveQuestion });
@@ -240,18 +244,21 @@ export function AssistantHome({ workflowId }: { workflowId?: string } = {}) {
           <Link href="/settings/connected-accounts" target="_blank">Connect the account</Link> or <Link href="/settings/credentials" target="_blank">add an AI key</Link>, then{" "}
           <button className="link" disabled={s.busy} onClick={() => void s.send("I have connected the required account. Check the available accounts and update this workflow.")}>check again</button>.
         </p>}
-        {compilation?.plan.mode === "continuous" && <section className="continuous-budget">
-          <h3>How much room should I work within?</h3><p className="hint">Work pauses when any limit is reached. Time spent waiting for you does not count.</p>
-          <PlanBudgetEditor key={s.session?.revision} plan={compilation.plan} onSave={s.edit} busy={s.busy} />
-        </section>}
+        {compilation && <details className="continuous-budget"><summary>Execution settings</summary>
+          <p className="hint">Automatic execution works until the task finishes or you stop it. Custom limits are optional.</p>
+          {!compilation.plan.budget.automatic && <button disabled={s.busy} onClick={() => void afterSave(() => s.setBudget({ ...compilation.plan.budget, automatic: true }))}>Use automatic execution</button>}
+          <p className="hint">Optional custom limits</p>
+          <PlanBudgetEditor key={s.session?.revision} initial={compilation.plan.budget} onSave={async budget => { await flush(); await s.setBudget(budget); }} busy={s.busy} />
+        </details>}
         {s.run && <section className="assistant-run">
           <div className="row"><span className={"run-status status-" + s.run.status.toLowerCase()}>{s.run.status.replaceAll("_", " ").toLowerCase()}</span><span className="spacer" />
             {activeRun && <><button className="small-button" onClick={() => void assistantApi.control(s.run!.id, s.run!.status === "PAUSED" ? "resume" : "pause").catch(s.setError)}>{s.run.status === "PAUSED" ? "Resume" : "Pause"}</button><button className="small-button danger" onClick={() => void assistantApi.control(s.run!.id, "cancel").catch(s.setError)}>Stop</button></>}
           </div>
           <ol className="run-progress">{s.events.filter(event => event.run_id === s.run?.id && event.kind === "step_completed").map(event => <li key={event.id}><span>✓</span>{event.message || event.step_id}</li>)}</ol>
           {s.run.error && <p className="compiler-finding">{s.run.error}</p>}
-          {s.run.status === "PAUSED" && <div className="continuous-budget"><h3>Give this work a new budget</h3><BudgetEditor budget={renewBudget} onChange={setRenewBudget} />
-            <button onClick={() => void assistantApi.control(s.run!.id, "resume", renewBudget).catch(s.setError)}>Continue with these limits</button></div>}
+          {Object.entries(s.run.outputs).filter(([, output]) => typeof output.notes === "string" && output.notes.trim()).slice(-1).map(([id, output]) => <div key={id} className="hint"><AiMarkdown text={String(output.notes)} /></div>)}
+          {s.run.status === "PAUSED" && <div className="continuous-budget"><h3>Execution paused</h3>
+            <button onClick={() => void assistantApi.control(s.run!.id, "resume", { ...s.run!.plan.budget, automatic: true }).catch(s.setError)}>Resume automatically</button></div>}
           {s.run.status === "WAITING_FOR_EVENT" && <button onClick={() => void assistantApi.event(s.run!.id, { continued: true }).catch(s.setError)}>Continue now</button>}
           <ArtifactDownloads value={s.run.outputs} />
           {Object.values(s.run.outputs).filter(value => typeof value.child_run_id === "string").map(value =>
@@ -289,6 +296,7 @@ export function AssistantHome({ workflowId }: { workflowId?: string } = {}) {
         </>} />
       <form className="voice-composer" onSubmit={submit}>
         <ErrorBanner error={voiceError} />
+        {!s.building && (compilation || s.run) && <ExecutionTiming plan={activeRun ? s.run!.plan : compilation?.plan ?? s.run!.plan} run={s.run} />}
         {s.building && <div className="row small" role="status"><span className="spinner" />{buildLabel}. Editing unlocks when this finishes.<span className="spacer" /><button type="button" onClick={s.interrupt}>Stop building</button></div>}
         {!conversationOpen && liveQuestion && <button type="button" className="composer-question" onClick={() => setConversationOpen(true)}>Answer needed: {liveQuestion.prompt}</button>}
         {!conversationOpen && (s.busy || !!s.doctorFailure || !!s.error) && <div className="small" role="status">{s.doctorFailure || (s.repairing ? "Checking and fixing your workflow…" : s.busy ? "Shaping your workflow…" : "A request needs attention.")} <button type="button" className="link" onClick={() => setConversationOpen(true)}>Open conversation</button></div>}

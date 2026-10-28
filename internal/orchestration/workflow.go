@@ -64,13 +64,16 @@ type State struct {
 	ActiveSeconds float64
 }
 type machine struct {
-	ctx     workflow.Context
-	input   Input
-	run     automation.Run
-	state   *State
-	askLock workflow.Mutex
-	outputs map[string]map[string]any
-	answers map[string]any
+	ctx            workflow.Context
+	input          Input
+	run            automation.Run
+	state          *State
+	askLock        workflow.Mutex
+	outputs        map[string]map[string]any
+	answers        map[string]any
+	failedStepID   string
+	failedStepName string
+	failureMessage string
 }
 
 func WorkflowV2(ctx workflow.Context, in Input) (result map[string]map[string]any, err error) {
@@ -82,6 +85,28 @@ func WorkflowV2(ctx workflow.Context, in Input) (result map[string]map[string]an
 	if m.answers == nil {
 		m.answers = map[string]any{}
 	}
+	// Install terminal projection before loading so cancelling a pending run
+	// cannot leave its UI projection permanently PENDING.
+	defer func() {
+		if workflow.IsContinueAsNewError(err) {
+			return
+		}
+		m.outputs["_usage"] = map[string]any{"actions": m.state.Actions, "tokens": m.state.Tokens, "active_seconds": m.state.ActiveSeconds}
+		status, message := "COMPLETED", ""
+		if err != nil {
+			status = "FAILED"
+			message = "A step could not finish. Check the execution details."
+			if m.failedStepID != "" {
+				message = "“" + m.failedStepName + "” could not finish. " + m.failureMessage
+			}
+		}
+		if temporal.IsCanceledError(err) {
+			status = "CANCELLED"
+			message = ""
+		}
+		dctx, _ := workflow.NewDisconnectedContext(ctx)
+		_ = workflow.ExecuteActivity(dctx, "automation.progress", Progress{RunID: in.RunID, Status: status, Outputs: m.outputs, Message: message, StepID: m.failedStepID, Kind: status}).Get(dctx, nil)
+	}()
 	if err := workflow.ExecuteActivity(ctx, "automation.load", in.RunID).Get(ctx, &m.run); err != nil {
 		return nil, err
 	}
@@ -99,7 +124,9 @@ func WorkflowV2(ctx workflow.Context, in Input) (result map[string]map[string]an
 		}
 		for {
 			var c Control
-			ch.Receive(ctx, &c)
+			if err := receiveSignal(ctx, ch, &c); err != nil {
+				return
+			}
 			switch c.Action {
 			case "pause":
 				m.state.Paused = true
@@ -120,23 +147,6 @@ func WorkflowV2(ctx workflow.Context, in Input) (result map[string]map[string]an
 			}
 		}
 	})
-	defer func() {
-		if workflow.IsContinueAsNewError(err) {
-			return
-		}
-		m.outputs["_usage"] = map[string]any{"actions": m.state.Actions, "tokens": m.state.Tokens, "active_seconds": m.state.ActiveSeconds}
-		status, message := "COMPLETED", ""
-		if err != nil {
-			status = "FAILED"
-			message = "A step could not finish. Check the execution details."
-		}
-		if temporal.IsCanceledError(err) {
-			status = "CANCELLED"
-			message = ""
-		}
-		dctx, _ := workflow.NewDisconnectedContext(ctx)
-		_ = workflow.ExecuteActivity(dctx, "automation.progress", Progress{RunID: in.RunID, Status: status, Outputs: m.outputs, Message: message, Kind: status}).Get(dctx, nil)
-	}()
 	if err = m.progress("RUNNING", "", "", "started"); err != nil {
 		return nil, err
 	}
@@ -178,7 +188,7 @@ func (m *machine) checkpoint() error {
 		}
 	}
 	b := m.state.Budget
-	if b.Valid() && (m.state.Actions >= b.MaxActions || m.state.Tokens >= b.MaxTokens || m.state.ActiveSeconds >= float64(b.MaxActiveSeconds)) {
+	if !b.Automatic && b.Valid() && (m.state.Actions >= b.MaxActions || m.state.Tokens >= b.MaxTokens || m.state.ActiveSeconds >= float64(b.MaxActiveSeconds)) {
 		m.state.Paused = true
 		if err := m.progress("PAUSED", "", "The work reached its budget. Set a new budget to continue.", "budget"); err != nil {
 			return err
@@ -203,7 +213,9 @@ func (m *machine) ask(q automation.Question) (any, error) {
 	ch := workflow.GetSignalChannel(m.ctx, AnswerSignal)
 	for {
 		var a Answer
-		ch.Receive(m.ctx, &a)
+		if err := receiveSignal(m.ctx, ch, &a); err != nil {
+			return nil, err
+		}
 		if a.QuestionID != q.ID || a.Revision != m.run.Revision {
 			continue
 		}
@@ -220,6 +232,20 @@ func (m *machine) ask(q automation.Question) (any, error) {
 		}
 		return a.Value, nil
 	}
+}
+
+// A signal channel's Receive does not unblock when its context is cancelled.
+// Select on cancellation as well so durable event/human waits can be stopped.
+// This adds no commands to history and preserves existing signal payloads.
+func receiveSignal(ctx workflow.Context, ch workflow.ReceiveChannel, value any) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	selector := workflow.NewSelector(ctx)
+	selector.AddReceive(ch, func(ready workflow.ReceiveChannel, _ bool) { ready.Receive(ctx, value) })
+	selector.AddReceive(ctx.Done(), func(workflow.ReceiveChannel, bool) {})
+	selector.Select(ctx)
+	return ctx.Err()
 }
 func (m *machine) condition(c *automation.Condition, item any) (bool, error) {
 	if c == nil {
@@ -296,6 +322,15 @@ func (m *machine) steps(steps []automation.Step, path string, item any) error {
 				actx := workflow.WithActivityOptions(m.ctx, opts)
 				call := automation.ToolCall{WorkspaceID: m.run.WorkspaceID, UserID: m.run.UserID, RunID: m.input.RunID, OperationID: op, Tool: s.Tool, Inputs: inputs}
 				if err := workflow.ExecuteActivity(actx, "automation.execute", call).Get(m.ctx, &out); err != nil {
+					m.failedStepID, m.failedStepName = s.ID, s.Name
+					if m.failedStepName == "" {
+						m.failedStepName = s.Tool
+					}
+					m.failureMessage = "Check its connection and inputs."
+					var failure *temporal.ApplicationError
+					if errors.As(err, &failure) && failure.Type() == "tool_failed" {
+						m.failureMessage = failure.Message()
+					}
 					return err
 				}
 				if out.Question != nil {
@@ -433,7 +468,9 @@ func (m *machine) steps(steps []automation.Step, path string, item any) error {
 					return err
 				}
 				var event any
-				workflow.GetSignalChannel(m.ctx, EventSignal).Receive(m.ctx, &event)
+				if err := receiveSignal(m.ctx, workflow.GetSignalChannel(m.ctx, EventSignal), &event); err != nil {
+					return err
+				}
 				m.input.Event = event
 				m.outputs[s.ID] = map[string]any{"result": event}
 			}
@@ -444,7 +481,10 @@ func (m *machine) steps(steps []automation.Step, path string, item any) error {
 				return err
 			}
 			child.Event = inputs
-			if m.state.Budget.Valid() {
+			if m.state.Budget.Automatic {
+				budget := m.state.Budget
+				child.Budget = &budget
+			} else if m.state.Budget.Valid() {
 				remaining := m.state.Budget
 				remaining.MaxActions -= m.state.Actions
 				remaining.MaxTokens -= m.state.Tokens
@@ -549,7 +589,12 @@ func (a *Activities) Execute(ctx context.Context, c automation.ToolCall) (CallRe
 		return CallResult{Question: &need.Question}, nil
 	}
 	if err != nil {
-		return CallResult{}, temporal.NewNonRetryableApplicationError("The tool could not finish; inspect its connection and inputs.", "tool_failed", nil)
+		message := "Check its connection and inputs."
+		var public interface{ UserMessage() string }
+		if errors.As(err, &public) {
+			message = public.UserMessage()
+		}
+		return CallResult{}, temporal.NewNonRetryableApplicationError(message, "tool_failed", nil)
 	}
 	return CallResult{Result: result}, nil
 }

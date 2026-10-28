@@ -77,14 +77,29 @@ is still enabled. Starting a new conversation ignores late repair responses.
 
 Control flow includes conditions, parallel joins, maps, repeat-until limits,
 immutable child plans, delays and event waits. Continuous mode repeats bounded
-cycles with a one-minute cooldown and Continue-As-New. Explicit action/token/
-active-time budgets pause work for renewal.
+cycles with a one-minute cooldown and Continue-As-New. New workflows use
+automatic execution without budget questions or cumulative action/token/time
+pauses. Explicit custom caps remain available under Execution settings. Stop
+and Pause remain available, and individual tool requests retain bounded timeouts.
 
 Schedules use five-field cron, IANA timezones (initially Asia/Kolkata), and skip
 overlaps. Event triggers require a source: knowledge base ID, conversation ID,
 or account-user/contact pair. Incoming WhatsApp messages only enter the outbox
 when an enabled source-specific automation subscribes. Event lineage prevents
 recursive chains. The outbox retries dispatch after outages.
+
+At `/automations`, each schedule or trigger shows every active root execution
+and its latest 20 finished runs, with links to `/home?run=…` for results,
+questions and budget renewal. Status refreshes every five seconds. **Pause
+future runs** disables new starts; **Pause run** and **Stop run** control only
+the selected execution. To stop an automation completely, pause future runs
+and stop its active executions. Deletion is disabled in the UI while runs are
+active or their status is unavailable, keeping their controls reachable.
+Schedules have no expiry; stopping a run does not disable its schedule or undo
+completed actions. Run ownership uses the last event-trace entry, excluding
+child workflows, so existing saved executions appear without a backfill.
+Durable event and human-answer waits select on cancellation as well as signals;
+stopping pending runs also records their terminal status before loading finishes.
 
 Unsafe actions claim a durable operation before dispatch. Uncertain delivery
 produces a reconciliation card and never blindly resends. Provider receipts

@@ -79,7 +79,7 @@ type WorkflowStore interface {
 }
 
 func EmptyPlan(name string) Plan {
-	return Plan{SchemaVersion: SchemaVersion, Name: name, Mode: "once", Budget: Budget{MaxActions: 30, MaxTokens: 50000, MaxActiveSeconds: 600}, Steps: []Step{}, Questions: []Question{}}
+	return Plan{SchemaVersion: SchemaVersion, Name: name, Mode: "once", Budget: Budget{Automatic: true, MaxActions: 30, MaxTokens: 50000, MaxActiveSeconds: 600}, Steps: []Step{}, Questions: []Question{}}
 }
 
 // RefreshQuestionOptions keeps resource choices current without changing IDs.

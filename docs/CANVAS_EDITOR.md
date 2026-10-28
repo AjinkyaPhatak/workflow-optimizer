@@ -18,6 +18,25 @@ Progress reports actual planning/checking/repair/saving checkpoints and generate
 plan previews. It does not stream individual provider tokens or pretend that a
 node-by-node animation is live generation. Previews never autosave or execute.
 
+Unchecked previews can temporarily repeat step IDs. The projection gives each
+occurrence and join a unique display ID, keeping all cards and minimap entries
+visible without changing the plan or guessing ambiguous result references.
+Inspection remains available; editing stays locked until the checker repairs
+the executable IDs. Display IDs are never saved as plan IDs or layout edits.
+The compiler folds only the recognized unfinished repeat scaffold (an empty
+invalid wrapper ending in a complete repeat with the same ID/name). Its stop
+rule, iteration cap, action IDs and prerequisite order are preserved. Other
+duplicate IDs stay blocked rather than being guessed.
+
+Automatic execution is the default. The composer shows a rough first-result
+estimate and actual elapsed runtime; these estimates do not stop execution.
+Optional custom caps are collapsed under Execution settings. Its form saves
+only limits through the revision-checked `/budget` endpoint after flushing
+canvas edits. Enabling automatic execution removes unnecessary budget questions;
+explicit custom caps remain opt-in. Setting either mode never starts a run.
+Saved intent answers awaiting application also enter the bounded doctor pass,
+so an already supplied answer is not ignored once structural checks become clean.
+
 After a build, manual edits autosave after 1.5 seconds. Pending changes flush
 before AI messages, execution, publishing and scheduling. Revision conflicts keep
 local changes and offer Keep my changes or Use latest version. Undo/redo and

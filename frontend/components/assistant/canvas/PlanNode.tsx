@@ -56,7 +56,7 @@ function View({ id, data, selected, dragging }: NodeProps<PlanFlowNode>) {
     </div>)}</div><div>{outputs.map(output => <div key={output.name} className="wf-port out" title={output.description}>
       <Handle type="source" position={Position.Right} id={"out:" + output.name} /><span className="pname">{fieldLabel(output.name)}</span>
     </div>)}</div></div>
-    <button className="link wf-node-more nodrag" onClick={() => data.onEdit?.(step.id)}>Edit step</button>
+    <button className="link wf-node-more nodrag" onClick={() => data.onEdit?.(id)}>Edit step</button>
     {hover && !dragging && <Popover anchor={hover} testId="node-hover"><div className="node-info">
       <div className="info-title">{step.name}</div><p className="info-desc">{tool?.description || data.summary || data.kindName}</p>
       {inputs.length > 0 && <div className="info-section"><div className="info-heading">Inputs</div><ul className="info-ports">{inputs.map(input => <li key={input.name}><span className="info-port-name">{fieldLabel(input.name)}</span>{input.required && <span className="info-port-req">required</span>}<div className="info-port-desc">{input.description}</div></li>)}</ul></div>}

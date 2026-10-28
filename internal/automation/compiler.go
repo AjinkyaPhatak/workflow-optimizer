@@ -27,7 +27,13 @@ Use the supplied controls' exact inputs and outputs. Every group exposes result,
 Map/repeat result is a list of iterations, each containing child-step IDs and their output fields;
 parallel result contains child-step IDs and their output fields. Branch result has matched and outputs.
 For a linked workflow, use an exact ref from the supplied workflows list; never invent a version ID.
-Use continuous mode only when explicitly requested, with the user's explicit budgets.
+Use continuous mode when ongoing monitoring or recurring execution is requested.
+Default to budget.automatic=true: manage work automatically without asking for action,
+token or time limits. Only use manual caps when the person explicitly requests them.
+Never create ask steps or questions for execution budgets. Preserve existing explicit caps
+when revising an older workflow unless the person requests automatic execution.
+Never wrap a complete repeat in another incomplete repeat with the same ID. Research
+that must refresh each iteration belongs inside that repeat's children, before analysis.
 Fresh facts require web search. Keep citations and dates. Do not fabricate market data.
 For Nifty 50, verify the constituent universe and trading session, use published sources,
 then calculate statistics from the actual rows. If coverage is incomplete, ask or explain.
@@ -106,6 +112,10 @@ func (c *Compiler) Compile(ctx context.Context, req PlanRequest) (Compilation, e
 	}
 	req.Tools = c.Tools
 	req.Controls = ControlDescriptors()
+	if req.Previous != nil {
+		previous := InsertConversions(*req.Previous, c.Tools)
+		req.Previous = &previous
+	}
 	if req.Repair && req.IntentQuestion == nil && req.Previous != nil {
 		for _, q := range req.Previous.Questions {
 			if q.Purpose == "intent" {
@@ -214,7 +224,7 @@ func sameExternalActions(before, after Plan, tools []ToolDescriptor) bool {
 }
 
 func Check(plan Plan, tools []ToolDescriptor) Compilation {
-	plan = normalizeReferences(ClonePlan(plan), tools)
+	plan = normalizeAutomaticBudget(normalizeReferences(ClonePlan(plan), tools), tools)
 	out := Compilation{Plan: plan, Diagnostics: []Diagnostic{}}
 	if out.Plan.Questions == nil {
 		out.Plan.Questions = []Question{}

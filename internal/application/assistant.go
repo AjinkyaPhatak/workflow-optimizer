@@ -303,6 +303,34 @@ func (s *AssistantService) AnswerDraft(ctx context.Context, user, id uuid.UUID, 
 	session.Revision++
 	return session, assistantError(s.Store.SaveSession(ctx, session, revision))
 }
+
+func (s *AssistantService) SetDraftBudget(ctx context.Context, user, id uuid.UUID, revision int, budget automation.Budget) (automation.Session, error) {
+	session, err := s.Get(ctx, user, id)
+	if err != nil {
+		return session, err
+	}
+	if err := s.require(ctx, user, session.WorkspaceID, workspace.ActionWrite); err != nil {
+		return session, err
+	}
+	if session.Revision != revision {
+		return session, assistantError(automation.ErrConflict)
+	}
+	if session.Compilation == nil {
+		return session, &InvalidError{Message: "Describe a workflow first."}
+	}
+	if !budget.Valid() {
+		return session, &InvalidError{Message: "Set positive action, token, and active-time limits."}
+	}
+	tools, err := s.Catalog(ctx, user, session.WorkspaceID)
+	if err != nil {
+		return session, err
+	}
+	plan, answers := automation.ConfirmBudget(session.Compilation.Plan, budget, session.Answers)
+	compiled := automation.CheckAnswered(automation.InsertConversions(plan, tools), tools, answers)
+	session.Compilation, session.Answers = &compiled, answers
+	session.Revision++
+	return session, assistantError(s.Store.SaveSession(ctx, session, revision))
+}
 func (s *AssistantService) Start(ctx context.Context, user, id uuid.UUID, revision int, requestID string) (automation.Run, error) {
 	session, err := s.Get(ctx, user, id)
 	if err != nil {
@@ -409,6 +437,17 @@ func (s *AssistantService) Automations(ctx context.Context, user, ws uuid.UUID) 
 		return nil, err
 	}
 	return s.Store.ListAutomations(ctx, ws)
+}
+
+func (s *AssistantService) AutomationRuns(ctx context.Context, user, id uuid.UUID) ([]automation.Run, error) {
+	a, err := s.Store.Automation(ctx, id)
+	if err != nil {
+		return nil, assistantError(err)
+	}
+	if err := s.require(ctx, user, a.WorkspaceID, workspace.ActionRead); err != nil {
+		return nil, err
+	}
+	return s.Store.ListAutomationRuns(ctx, a.WorkspaceID, a.ID)
 }
 func (s *AssistantService) SaveAutomation(ctx context.Context, user uuid.UUID, a automation.Automation) (automation.Automation, error) {
 	if s.Backend == nil {

@@ -155,6 +155,43 @@ func (s *AutomationRepository) UpdateRun(ctx context.Context, id uuid.UUID, stat
 	}
 	return err
 }
+
+// ListAutomationRuns returns every active root run and the latest 20 finished
+// runs for one automation. The last trace entry identifies the trigger owner,
+// including runs saved before the management UI existed. Child workflows carry
+// the same event trace but have ancestors and are opened from their parent run.
+func (s *AutomationRepository) ListAutomationRuns(ctx context.Context, ws, id uuid.UUID) ([]automation.Run, error) {
+	rows, err := s.pool.Query(ctx, `WITH matching AS MATERIALIZED (
+ SELECT id,body,created_at,
+  COALESCE(body->>'status','PENDING') NOT IN ('COMPLETED','FAILED','CANCELLED') AS active
+ FROM automation_runs
+ WHERE workspace_id=$1 AND body->'trace'->>-1=$2::text
+  AND COALESCE(jsonb_array_length(NULLIF(body->'ancestors','null'::jsonb)),0)=0
+), recent AS (
+ SELECT * FROM matching WHERE NOT active ORDER BY created_at DESC,id DESC LIMIT 20
+)
+SELECT body FROM (
+ SELECT * FROM matching WHERE active
+ UNION ALL SELECT * FROM recent
+) runs ORDER BY active DESC,created_at DESC,id DESC`, ws, id.String())
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []automation.Run{}
+	for rows.Next() {
+		var body []byte
+		var run automation.Run
+		if err := rows.Scan(&body); err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal(body, &run); err != nil {
+			return nil, err
+		}
+		out = append(out, run)
+	}
+	return out, rows.Err()
+}
 func (s *AutomationRepository) AddEvent(ctx context.Context, e automation.Event) error {
 	_, err := s.pool.Exec(ctx, `INSERT INTO automation_events(run_id,kind,step_id,message) VALUES($1,$2,$3,$4)`, e.RunID, e.Kind, e.StepID, e.Message)
 	return err

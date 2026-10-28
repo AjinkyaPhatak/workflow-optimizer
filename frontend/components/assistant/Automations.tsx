@@ -6,6 +6,7 @@ import { assistantApi } from "@/lib/api/assistant";
 import { materializePlan } from "@/features/assistant/useAssistant";
 import { ErrorBanner } from "@/components/ui/ErrorBanner";
 import { Backdrop } from "@/components/ui/Backdrop";
+import { AutomationCard } from "@/components/assistant/AutomationCard";
 import type { AssistantSession, Automation } from "@/types/automation";
 export function Automations() {
   const [workspace, setWorkspace] = useState("");
@@ -43,11 +44,8 @@ export function Automations() {
       {kind === "schedule" && <><label>Cron expression<input value={cron} onChange={e => setCron(e.target.value)} required /></label><p className="hint">0 9 * * 1-5 means 9 am on weekdays. Overlapping runs are skipped.</p><label>Timezone<input value={timezone} onChange={e => setTimezone(e.target.value)} required /></label></>}
       <button className="primary" disabled={busy || !selected}>{busy ? "Saving…" : "Create automation"}</button>
     </form>
-    {items.map(item => <section key={item.id} className="card automation-row">
-      <div><h3>{item.name}</h3><p className="muted">{item.cron ? item.cron + " · " + item.timezone : item.trigger}</p>
-        {item.trigger === "webhook" && <p className="hint">POST /api/v1/triggers/{item.id} · signed with your deployment’s webhook key.</p>}</div>
-      <button disabled={busy} onClick={async () => { setBusy(true); try { await assistantApi.saveAutomation({ ...item, enabled: !item.enabled }); await reload(workspace); } catch (err) { setError(err); } finally { setBusy(false); } }}>{item.enabled ? "Pause" : "Enable"}</button>
-      <button className="small-button danger" disabled={busy} onClick={async () => { setBusy(true);try { await assistantApi.deleteAutomation(item.id!);await reload(workspace); } catch (err) { setError(err); } finally { setBusy(false); } }}>Delete</button>
-    </section>)}
+    {items.map(item => item.id && <AutomationCard key={item.id} item={{ ...item, id: item.id }} busy={busy}
+      onToggle={async () => { setBusy(true); setError(null); try { await assistantApi.saveAutomation({ ...item, enabled: !item.enabled }); await reload(workspace); } catch (err) { setError(err); } finally { setBusy(false); } }}
+      onDelete={async () => { setBusy(true); setError(null); try { await assistantApi.deleteAutomation(item.id!); await reload(workspace); } catch (err) { setError(err); } finally { setBusy(false); } }} />)}
   </main>;
 }

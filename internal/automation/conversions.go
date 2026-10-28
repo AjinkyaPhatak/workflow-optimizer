@@ -42,7 +42,7 @@ func PortType(field Field, path []string) string {
 	return ""
 }
 func InsertConversions(plan Plan, tools []ToolDescriptor) Plan {
-	plan = normalizeReferences(ClonePlan(plan), tools)
+	plan = normalizeReferences(foldIncompleteRepeats(ClonePlan(plan)), tools)
 	catalog := map[string]ToolDescriptor{}
 	for _, t := range tools {
 		catalog[t.ID] = t

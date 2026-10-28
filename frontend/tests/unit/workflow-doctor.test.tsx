@@ -7,7 +7,7 @@ import { ApiError } from "@/lib/api/client";
 import type { AssistantSession } from "@/types/automation";
 
 const api = vi.hoisted(() => Object.fromEntries([
-  "tools", "get", "create", "sessions", "runs", "repair", "message", "answer", "edit", "start", "run", "stream",
+  "tools", "get", "create", "sessions", "runs", "repair", "message", "answer", "edit", "setBudget", "start", "run", "stream",
 ].map(name => [name, vi.fn()])));
 vi.mock("@/lib/api/assistant", () => ({ assistantApi: api }));
 vi.mock("@/lib/api", () => ({
@@ -34,6 +34,37 @@ function mount(saved: AssistantSession) {
 }
 
 describe("automatic workflow doctor", () => {
+  it("applies a saved intent answer once even after structural checks become clean", async () => {
+    const saved = draft("intent-still-pending", 1, false);
+    saved.compilation!.ready = false;
+    saved.compilation!.plan.questions = [{ id: "parity", purpose: "intent", kind: "choice", prompt: "Round or truncate?", required: true, options: [], allow_other: false, step_id: "clarify", input: "answer", example: "", min: null, max: null }];
+    saved.answers.parity = "nearest_whole_usd";
+    api.repair.mockResolvedValue(draft("intent-still-pending", 2, false));
+    const view = mount(saved);
+    await waitFor(() => expect(view.result.current.session?.revision).toBe(2));
+    expect(api.repair).toHaveBeenCalledTimes(1);
+    expect(api.answer).not.toHaveBeenCalled();
+    expect(api.start).not.toHaveBeenCalled();
+  });
+  it("confirms limits against the latest flushed revision without resaving a stale plan or starting it", async () => {
+    const view = mount(draft("budget-confirmation", 1, false));
+    await waitFor(() => expect(view.result.current.loading).toBe(false));
+    const confirm = view.result.current.setBudget;
+    const edited = draft("budget-confirmation", 2, false);
+    edited.compilation!.plan.name = "My latest edits";
+    api.edit.mockResolvedValue(edited);
+    await act(async () => { await view.result.current.edit(edited.compilation!.plan); });
+    const budget = { max_actions: 25, max_tokens: 25000, max_active_seconds: 1800 };
+    const confirmed = draft("budget-confirmation", 3, false);
+    confirmed.compilation!.plan = { ...edited.compilation!.plan, budget };
+    api.setBudget.mockResolvedValue(confirmed);
+    await act(async () => { await confirm(budget); });
+    expect(api.setBudget).toHaveBeenCalledExactlyOnceWith("budget-confirmation", 2, budget);
+    expect(view.result.current.session?.compilation?.plan.name).toBe("My latest edits");
+    expect(api.edit).toHaveBeenCalledTimes(1);
+    expect(api.start).not.toHaveBeenCalled();
+    expect(api.repair).not.toHaveBeenCalled();
+  });
   it.each([new TypeError("Failed to fetch"), new ApiError(504, "TIMEOUT", "Timed out", null), new ApiError(409, "CONFLICT", "Stale revision", null)])("recovers a saved answer after %s without executing it", async failure => {
     const view = mount(draft("answer-recovery", 1, false));
     await waitFor(() => expect(view.result.current.loading).toBe(false));

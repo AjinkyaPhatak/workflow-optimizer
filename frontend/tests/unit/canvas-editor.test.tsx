@@ -29,6 +29,39 @@ describe("Compiler canvas semantics", () => {
     expect(availableSteps(value, "repeat", true).map(s => s.id)).toEqual(["source", "parallel", "body"]);
     expect(projectPlan(value).edges).toEqual(expect.arrayContaining([expect.objectContaining({ source: "body", target: "repeat", kind: "loop" })]));
   });
+  it("renders repeated preview IDs as separate cards and joins without rewriting the plan", () => {
+    const first = step("price_check_loop", [step("read_price")], [], "repeat");
+    const second = { ...step("price_check_loop", [step("send_alert")], [], "repeat"), name: "Check the next price" };
+    const after = step("summary");
+    after.inputs = [{ name: "value", source: "step", ref: "price_check_loop.result", value_json: "" }];
+    const value = plan(first, second, after), before = JSON.stringify(value);
+    const graph = projectPlan(value);
+    expect(graph.nodes.filter(node => node.step)).toHaveLength(5);
+    expect(graph.nodes.filter(node => !node.step)).toHaveLength(2);
+    expect(new Set(graph.nodes.map(node => node.id)).size).toBe(graph.nodes.length);
+    expect(new Set(graph.edges.map(edge => edge.id)).size).toBe(graph.edges.length);
+    expect(graph.ambiguousStepIDs).toEqual(["price_check_loop"]);
+    expect(graph.nodes.filter(node => node.step?.id === "price_check_loop").map(node => node.step)).toEqual([first, second]);
+    expect(graph.edges.some(edge => edge.kind === "data")).toBe(false);
+    const nodeIDs = new Set(graph.nodes.map(node => node.id));
+    expect(graph.edges.every(edge => nodeIDs.has(edge.source) && nodeIDs.has(edge.target))).toBe(true);
+    expect(projectPlan(value)).toEqual(graph);
+    expect(JSON.stringify(value)).toBe(before);
+  });
+  it("reserves actual step IDs when allocating joins and makes repeated input edges unique", () => {
+    const consumer = step("summary");
+    consumer.inputs = [0, 1].map(() => ({ name: "value", source: "step" as const, ref: "source.result", value_json: "" }));
+    const value = plan(step("source"), step("choice", [step("yes")], [], "branch"), step("__join_choice"), consumer);
+    const graph = projectPlan(value);
+    expect(graph.ambiguousStepIDs).toEqual([]);
+    expect(new Set(graph.nodes.map(node => node.id)).size).toBe(graph.nodes.length);
+    expect(graph.nodes.find(node => node.id === "__join_choice")?.step?.id).toBe("__join_choice");
+    const join = graph.nodes.find(node => !node.step)!;
+    expect(join.id).not.toBe("__join_choice");
+    expect(graph.edges).toContainEqual(expect.objectContaining({ source: "yes", target: join.id }));
+    expect(graph.edges.filter(edge => edge.kind === "data")).toHaveLength(2);
+    expect(new Set(graph.edges.map(edge => edge.id)).size).toBe(graph.edges.length);
+  });
   it("keeps layout separate from order and remaps pasted nested references and questions", () => {
     const a = step("source"); const b = step("consumer");
     b.inputs = [{ name: "value", source: "step", ref: "source.result", value_json: "" }, { name: "name", source: "answer", ref: "who", value_json: "" }];

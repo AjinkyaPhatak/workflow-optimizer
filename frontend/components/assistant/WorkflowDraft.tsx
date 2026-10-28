@@ -26,11 +26,12 @@ const isTyping = (target: EventTarget | null) => { const element = target as HTM
 
 function CanvasEditor({ plan, tools, comparisons = [], selectedStep, onSelectStep, busy, onSave, sessionId, controls = [], layout, onLayoutSave, onManualEdit, onFlushReady, headerActions, checkPlan, workflowVersions = [], completedSteps = [], readOnly = false, onDirtyChange }: WorkflowDraftProps) {
   const editor = useCanvasDraft(plan, onSave, onManualEdit, sessionId);
-  const locked = busy || readOnly;
+  const draft = useMemo(() => normalizeCanvasPlan(editor.draft), [editor.draft]);
+  const graph = useMemo(() => projectPlan(draft), [draft]);
+  const locked = busy || readOnly || graph.ambiguousStepIDs.length > 0;
   const lockedRef = useRef(locked);
   useEffect(() => { lockedRef.current = locked; }, [locked]);
   const { change: commit, undo: undoDraft, redo: redoDraft, retry } = editor;
-  const draft = useMemo(() => normalizeCanvasPlan(editor.draft), [editor.draft]);
   const change = useCallback((next: Plan) => { if (!lockedRef.current) commit(next); }, [commit]);
   const undo = useCallback(() => { if (!lockedRef.current) undoDraft(); }, [undoDraft]);
   const redo = useCallback(() => { if (!lockedRef.current) redoDraft(); }, [redoDraft]);
@@ -65,9 +66,9 @@ function CanvasEditor({ plan, tools, comparisons = [], selectedStep, onSelectSte
   useEffect(() => { onFlushReady?.(editor.flush); return () => onFlushReady?.(null); }, [editor.flush, onFlushReady]);
   useEffect(() => { onDirtyChange?.(editor.dirty); }, [editor.dirty, onDirtyChange]);
   const steps = useMemo(() => allSteps(draft.steps), [draft.steps]);
-  const active = steps.find(step => step.id === selected[0]);
+  const active = graph.nodes.find(node => node.id === selected[0])?.step;
   const tool = tools.find(item => item.id === active?.tool);
-  const graph = useMemo(() => projectPlan(draft), [draft]);
+  const available = (id: string, includeRepeatChildren = false) => availableSteps(draft, id, includeRepeatChildren).filter(step => !graph.ambiguousStepIDs.includes(step.id));
   function editStep(id: string, update: (step: Step) => Step) { change({ ...latest.current, steps: updateStep(latest.current.steps, id, update) }); }
   function setInput(step: Step, binding: Binding) {
     const next = latest.current;
@@ -97,7 +98,7 @@ function CanvasEditor({ plan, tools, comparisons = [], selectedStep, onSelectSte
     return { id: node.id, type: "plan", position: positions[node.id] ?? node.position, selectable: !!node.step, draggable: !!node.step && !locked,
       selected: selected.includes(node.id), measured: measurements[node.id], data: { step: node.step, tool: descriptor, label: node.label, kindName: controls.find(control => control.kind === node.step?.kind)?.name,
         comparison: comparisons.find(option => option.value === node.step?.condition?.op)?.label, onEdit: select, completed: completedSteps.includes(node.id),
-        fieldEditor: node.step && compact.length ? <fieldset className="plan-inline-fields" disabled={locked}>{compact.map(field => <BindingEditor key={field.name} compact field={field} binding={node.step!.inputs.find(b => b.name === field.name)} steps={availableSteps(draft, node.id)} tools={tools} plan={draft} onChange={binding => setInput(node.step!, binding)} />)}</fieldset> : undefined } };
+        fieldEditor: node.step && compact.length ? <fieldset className="plan-inline-fields" disabled={locked}>{compact.map(field => <BindingEditor key={field.name} compact field={field} binding={node.step!.inputs.find(b => b.name === field.name)} steps={available(node.step!.id)} tools={tools} plan={draft} onChange={binding => setInput(node.step!, binding)} />)}</fieldset> : undefined } };
   });
   const edges: Edge[] = graph.edges.map(edge => ({ ...edge, type: "smoothstep", className: "plan-edge " + edge.kind,
     markerEnd: { type: MarkerType.ArrowClosed, width: 16, height: 16 }, selectable: edge.kind === "data", deletable: edge.kind === "data", selected: selectedEdges.includes(edge.id),
@@ -154,7 +155,7 @@ function CanvasEditor({ plan, tools, comparisons = [], selectedStep, onSelectSte
     const selectedChanges = changes.filter(change => change.type === "select");
     if (selectedChanges.length) setSelected(previous => {
       const next = new Set(previous); for (const item of selectedChanges) if (item.type === "select") { if (item.selected) next.add(item.id); else next.delete(item.id); }
-      return [...next].filter(id => !id.startsWith("__join_"));
+      return [...next].filter(id => graph.nodes.some(node => node.id === id && node.step));
     });
     const moved = changes.filter(change => change.type === "position" && change.position);
     if (moved.length && !locked) {
@@ -218,13 +219,13 @@ function CanvasEditor({ plan, tools, comparisons = [], selectedStep, onSelectSte
     } catch { setHint("The connection could not be checked. Your existing steps are unchanged."); }
   }
   const updateActive = (update: (step: Step) => Step) => { if (active) editStep(active.id, update); };
-  const scopeSteps = active ? availableSteps(draft, active.id) : [];
-  const conditionScope = active ? availableSteps(draft, active.id, true) : [];
+  const scopeSteps = active ? available(active.id) : [];
+  const conditionScope = active ? available(active.id, true) : [];
   const fields = tool?.inputs ?? (active?.kind === "map" ? [bindingField("items", "Choose the list to repeat over.", "array")] : []);
   const closeInspector = () => select("");
   return <section className="compiler-editor" aria-label="Workflow builder">
     <header className="editor-header compiler-editor-header"><input className="compiler-workflow-name" aria-label="Workflow name" disabled={locked} value={draft.name} onChange={event => change({ ...draft, name: event.target.value })} />
-      <span className={"save-state " + (editor.error ? "error" : "")} role="status">{editor.saving ? "Saving…" : editor.error ? "Changes not saved" : editor.dirty ? "Unsaved changes" : plan ? "All changes saved" : ""}</span><span className="spacer" />
+      <span className={"save-state " + (editor.error ? "error" : "")} role="status">{busy ? "Building…" : graph.ambiguousStepIDs.length ? "Draft needs repair" : editor.saving ? "Saving…" : editor.error ? "Changes not saved" : editor.dirty ? "Unsaved changes" : plan ? "All changes saved" : ""}</span><span className="spacer" />
       <button onClick={undo} disabled={locked || !editor.past.length} aria-label="Undo" title="Undo (Ctrl+Z)">↶</button><button onClick={redo} disabled={locked || !editor.future.length} aria-label="Redo" title="Redo (Ctrl+Shift+Z)">↷</button>
       <button onClick={() => { storePositions(Object.fromEntries(graph.nodes.filter(node => node.step).map(node => [node.id, node.position]))); void flow.fitView({ padding: .15, minZoom: .55, maxZoom: 1 }); }} disabled={locked || !steps.length}>Arrange</button>
       <button aria-expanded={paletteOpen} onClick={() => setPaletteOpen(!paletteOpen)}>{paletteOpen ? "Hide steps" : "Add steps"}</button>
@@ -247,6 +248,7 @@ function CanvasEditor({ plan, tools, comparisons = [], selectedStep, onSelectSte
         </ReactFlow>
         {!steps.length && <div className="canvas-empty"><div className="empty-card compiler-empty"><div className="empty-mark" aria-hidden><span /><span /><span /></div><h2>Your workflow starts here</h2><p className="muted">Describe it below, or add a step above.</p></div></div>}
         {busy && <div className="canvas-hint" role="status">Building your workflow… You can pan and zoom while I work.</div>}
+        {!busy && graph.ambiguousStepIDs.length > 0 && <div className="canvas-hint" role="status">This draft needs repair before editing. You can still inspect every step.</div>}
       </div>
       {active && <aside className="config-panel compiler-config" role="region" aria-label={"Edit " + active.name}>
         <div className="row"><h3>{active.name}</h3><span className="spacer" /><button className="small-button" onClick={closeInspector}>Close</button></div>
@@ -268,7 +270,7 @@ function CanvasEditor({ plan, tools, comparisons = [], selectedStep, onSelectSte
           {active.question.kind === "choice" && <><label htmlFor="question-options">Choices, one per line</label><textarea id="question-options" value={(active.question.options ?? []).map(option => option.label).join("\n")} onChange={event => updateActive(step => ({ ...step, question: { ...step.question!, options: event.target.value.split("\n").map(label => step.question!.options?.find(option => option.label === label) ?? { label, value: label }) } }))} /><label className="switch-row"><input type="checkbox" checked={active.question.allow_other} onChange={event => updateActive(step => ({ ...step, question: { ...step.question!, allow_other: event.target.checked } }))} />Allow another answer</label></>}
         </fieldset>}
         <fieldset><legend>Position in the workflow</legend><div className="row"><button onClick={() => change(moveStep(draft, active.id, "", "children", -1))}>Move earlier</button><button onClick={() => change(moveStep(draft, active.id, "", "children", 1))}>Move later</button></div>
-          <label htmlFor="move-step">Move to a path</label><select id="move-step" value={moveTarget} onChange={event => setMoveTarget(event.target.value)}><option value="">Main sequence</option>{steps.filter(step => ["branch", "parallel", "map", "repeat"].includes(step.kind) && !allSteps([active]).some(child => child.id === step.id)).flatMap(step => [<option key={step.id + ":children"} value={step.id + ":children"}>{step.name} · {step.kind === "branch" ? "Yes" : "Steps"}</option>, ...(step.kind === "branch" ? [<option key={step.id + ":otherwise"} value={step.id + ":otherwise"}>{step.name} · Otherwise</option>] : [])])}</select><button onClick={() => { const [parent, path] = moveTarget.split(":"); change(moveStep(draft, active.id, parent, path === "otherwise" ? "otherwise" : "children")); }}>Move step</button>
+          <label htmlFor="move-step">Move to a path</label><select id="move-step" value={moveTarget} onChange={event => setMoveTarget(event.target.value)}><option value="">Main sequence</option>{graph.nodes.filter(node => node.step && ["branch", "parallel", "map", "repeat"].includes(node.step.kind) && !allSteps([active]).some(child => child.id === node.step!.id)).flatMap(node => [<option key={node.id + ":children"} value={node.step!.id + ":children"}>{node.step!.name} · {node.step!.kind === "branch" ? "Yes" : "Steps"}</option>, ...(node.step!.kind === "branch" ? [<option key={node.id + ":otherwise"} value={node.step!.id + ":otherwise"}>{node.step!.name} · Otherwise</option>] : [])])}</select><button onClick={() => { const [parent, path] = moveTarget.split(":"); change(moveStep(draft, active.id, parent, path === "otherwise" ? "otherwise" : "children")); }}>Move step</button>
         </fieldset>
         <div className="row"><button onClick={() => { clipboard.current = copySteps(draft, [active.id]); paste(); }}>Duplicate</button><button className="danger" onClick={() => { change(removeSteps(draft, [active.id])); select(""); }}>Remove step</button></div></fieldset>
       </aside>}

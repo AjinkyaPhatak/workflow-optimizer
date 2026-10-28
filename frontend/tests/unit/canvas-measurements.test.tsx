@@ -99,3 +99,36 @@ it("preserves saved positions when a restored plan replaces the semantic graph",
   expect(flow.nodes[0].position).toEqual(saved.positions.write);
   expect(saveLayout).not.toHaveBeenCalled(); expect(save).not.toHaveBeenCalled();
 });
+
+it("keeps duplicate-ID previews inspectable and locked without saving display IDs", async () => {
+  const errors = vi.spyOn(console, "error").mockImplementation(() => undefined);
+  try {
+    const save = vi.fn(); const saveLayout = vi.fn(); const manual = vi.fn();
+    const first = { ...plan.steps[0], id: "price_check_loop", name: "Check the first price", kind: "repeat" };
+    const second = { ...first, name: "Check the next price" };
+    const incoming = { ...plan, steps: [first, second] };
+    const original = JSON.stringify(incoming);
+    const props = { tools: [], sessionId: "preview", onSave: save, onLayoutSave: saveLayout, onManualEdit: manual };
+    const view = render(<WorkflowDraft {...props} plan={incoming} busy />);
+    expect(new Set(flow.nodes.map(node => node.id)).size).toBe(flow.nodes.length);
+    expect(flow.nodes.filter(node => node.data.step)).toHaveLength(2);
+    fireEvent.click(screen.getByRole("button", { name: "View Check the next price" }));
+    expect((screen.getByLabelText("Step name") as HTMLInputElement).value).toBe("Check the next price");
+    expect(screen.getByLabelText("Step name").matches(":disabled")).toBe(true);
+    view.rerender(<WorkflowDraft {...props} plan={incoming} busy={false} />);
+    expect(screen.getByText("Draft needs repair")).toBeTruthy();
+    expect(screen.getByLabelText("Workflow name").matches(":disabled")).toBe(true);
+    fireEvent.keyDown(document.body, { key: "Delete" });
+    await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
+    expect(save).not.toHaveBeenCalled(); expect(saveLayout).not.toHaveBeenCalled(); expect(manual).not.toHaveBeenCalled();
+    expect(JSON.stringify(incoming)).toBe(original);
+    expect(errors).not.toHaveBeenCalled();
+    // A checked revision restores normal editable IDs and retains authored layout.
+    const repaired = { ...plan, steps: [first, { ...second, id: "next_price_check" }] };
+    view.rerender(<WorkflowDraft {...props} plan={repaired} busy={false} />);
+    expect(screen.getByLabelText("Workflow name").matches(":disabled")).toBe(false);
+    expect(flow.nodes.filter(node => node.data.step).map(node => node.id)).toEqual(["price_check_loop", "next_price_check"]);
+    await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
+    expect(save).not.toHaveBeenCalled(); expect(saveLayout).not.toHaveBeenCalled();
+  } finally { errors.mockRestore(); }
+});

@@ -6,7 +6,7 @@ import { authApi, credentialApi } from "@/lib/api";
 import { ApiError } from "@/lib/api/client";
 import { DOCTOR_STOPPED, markDoctored, wasDoctored } from "./workflowDoctor";
 import type { Credential, WorkspaceRef } from "@/types/api";
-import type { AssistantSession, AutomationRun, Plan, RunEvent, ToolDescriptor, ControlDescriptor } from "@/types/automation";
+import type { AssistantSession, AutomationRun, Budget, Plan, RunEvent, ToolDescriptor, ControlDescriptor } from "@/types/automation";
 
 export function useAssistant(workflowId?: string) {
   const [workspaces, setWorkspaces] = useState<WorkspaceRef[]>([]);
@@ -242,7 +242,9 @@ export function useAssistant(workflowId?: string) {
     }
   }, [session, remember, setBuilding]);
   useEffect(() => {
-    if (loading || busy || manualDraft || !session?.compilation?.diagnostics.length || doctorFailure) return;
+    const compilation = session?.compilation;
+    const unappliedAnswer = compilation?.plan.questions.some(question => question.purpose === "intent" && Object.hasOwn(session?.answers ?? {}, question.id));
+    if (loading || busy || manualDraft || !compilation || !(compilation.diagnostics.length || unappliedAnswer) || doctorFailure) return;
     // Schedule once after commit. Strict Mode cleanup cancels the first setup
     // before it can issue a duplicate repair or update state synchronously.
     const timer = setTimeout(() => {
@@ -282,6 +284,20 @@ export function useAssistant(workflowId?: string) {
     manualGeneration.current++; autoRunAfterDoctor.current = null;
     setManualDraft(true);
   }, [setManualDraft]);
+  const setBudget = useCallback(async (budget: Budget) => {
+    const active = sessionRef.current;
+    if (!active || buildingRef.current) throw new Error("Wait for the workflow to finish building before setting limits.");
+    const current = ++turn.current;
+    request.current?.abort(); autoRunAfterDoctor.current = null;
+    setBusy(true); setError(null); setDoctorFailure(null);
+    try {
+      const next = await assistantApi.setBudget(active.id, active.revision, budget);
+      if (current === turn.current) remember(next);
+    } catch (err) {
+      if (current === turn.current) setError(err);
+      throw err;
+    } finally { if (current === turn.current) setBusy(false); }
+  }, [remember]);
   const start = useCallback(async () => {
     const active = sessionRef.current;
     if (!active || manualDraftRef.current) return; setBusy(true); setError(null);
@@ -324,7 +340,7 @@ export function useAssistant(workflowId?: string) {
   return { workspaces, workspaceId, setWorkspaceId, credentialId, setCredentialId, credentials, sessions, session,
     tools, comparisons, controls, run, events, loading, workspaceError,
     reloadWorkspace: () => { setLoading(true); setWorkspaceError(null); setLoadAttempt(value => value + 1); },
-    busy, building, repairing, doctorFailure, pending, error, setError, autoExecute, setAutoExecute, send, answer, edit, start, open, fresh, fork, interrupt, beginManualEdit, endManualEdit, manualDraft, acceptSession: remember, currentSession: () => sessionRef.current };
+    busy, building, repairing, doctorFailure, pending, error, setError, autoExecute, setAutoExecute, send, answer, edit, setBudget, start, open, fresh, fork, interrupt, beginManualEdit, endManualEdit, manualDraft, acceptSession: remember, currentSession: () => sessionRef.current };
 }
 export function materializePlan(plan: Plan, answers: Record<string, unknown>): Plan {
   // Bind answered draft slots so scheduled runs have no conversation dependency.

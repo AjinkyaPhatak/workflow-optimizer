@@ -12,7 +12,7 @@ export interface Step {
   children: Step[]; otherwise: Step[]; condition: Condition | null; question: Question | null;
   max_iterations: number; duration_seconds: number; workflow_ref: string;
 }
-export interface Budget { max_actions: number; max_tokens: number; max_active_seconds: number }
+export interface Budget { automatic?: boolean; max_actions: number; max_tokens: number; max_active_seconds: number }
 export interface Plan { schema_version: 2; name: string; summary: string; mode: "once" | "continuous"; budget: Budget; steps: Step[]; questions: Question[] }
 export interface Compilation { plan: Plan; ready: boolean; diagnostics: { step_id: string; code: string; message: string }[] }
 export interface AssistantSession {
