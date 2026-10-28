@@ -37,6 +37,7 @@ type ArtifactRef = automation.ArtifactRef
 
 // ModelClient keeps the executor independent of provider details.
 type ModelClient interface {
+	Query(context.Context, string, string) (ToolResult, error)
 	Research(context.Context, string, int) (ToolResult, error)
 	Write(context.Context, string, string, int) (ToolResult, error)
 	ExtractTable(context.Context, string, string) (ToolResult, error)
@@ -62,6 +63,7 @@ func (t *Toolbox) Catalog() []ToolDescriptor {
 		{ID: "value.bind", Name: "Fill a value", Description: "Fill one named $(slot) in a text or structured document without changing its type. Set name to slot; chain fills for multiple names.", Inputs: []Field{field("template", "json", "Text or structure with a $(slot) placeholder", true), field("name", "string", "Slot name without punctuation", true), field("value", "json", "Value for the slot", true)}, Outputs: []Field{field("result", "json", "Filled text or structure", true)}, Category: "logic", Icon: "braces"},
 		{ID: "value.json", Name: "Read JSON", Description: "Read structured input as JSON.", Inputs: []Field{field("text", "string", "JSON text", true)}, Outputs: []Field{field("result", "json", "Structured value", true)}, Category: "logic", Icon: "braces"},
 		{ID: "web.search", Name: "Search the web", Description: "Find fresh published information with source links and dates.", Inputs: []Field{field("query", "string", "What to research", true)}, Outputs: []Field{field("text", "string", "Research with citations", true), field("sources", "array", "Source URLs", true), field("observed_at", "string", "Research time", true)}},
+		{ID: "web.query", Name: "Fetch current data", Description: "Search live web sources and return the requested structured rows, sources and retrieval time. Generic: specify any topic and desired fields. Empty results include notes instead of asking for a CSV.", Inputs: []Field{field("query", "string", "What current information to find", true), field("instructions", "string", "Fields, scope and units to return; never invent missing facts", true)}, Outputs: []Field{field("rows", "array", "Records from current sources", true), field("text", "string", "Readable findings and coverage", true), field("sources", "array", "Supporting source URLs", true), field("observed_at", "string", "Retrieval time in UTC", true), field("notes", "string", "Missing information or source limitations", true)}},
 		{ID: "web.read", Name: "Read a web page", Description: "Read a public URL as source material; cannot submit forms or click actions.", Inputs: []Field{field("url", "string", "Public page URL", true)}, Outputs: []Field{field("text", "string", "Extracted page text", true), field("url", "string", "Source URL", true), field("fetched_at", "string", "Fetch time", true)}},
 		{ID: "ai.write", Name: "Write or explain", Inputs: []Field{field("instructions", "string", "What to produce", true), field("text", "string", "Source material", true)}, Outputs: []Field{field("text", "string", "Written result", true)}},
 		{ID: "decision.classify", Name: "Choose a route", Description: "Choose among explicit alternatives. Low confidence asks you instead.", Inputs: []Field{field("question", "string", "The decision to make", true), field("text", "string", "Evidence", true), field("choices", "array", "Two or more choices", true)}, Outputs: []Field{field("choice", "string", "Chosen value", true), field("confidence", "number", "Model confidence", true)}},
@@ -363,7 +365,7 @@ func (t *Toolbox) dispatch(ctx context.Context, c ToolCall) (ToolResult, error) 
 			return ToolResult{}, errors.New("enter valid JSON")
 		}
 		return result(map[string]any{"result": value})
-	case "web.search", "ai.write", "table.extract", "decision.classify":
+	case "web.search", "web.query", "ai.write", "table.extract", "decision.classify":
 		if c.Tool == "decision.classify" && c.Inputs["human_choice"] != nil {
 			choice, ok := c.Inputs["human_choice"].(string)
 			if !ok {
@@ -376,6 +378,8 @@ func (t *Toolbox) dispatch(ctx context.Context, c ToolCall) (ToolResult, error) 
 			return ToolResult{}, err
 		}
 		switch c.Tool {
+		case "web.query":
+			return model.Query(ctx, stringInput(c, "query"), stringInput(c, "instructions"))
 		case "web.search":
 			return model.Research(ctx, stringInput(c, "query"), 8000)
 		case "ai.write":

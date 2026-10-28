@@ -203,7 +203,7 @@ func (c *Client) ExtractTable(ctx context.Context, text, instructions string) (a
 		return automation.ToolResult{}, err
 	}
 	if len(table.Rows) == 0 {
-		return automation.ToolResult{}, &automation.NeedInput{Question: automation.Question{ID: "source_data", Prompt: "The sources did not contain the requested dataset. Paste a complete table or CSV so I can continue.", Kind: "text", Required: true, Input: "text"}}
+		return automation.ToolResult{Outputs: map[string]any{"rows": []map[string]any{}, "notes": table.Notes}, Tokens: int(res.Usage.TotalTokens)}, nil
 	}
 	seen := map[string]bool{}
 	for _, col := range table.Columns {

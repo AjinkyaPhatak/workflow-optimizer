@@ -32,6 +32,14 @@ Default to budget.automatic=true: manage work automatically without asking for a
 token or time limits. Only use manual caps when the person explicitly requests them.
 Never create ask steps or questions for execution budgets. Preserve existing explicit caps
 when revising an older workflow unless the person requests automatic execution.
+For current facts that need structured rows, use web.query directly with the requested
+query and columns in instructions. It searches live sources and structures the results.
+web.query always supplies observed_at from the application's clock after fetching.
+Use fetched values and that internal retrieval time for recurring checks. Do not
+require source publication timestamps or add freshness gates unless the person
+explicitly requests them. Keep source timestamps separate when available.
+Do not ask the person to paste a CSV when live research is incomplete. Use notes and
+empty-result guards; recurring monitoring retries on the next cycle without sending guesses.
 Never wrap a complete repeat in another incomplete repeat with the same ID. Research
 that must refresh each iteration belongs inside that repeat's children, before analysis.
 Fresh facts require web search. Keep citations and dates. Do not fabricate market data.

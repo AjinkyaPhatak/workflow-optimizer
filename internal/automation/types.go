@@ -411,8 +411,8 @@ func CompareValues(op string, l, r any) (bool, error) {
 	case "contains":
 		return strings.Contains(fmt.Sprint(l), fmt.Sprint(r)), nil
 	case "greater", "less", "at_least", "at_most":
-		a, aok := l.(float64)
-		b, bok := r.(float64)
+		a, aok := comparisonNumber(l)
+		b, bok := comparisonNumber(r)
 		if !aok || !bok {
 			return false, errors.New("comparison needs two numbers")
 		}
@@ -429,4 +429,23 @@ func CompareValues(op string, l, r any) (bool, error) {
 	default:
 		return false, fmt.Errorf("unknown comparison %s", op)
 	}
+}
+
+// Structured web results can contain numeric cells as text. Compare their
+// actual numeric values without guessing units, stripping symbols, or changing
+// equality semantics for identifiers and names.
+func comparisonNumber(value any) (float64, bool) {
+	var number float64
+	var err error
+	switch v := value.(type) {
+	case float64:
+		number = v
+	case json.Number:
+		number, err = v.Float64()
+	case string:
+		number, err = strconv.ParseFloat(strings.TrimSpace(v), 64)
+	default:
+		return 0, false
+	}
+	return number, err == nil && !math.IsNaN(number) && !math.IsInf(number, 0)
 }

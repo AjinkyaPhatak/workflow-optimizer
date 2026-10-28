@@ -82,6 +82,16 @@ automatic execution without budget questions or cumulative action/token/time
 pauses. Explicit custom caps remain available under Execution settings. Stop
 and Pause remain available, and individual tool requests retain bounded timeouts.
 
+`web.query` (Fetch current data) uses OpenAI live web search and a generic
+structured-record schema. The workflow supplies the query and desired columns;
+the tool returns rows, source URLs, notes and actual retrieval time. It tries an
+alternative search once when sources are empty. Missing web data returns empty
+rows and notes rather than asking the user to paste a CSV. `observed_at` is
+retrieval time from the application's clock; any source publication or quote
+time is a separate field. Missing source timestamps do not block ordinary
+recurring checks. Numeric comparisons accept plain numeric text from fetched
+records; currency symbols and missing or nonfinite values are rejected.
+
 Schedules use five-field cron, IANA timezones (initially Asia/Kolkata), and skip
 overlaps. Event triggers require a source: knowledge base ID, conversation ID,
 or account-user/contact pair. Incoming WhatsApp messages only enter the outbox

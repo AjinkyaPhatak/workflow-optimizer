@@ -309,3 +309,44 @@ func TestToolFailureNamesStepAndPreservesCompletedResults(t *testing.T) {
 		})
 	}
 }
+
+func TestFetchedNumericTextRoutesThresholdWithoutSourceTimestamp(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		rows []any
+		send bool
+	}{
+		{"below", []any{map[string]any{"price_usd": "80784.8"}}, false},
+		{"equal", []any{map[string]any{"price_usd": "80800"}}, false},
+		{"above", []any{map[string]any{"price_usd": "80894"}}, true},
+		{"missing", []any{}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rows := automation.Binding{Source: "step", Ref: "fetch.rows"}
+			price := automation.Binding{Source: "step", Ref: "fetch.rows.0.price_usd"}
+			plan := automation.Plan{Mode: "once", Steps: []automation.Step{
+				{ID: "fetch", Kind: "tool", Tool: "web.query"},
+				{ID: "available", Kind: "branch", Condition: &automation.Condition{Left: rows, Op: "not_equals", Right: lit("", "[]")}, Children: []automation.Step{
+					{ID: "threshold", Kind: "branch", Condition: &automation.Condition{Left: price, Op: "greater", Right: lit("", "80800")}, Children: []automation.Step{
+						{ID: "send", Kind: "tool", Tool: "send", Inputs: []automation.Binding{lit("recipient", `"known"`)}},
+					}},
+				}},
+			}}
+			env, store, tools := environment(t, plan)
+			tools.results = map[string]automation.ToolResult{"web.query": {Outputs: map[string]any{"rows": tc.rows}}}
+			env.ExecuteWorkflow(WorkflowName, Input{RunID: store.run.ID})
+			if err := env.GetWorkflowError(); err != nil {
+				t.Fatal(err)
+			}
+			sends := 0
+			for _, call := range tools.calls {
+				if call.Tool == "send" {
+					sends++
+				}
+			}
+			if (sends == 1) != tc.send || store.run.Status != "COMPLETED" {
+				t.Fatalf("sends=%d status=%s", sends, store.run.Status)
+			}
+		})
+	}
+}
