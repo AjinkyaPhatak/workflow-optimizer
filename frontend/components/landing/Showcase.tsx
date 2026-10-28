@@ -104,7 +104,6 @@ export function Showcase() {
                 ))}
               </div>
               <div className="lp-prompt-row">
-                <span className="lp-prompt-icon" aria-hidden>✳</span>
                 <span className="lp-prompt-text">{typed}<span className="lp-caret" aria-hidden /></span>
                 <span className="lp-prompt-go" aria-hidden>→</span>
               </div>

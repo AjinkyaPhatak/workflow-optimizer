@@ -44,9 +44,5 @@
 @keyframes bd-flowing { to { stroke-dashoffset: -24; } }
 .bd-app { width: 40px; height: 40px; border-radius: 12px; background: #fff; display: grid; place-items: center; box-shadow: 0 1px 2px rgba(18, 24, 27, .06), 0 10px 22px -12px rgba(18, 24, 27, .35); }
 .bd-app.lone { position: absolute; width: 34px; height: 34px; right: max(60px, calc(50% - 470px)); top: 16%; transform: rotate(8deg); animation: bd-bob 7s ease-in-out -1s infinite; }
-.bd-spark { position: absolute; color: #e9c46a; font-size: 18px; animation: bd-twinkle 4s ease-in-out infinite; }
-.bd-spark.s1 { left: 34%; top: 14%; } .bd-spark.s2 { right: 36%; bottom: 10%; color: #e76f51; font-size: 14px; animation-delay: -1.5s; }
-.bd-spark.s3 { left: 12%; bottom: 26%; color: #2a9d8f; font-size: 12px; animation-delay: -2.6s; }
-@keyframes bd-twinkle { 0%, 100% { transform: scale(.8) rotate(0); opacity: .4; } 50% { transform: scale(1.15) rotate(45deg); opacity: 1; } }
 @media (max-width: 960px) { .bd-flow, .bd-app.lone, .bd-rings { display: none; } }
 @media (prefers-reduced-motion: reduce) { .backdrop * { animation: none !important; } }

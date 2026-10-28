@@ -232,7 +232,7 @@ export function AssistantHome({ workflowId }: { workflowId?: string } = {}) {
 
         {!s.session?.messages.length && !s.run ? <p className="muted small">Describe what you need below. Your workflow will take shape on the canvas, and I’ll ask here if a detail is missing.</p> : <div className="conversation-messages" aria-live="polite">
           {s.session?.messages.map((message, i) => <article key={i} className={"assistant-message " + message.role}>
-            <span className="message-author">{message.role === "user" ? "You" : "✦ Workflow"}</span><AiMarkdown text={message.text} />
+            <span className="message-author">{message.role === "user" ? "You" : "Workflow"}</span><AiMarkdown text={message.text} />
           </article>)}
         </div>}
         {s.pending && <article className="assistant-message user"><span className="message-author">You</span><p>{s.pending}</p></article>}

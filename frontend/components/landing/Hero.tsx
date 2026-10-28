@@ -285,7 +285,7 @@ export function Hero({ signedIn }: { signedIn: boolean }) {
             {signedIn ? "Open app" : "Get started for free"}
           </Link>
           <Link className="lp-btn lp-btn-ghost" href="/templates">
-            <span className="lp-spark" aria-hidden>✳</span> Browse templates
+            Browse templates
           </Link>
         </div>
       </div>

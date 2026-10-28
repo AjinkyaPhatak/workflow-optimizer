@@ -11,6 +11,10 @@ files, and `/settings/whatsapp` handles personal pairing. The legacy workflow ed
 and templates remain available. See [the merge guide](../docs/FRONTEND_MERGE.md)
 before replacing screens or styles.
 
+The product identity uses its connected-node mark and teal primary actions.
+Keep template buttons and assistant labels plain; avoid starburst and sparkle
+decorations. Integration logos identify their own services, not the product.
+
 ## Run
 
 ```sh

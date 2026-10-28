@@ -33,7 +33,6 @@ export function Backdrop({ apps = ["gmail", "google_sheets", "google_calendar", 
         <span className="bd-app">{ic[3]}</span>
       </div>
       <span className="bd-app lone a">{ic[1]}</span>
-      <span className="bd-spark s1">✳</span><span className="bd-spark s2">✳</span><span className="bd-spark s3">✳</span>
     </div>
   );
 }

@@ -7,7 +7,7 @@ const backend = process.env.BACKEND_URL ?? "http://localhost:8080";
 
 const config: NextConfig = {
   reactStrictMode: true,
-  // Do not generate AGENTS.md / CLAUDE.md in the project on `next dev`.
+  // Keep development startup from generating agent instruction files.
   agentRules: false,
   experimental: {
     // Keep above handlers.PlanningTimeout (6 minutes) plus its 15-second response
